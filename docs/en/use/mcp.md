@@ -54,13 +54,15 @@ If AstrBot cannot find a newly installed command, restart AstrBot to pick up env
 
 1. Open `Extensions → MCP Servers` and click the **+** button at the bottom right.
 2. Enter a recognizable **Server Name**, such as `arxiv`.
-3. Choose the appropriate template, paste the server's JSON into **Server Configuration**, and replace any endpoints, paths, and tokens.
+3. Choose **stdio** or **HTTP / SSE**. For **stdio**, enter the executable, add each argument separately, and enter environment variables as one `KEY=value` pair per line. For **HTTP / SSE**, enter the server URL and choose **None** or **Bearer Token**. Enter just the token value. AstrBot detects the HTTP transport for new connections. Additional headers and timeouts are under **Advanced Settings**.
 4. Click **Test Connection** to check connectivity and discover tools.
 5. Click **Save**. When adding a server, AstrBot checks the connection again and connects it. The list should then show **Connected** and its available tools.
 
+Connecting to external MCP servers may pose security risks. Only connect to MCP servers you trust.
+
 ![The Add MCP Server configuration dialog](./images/mcp-config-en.png)
 
-Add one server at a time. If a service supplies a complete configuration wrapped in `mcpServers`, you can paste the configuration object for one server. AstrBot also accepts the wrapper format, but a single add operation does not import every server inside it.
+Open **Advanced Settings → Import JSON** to fill the form from an existing configuration. It accepts a single server object or the first server in an `mcpServers` wrapper.
 
 ### Remote Streamable HTTP Example
 
@@ -127,12 +129,14 @@ After connecting, make sure the tools are available to the current conversation:
 
 The default persona uses all available capabilities. Create or edit a custom persona to restrict the selection. Selecting a globally disabled tool in a persona does not enable it again.
 
+AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace. Renaming a server in WebUI preserves its namespace. If an older persona selection matches tools from multiple servers, select the intended tool again in that persona.
+
 **Connected means the service is reachable; it does not guarantee the model will call a tool.** Tool use depends on the model, persona, task, and tool descriptions. External tools such as MCP searches do not require Computer Use. Configure an [execution environment and permissions](/en/use/astrbot-agent-sandbox) only when AstrBot itself needs to execute code or access files.
 
 ## Manage and Sync Servers
 
 - **View tools:** click the available-tool count to see the server's tool names.
-- **Edit:** click a server entry, update its JSON, and save.
+- **Edit:** click a server entry, update its form fields, and save.
 - **Connect / Disconnect:** use the switch on the right. Its tools become unavailable when disconnected.
 - **Delete:** remove the server configuration from AstrBot. This does not uninstall a stdio program or delete a remote service.
 - **Sync from ModelScope:** use the sync button at the bottom right. Follow the dialog to obtain a personal access token and synchronize servers. Configure the desired MCP services on ModelScope first.

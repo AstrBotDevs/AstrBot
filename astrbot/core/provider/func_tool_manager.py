@@ -21,6 +21,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
+MCP_TOOL_NAMESPACE_SEED = "_astrbot_tool_namespace_seed"
 
 DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 180.0
 DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 180.0
@@ -61,6 +62,7 @@ class MCPInitSummary:
 @dataclass
 class _MCPServerRuntime:
     name: str
+    namespace: str
     client: MCPClient
     shutdown_event: asyncio.Event
     lifecycle_task: asyncio.Task[None]
@@ -162,7 +164,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
     try:
         async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
+            if (cfg.get("transport") or cfg.get("type")) == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
                     "method": "initialize",
@@ -239,7 +241,12 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = await self._mgr._check_tool_permission(self.name, context)
+        if isinstance(self._wrapped, MCPTool):
+            error = await self._mgr._check_tool_permission(
+                self.name, context, legacy_name=self._wrapped.legacy_name
+            )
+        else:
+            error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
 
@@ -290,7 +297,7 @@ class FunctionToolManager:
         self._timeout_mismatch_warned = False
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
-        self._mcp_starting: set[str] = set()
+        self._mcp_starting: dict[str, str] = {}
         self._init_timeout_default = _resolve_timeout(
             timeout=None,
             env_name=MCP_INIT_TIMEOUT_ENV,
@@ -409,6 +416,8 @@ class FunctionToolManager:
         self,
         tool_name: str,
         context: Any,
+        *,
+        legacy_name: str | None = None,
     ) -> str | None:
         """Return an error string if the caller lacks permission, or None.
 
@@ -422,6 +431,8 @@ class FunctionToolManager:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
         effective = defaults.get(tool_name)
+        if effective is None and legacy_name is not None:
+            effective = defaults.get(legacy_name)
         if effective is None:
             effective = self._default_permission(tool_name)
 
@@ -604,7 +615,23 @@ class FunctionToolManager:
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
-            self._mcp_starting.add(name)
+            namespace = MCPTool.server_namespace(
+                cfg.get(MCP_TOOL_NAMESPACE_SEED) or name
+            )
+            namespaces = {
+                **self._mcp_starting,
+                **{
+                    server.name: server.namespace
+                    for server in self._mcp_server_runtime.values()
+                },
+            }
+            for other, other_namespace in namespaces.items():
+                if other_namespace == namespace:
+                    raise MCPInitError(
+                        f"MCP servers {name!r} and {other!r} share tool namespace "
+                        f"{namespace!r}. Rename one server."
+                    )
+            self._mcp_starting[name] = namespace
 
         if shutdown_event is None:
             shutdown_event = asyncio.Event()
@@ -631,9 +658,35 @@ class FunctionToolManager:
                         mcp_tool=tool,
                         mcp_client=mcp_client,
                         mcp_server_name=name,
+                        namespace=namespace,
                     )
                     for tool in mcp_client.tools
                 ]
+                inactive_names = (
+                    await sp.global_get("inactivated_llm_tools", [])
+                    if registered_tools
+                    else []
+                )
+                for tool in registered_tools:
+                    if tool.name in inactive_names:
+                        tool.active = False
+                    elif tool.legacy_name in inactive_names:
+                        tool.active = await sp.get_async(
+                            "mcp_tool", tool.name, "active", False
+                        )
+                existing = [
+                    tool
+                    for tool in self.func_list
+                    if not (isinstance(tool, MCPTool) and tool.mcp_server_name == name)
+                ]
+                used_names = {tool.name for tool in existing}
+                for tool in registered_tools:
+                    if tool.name in used_names:
+                        raise MCPInitError(
+                            f"MCP server {name!r} has a duplicate tool name {tool.name!r}."
+                        )
+                    used_names.add(tool.name)
+                self.func_list = [*existing, *registered_tools]
             except asyncio.CancelledError:
                 # cleanup on cancellation
                 try:
@@ -649,13 +702,6 @@ class FunctionToolManager:
                     pass
                 connect_done.set()
                 return
-
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
-            self.func_list.extend(registered_tools)
 
             logger.info(
                 f"Connected to MCP server {name}, "
@@ -693,11 +739,12 @@ class FunctionToolManager:
         async with self._runtime_lock:
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
+                namespace=namespace,
                 client=mcp_client,
                 shutdown_event=shutdown_event,
                 lifecycle_task=lifecycle_task,
             )
-            self._mcp_starting.discard(name)
+            self._mcp_starting.pop(name, None)
 
         try:
             await asyncio.wait_for(connect_done.wait(), timeout=timeout)
@@ -705,7 +752,7 @@ class FunctionToolManager:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
             async with self._runtime_lock:
-                self._mcp_starting.discard(name)
+                self._mcp_starting.pop(name, None)
                 self._mcp_server_runtime.pop(name, None)
             if isinstance(e, asyncio.TimeoutError):
                 raise MCPInitTimeoutError(
@@ -715,7 +762,7 @@ class FunctionToolManager:
 
         if connect_error is not None:
             async with self._runtime_lock:
-                self._mcp_starting.discard(name)
+                self._mcp_starting.pop(name, None)
                 self._mcp_server_runtime.pop(name, None)
             raise connect_error
 
@@ -799,7 +846,7 @@ class FunctionToolManager:
             ]
             async with self._runtime_lock:
                 self._mcp_server_runtime.pop(name, None)
-                self._mcp_starting.discard(name)
+                self._mcp_starting.pop(name, None)
             logger.info(f"Disconnected from MCP server {name}")
             return
 
@@ -810,18 +857,18 @@ class FunctionToolManager:
             if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
         ]
         async with self._runtime_lock:
-            self._mcp_starting.discard(name)
+            self._mcp_starting.pop(name, None)
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
-        if "url" in config:
+        if "url" in config and (config.get("transport") or config.get("type")):
             success, error_msg = await _quick_test_mcp_connection(config)
             if not success:
                 raise Exception(error_msg)
 
         mcp_client = MCPClient()
         try:
-            logger.debug(f"testing MCP server connection with config: {config}")
+            logger.debug("Testing MCP server connection.")
             await mcp_client.connect_to_server(config, "test")
             tools_res = await mcp_client.list_tools_and_save()
             tool_names = [tool.name for tool in tools_res.tools]
@@ -1011,6 +1058,11 @@ class FunctionToolManager:
                 scope="global",
                 scope_id="global",
             )
+            if (
+                isinstance(func_tool, MCPTool)
+                and func_tool.legacy_name in inactivated_llm_tools
+            ):
+                sp.put("active", True, scope="mcp_tool", scope_id=func_tool.name)
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
                 sp.put(
@@ -1052,6 +1104,11 @@ class FunctionToolManager:
                 "inactivated_llm_tools",
                 [],
             )
+            if (
+                isinstance(func_tool, MCPTool)
+                and func_tool.legacy_name in inactivated_llm_tools
+            ):
+                await sp.put_async("mcp_tool", func_tool.name, "active", True)
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
                 await sp.put_async(

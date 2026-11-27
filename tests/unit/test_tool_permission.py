@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
@@ -84,6 +85,24 @@ def _make_tools_service(
 def test_default_permission_is_member():
     mgr = FunctionToolManager()
     assert mgr._default_permission("any_mcp_tool") == "member"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_retains_admin_permission_saved_under_legacy_name(monkeypatch):
+    manager = FunctionToolManager()
+    client = SimpleNamespace(call_tool_with_reconnect=AsyncMock())
+    tool = MCPTool(
+        SimpleNamespace(name="search", description="", inputSchema={}), client, "docs"
+    )
+    manager.func_list.append(tool)
+    monkeypatch.setattr(
+        sp, "global_get", AsyncMock(return_value={"_default": {"search": "admin"}})
+    )
+
+    wrapped = manager.get_full_tool_set().get_tool("mcp__docs__search")
+    assert wrapped is not None
+    assert "Permission denied" in await wrapped.call(_make_context(role="member"))
+    client.call_tool_with_reconnect.assert_not_awaited()
 
 
 # ── _check_tool_permission ───────────────────────────────────────────

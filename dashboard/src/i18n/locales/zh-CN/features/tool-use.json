@@ -95,25 +95,49 @@
       "title": "新增 MCP 服务器",
       "editTitle": "编辑 MCP 服务器",
       "fields": {
+        "transport": "传输方式",
+        "command": "命令",
+        "args": "命令参数",
+        "argument": "参数 {index}",
+        "env": "环境变量",
+        "cwd": "工作目录",
+        "url": "服务器 URL",
+        "authentication": "身份验证",
+        "authNone": "无",
+        "bearerToken": "Bearer Token",
+        "advanced": "高级设置",
+        "headers": "额外 HTTP 请求头",
+        "timeout": "连接超时（秒）",
+        "readTimeout": "SSE 读取超时（秒）",
+        "commandRequired": "请输入命令",
+        "urlRequired": "请输入 URL",
+        "tokenRequired": "请输入 Bearer Token",
         "name": "服务器名称",
         "nameRequired": "名称是必填项",
         "enable": "保存后连接服务器",
         "config": "服务器配置"
       },
       "errors": {
+        "keyValue": "每行填写一组 key=value。",
+        "url": "请输入有效的 HTTP 或 HTTPS URL。",
+        "timeout": "请输入大于零的超时时间。",
         "configEmpty": "配置不能为空",
         "jsonFormat": "JSON 格式错误: {error}",
         "jsonParse": "JSON 解析错误: {error}"
       },
       "buttons": {
+        "addArgument": "添加参数",
+        "removeArgument": "删除参数",
+        "importJson": "导入 JSON",
         "cancel": "取消",
         "save": "保存",
         "testConnection": "测试连接",
         "sync": "同步"
       },
       "tips": {
+        "keyValue": "每行填写一组 key=value。",
         "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
-        "transportRecommendation": "建议优先使用 Streamable HTTP 或 SSE 模式。stdio 模式会在 AstrBot 主机上启动本地进程，仅适合可信 MCP 服务器。"
+        "connectionRisk": "连接到外部 MCP 服务器可能引入安全风险。请只连接你信任的 MCP 服务器。"
       }
     },
     "serverDetail": {

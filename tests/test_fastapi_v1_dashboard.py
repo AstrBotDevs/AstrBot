@@ -3986,6 +3986,26 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
 
 
 @pytest.mark.asyncio
+async def test_v1_mcp_rename_preserves_tool_namespace_seed(
+    asgi_client: httpx.AsyncClient, fake_core_lifecycle
+):
+    headers = _jwt_headers()
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    for old_name, new_name in [("demo-server", "知识库"), ("知识库", "工作知识库")]:
+        response = await asgi_client.put(
+            "/api/v1/mcp/servers/by-name",
+            headers=headers,
+            json={"server_name": old_name, "config": {"name": new_name}},
+        )
+        assert response.status_code == 200
+    renamed = fake_tools.config["mcpServers"]["工作知识库"]
+    assert renamed["_astrbot_tool_namespace_seed"] == "demo-server"
+    response = await asgi_client.get("/api/v1/mcp/servers", headers=headers)
+    assert response.status_code == 200
+    assert all("_astrbot_tool_namespace_seed" not in item for item in response.json()["data"])
+
+
+@pytest.mark.asyncio
 async def test_v1_mcp_scope_accepts_api_key(
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,

@@ -251,7 +251,7 @@
             size="x-large"
             variant="elevated"
             class="mcp-fab"
-            @click="showMcpServerDialog = true"
+            @click="openServerDialog()"
           />
         </template>
       </v-tooltip>
@@ -291,79 +291,14 @@
       </v-card>
     </v-dialog>
 
-    <!-- 添加/编辑 MCP 服务器对话框 -->
-    <v-dialog v-model="showMcpServerDialog" max-width="750px">
-      <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-          <v-icon class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ isEditMode ? tm('dialogs.addServer.editTitle') : tm('dialogs.addServer.title') }}</span>
-        </v-card-title>
-
-        <v-card-text class="py-4">
-          <v-form @submit.prevent="saveServer" ref="form">
-            <v-text-field v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined"
-              :rules="[v => !!v || tm('dialogs.addServer.fields.nameRequired')]" required class="mb-3"></v-text-field>
-
-            <div class="mb-2 d-flex align-center">
-              <span class="text-subtitle-1">{{ tm('dialogs.addServer.fields.config') }}</span>
-              <v-spacer></v-spacer>
-              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('stdio')" class="me-1">
-                {{ tm('mcpServers.buttons.useTemplateStdio') }}
-              </v-btn>
-              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('streamable_http')"
-                class="me-1">
-                {{ tm('mcpServers.buttons.useTemplateStreamableHttp') }}
-              </v-btn>
-              <v-btn size="small" color="primary" variant="tonal" @click="setConfigTemplate('sse')" class="me-1">
-                {{ tm('mcpServers.buttons.useTemplateSse') }}
-              </v-btn>
-            </div>
-
-            <small style="color: grey">*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small>
-
-            <v-alert type="info" variant="tonal" density="compact" class="mt-3">
-              {{ tm('dialogs.addServer.tips.transportRecommendation') }}
-            </v-alert>
-
-            <div class="monaco-container" style="margin-top: 16px;">
-              <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
-                minimap: {
-                  enabled: false
-                },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                lineNumbers: 'on',
-                roundedSelection: true,
-                tabSize: 2
-              }" @change="validateJson" />
-            </div>
-
-            <div v-if="jsonError" class="mt-2 text-error">
-              <v-icon color="error" size="small" class="me-1">mdi-alert-circle</v-icon>
-              <span>{{ jsonError }}</span>
-            </div>
-
-          </v-form>
-          <div style="margin-top: 8px;">
-            <small>{{ addServerDialogMessage }}</small>
-          </div>
-
-        </v-card-text>
-
-        <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeServerDialog" :disabled="loading">
-            {{ tm('dialogs.addServer.buttons.cancel') }}
-          </v-btn>
-          <v-btn variant="text" @click="testServerConnection" :disabled="loading">
-            {{ tm('dialogs.addServer.buttons.testConnection') }}
-          </v-btn>
-          <v-btn color="primary" variant="tonal" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
-            {{ tm('dialogs.addServer.buttons.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <McpServerDialog
+      v-model="showMcpServerDialog"
+      :server="editingServer"
+      :loading="serverDialogLoading"
+      :test-message="serverTestMessage"
+      @save="saveServer"
+      @test="testServerConnection"
+    />
 
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
@@ -429,7 +364,7 @@
 </template>
 
 <script>
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import McpServerDialog from './McpServerDialog.vue';
 import { mcpApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
@@ -442,7 +377,7 @@ import {
 export default {
   name: 'McpServersSection',
   components: {
-    VueMonacoEditor,
+    McpServerDialog,
     OutlinedActionListItem
   },
   setup() {
@@ -461,7 +396,9 @@ export default {
       mcpServerProviderList: ['modelscope'],
       mcpProviderToken: '',
       showSyncMcpServerDialog: false,
-      addServerDialogMessage: '',
+      serverTestMessage: null,
+      serverDialogLoading: false,
+      editingServer: null,
       loading: false,
       loadingGettingServers: false,
       mcpServerUpdateLoaders: {},
@@ -470,24 +407,12 @@ export default {
       batchDeleteTargets: [],
       batchDeleteDialog: false,
       batchDeleting: false,
-      isEditMode: false,
-      serverConfigJson: '',
-      jsonError: null,
-      currentServer: {
-        name: '',
-        active: true,
-        tools: []
-      },
-      originalServerName: '',
       save_message_snack: false,
       save_message: '',
       save_message_success: 'success'
     };
   },
   computed: {
-    isServerFormValid() {
-      return !!this.currentServer.name && !this.jsonError;
-    },
     filteredMcpServers() {
       const query = buildSearchQuery(this.mcpSearch);
       if (!query) return this.mcpServers;
@@ -509,6 +434,7 @@ export default {
         if (server.transport) {
           return String(server.transport).trim();
         }
+        if (server.url) return 'HTTP / SSE';
         if (server.command) {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
@@ -524,7 +450,7 @@ export default {
     getServerConfigIcon() {
       return (server) => {
         const transport = String(server.transport || '').toLowerCase();
-        if (transport === 'streamable_http') {
+        if (transport === 'streamable_http' || (!transport && server.url)) {
           return 'mdi-web';
         }
         if (transport === 'sse') {
@@ -586,84 +512,33 @@ export default {
           this.loadingGettingServers = false;
         });
     },
-    validateJson() {
-      try {
-        if (!this.serverConfigJson.trim()) {
-          this.jsonError = this.tm('dialogs.addServer.errors.configEmpty');
-          return false;
-        }
-        JSON.parse(this.serverConfigJson);
-        this.jsonError = null;
-        return true;
-      } catch (e) {
-        this.jsonError = this.tm('dialogs.addServer.errors.jsonFormat', { error: e.message });
-        return false;
-      }
+    openServerDialog(server = null) {
+      this.editingServer = server;
+      this.serverTestMessage = null;
+      this.showMcpServerDialog = true;
     },
-    setConfigTemplate(type = 'stdio') {
-      let template = {};
-      if (type === 'streamable_http') {
-        template = {
-          transport: 'streamable_http',
-          url: 'your mcp server url',
-          headers: {},
-          timeout: 5,
-          sse_read_timeout: 300
-        };
-      } else if (type === 'sse') {
-        template = {
-          transport: 'sse',
-          url: 'your mcp server url',
-          headers: {},
-          timeout: 5,
-          sse_read_timeout: 300
-        };
-      } else {
-        template = {
-          command: 'python',
-          args: ['-m', 'your_module']
-        };
-      }
-      this.serverConfigJson = JSON.stringify(template, null, 2);
-    },
-    saveServer() {
-      if (!this.validateJson()) {
-        return;
-      }
-      this.loading = true;
+    async saveServer(name, config) {
+      this.serverDialogLoading = true;
+      this.serverTestMessage = null;
       try {
-        const configObj = JSON.parse(this.serverConfigJson);
-        const serverData = {
-          name: this.currentServer.name,
-          active: this.currentServer.active,
-          ...configObj
-        };
-        if (this.isEditMode && this.originalServerName) {
-          serverData.oldName = this.originalServerName;
+        const server = this.editingServer;
+        const data = { ...config, name, active: server?.active ?? true };
+        const { data: response } = server
+          ? await mcpApi.update(server.name, data)
+          : await mcpApi.create(data);
+        if (response.status === 'error') {
+          this.serverTestMessage = { type: 'error', text: response.message };
+          return;
         }
-        const request = this.isEditMode
-          ? mcpApi.update(this.originalServerName || serverData.name, serverData)
-          : mcpApi.create(serverData);
-        request
-          .then(response => {
-            this.loading = false;
-            if (response.data.status === 'error') {
-              this.showError(response.data.message || this.tm('messages.saveError', { error: 'Unknown error' }));
-              return;
-            }
-            this.showMcpServerDialog = false;
-            this.addServerDialogMessage = '';
-            this.getServers();
-            this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
-            this.resetForm();
-          })
-          .catch(error => {
-            this.loading = false;
-            this.showError(this.tm('messages.saveError', { error: error.response?.data?.message || error.message }));
-          });
-      } catch (e) {
-        this.loading = false;
-        this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
+        this.showMcpServerDialog = false;
+        this.getServers();
+        this.showSuccess(response.message || this.tm('messages.saveSuccess'));
+      } catch (error) {
+        this.serverTestMessage = { type: 'error', text: this.tm('messages.saveError', {
+          error: error.response?.data?.message || error.message
+        }) };
+      } finally {
+        this.serverDialogLoading = false;
       }
     },
     async deleteServer(server) {
@@ -750,21 +625,7 @@ export default {
       }
     },
     editServer(server) {
-      const configCopy = { ...server };
-      delete configCopy.name;
-      delete configCopy.active;
-      delete configCopy.connected;
-      delete configCopy.tools;
-      delete configCopy.errlogs;
-      this.currentServer = {
-        name: server.name,
-        active: server.active,
-        tools: server.tools || []
-      };
-      this.originalServerName = server.name;
-      this.serverConfigJson = JSON.stringify(configCopy, null, 2);
-      this.isEditMode = true;
-      this.showMcpServerDialog = true;
+      this.openServerDialog(server);
     },
     updateServerStatus(server) {
       this.mcpServerUpdateLoaders[server.name] = true;
@@ -783,44 +644,21 @@ export default {
           this.mcpServerUpdateLoaders[server.name] = false;
         });
     },
-    closeServerDialog() {
-      this.showMcpServerDialog = false;
-      this.addServerDialogMessage = '';
-      this.resetForm();
-    },
-    testServerConnection() {
-      if (!this.validateJson()) {
-        return;
-      }
-      this.loading = true;
-      let configObj;
+    async testServerConnection(name, config) {
+      this.serverDialogLoading = true;
+      this.serverTestMessage = null;
       try {
-        configObj = JSON.parse(this.serverConfigJson);
-      } catch (e) {
-        this.loading = false;
-        this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
-        return;
+        const { data: response } = await mcpApi.test(name, config);
+        this.serverTestMessage = response.status === 'error'
+          ? { type: 'error', text: response.message }
+          : { type: 'success', text: [response.message, response.data?.join(', ')].filter(Boolean).join(' · ') };
+      } catch (error) {
+        this.serverTestMessage = { type: 'error', text: this.tm('messages.testError', {
+          error: error.response?.data?.message || error.message
+        }) };
+      } finally {
+        this.serverDialogLoading = false;
       }
-      mcpApi.test(this.currentServer.name || 'draft', configObj)
-        .then(response => {
-          this.loading = false;
-          this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
-        })
-        .catch(error => {
-          this.loading = false;
-          this.showError(this.tm('messages.testError', { error: error.response?.data?.message || error.message }));
-        });
-    },
-    resetForm() {
-      this.currentServer = {
-        name: '',
-        active: true,
-        tools: []
-      };
-      this.serverConfigJson = '';
-      this.jsonError = null;
-      this.isEditMode = false;
-      this.originalServerName = '';
     },
     showSuccess(message) {
       this.save_message = message;
@@ -979,13 +817,6 @@ export default {
   transform: translateY(-4px) scale(1.05);
 }
 
-.monaco-container {
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  height: 300px;
-  margin-top: 4px;
-  overflow: hidden;
-}
 
 @media (max-width: 640px) {
   .mcp-list-header {
