@@ -31,6 +31,7 @@ from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
 from .chat_request import chat_request
 from .gemini_api_common import gemini_api_version
+from .gemini_usage_backfill import wrap_httpx_client_for_usage_backfill
 from .request_retry import retry_provider_request
 
 GEMINI_4_FALLBACK_THINKING_LEVELS = ("LOW", "MEDIUM", "HIGH", "XHIGH")
@@ -151,13 +152,14 @@ class ProviderGoogleGenAI(Provider):
         else:
             async_client_kwargs["trust_env"] = True
 
-        # Track the previous client so it can be closed in terminate() instead
-        # of leaking when _init_client is called again (e.g. via set_key).
-        # Only the most recent stale client is kept to avoid unbounded growth.
+        # Track every replaced client so terminate() can close all of them
+        # instead of leaking transports across repeated or concurrent rotations.
         if self._http_client is not None:
-            self._stale_http_clients = [self._http_client]
+            self._stale_http_clients.append(self._http_client)
 
-        self._http_client = httpx.AsyncClient(**async_client_kwargs)
+        self._http_client = wrap_httpx_client_for_usage_backfill(
+            httpx.AsyncClient(**async_client_kwargs)
+        )
         http_options.httpx_async_client = self._http_client
 
         self.client = genai.Client(
@@ -709,19 +711,49 @@ class ProviderGoogleGenAI(Provider):
     ) -> TokenUsage:
         """Extract usage from response metadata.
 
-        `prompt_token_count` includes tokens served from cache, so subtract
-        `cached_content_token_count` to avoid double-counting cached input
-        (matching the OpenAI provider's TokenUsage accounting).
+        ``prompt_token_count`` includes tokens served from cache, so subtract
+        ``cached_content_token_count`` (clamped to ``prompt_token_count``) to
+        avoid double-counting cached input or producing negative counts.
+        ``thoughts_token_count`` is added to ``output`` unless
+        ``total_token_count`` shows ``candidates_token_count`` already includes
+        reasoning tokens.
+
+        Args:
+            usage_metadata: Gemini response usage metadata.
+
+        Returns:
+            Normalized ``TokenUsage`` instance.
         """
-        prompt_tokens = usage_metadata.prompt_token_count or 0
-        cached = usage_metadata.cached_content_token_count or 0
+        prompt_tokens = max(0, usage_metadata.prompt_token_count or 0)
+        cached = min(
+            max(0, usage_metadata.cached_content_token_count or 0),
+            prompt_tokens,
+        )
+        tool_use_prompt_tokens = max(
+            0, getattr(usage_metadata, "tool_use_prompt_token_count", None) or 0
+        )
+        candidates_tokens = max(0, usage_metadata.candidates_token_count or 0)
+        thoughts_tokens = max(
+            0, getattr(usage_metadata, "thoughts_token_count", None) or 0
+        )
+        output_tokens = candidates_tokens
+        if thoughts_tokens > 0:
+            total_tokens = getattr(usage_metadata, "total_token_count", None)
+            if total_tokens is not None and total_tokens > 0:
+                uncounted_output = (
+                    total_tokens
+                    - prompt_tokens
+                    - tool_use_prompt_tokens
+                    - candidates_tokens
+                )
+                if uncounted_output > 0:
+                    output_tokens += min(thoughts_tokens, uncounted_output)
+            else:
+                output_tokens += thoughts_tokens
         return TokenUsage(
-            input_other=prompt_tokens
-            - cached
-            + (getattr(usage_metadata, "tool_use_prompt_token_count", None) or 0),
+            input_other=prompt_tokens - cached + tool_use_prompt_tokens,
             input_cached=cached,
-            output=(usage_metadata.candidates_token_count or 0)
-            + (getattr(usage_metadata, "thoughts_token_count", None) or 0),
+            output=output_tokens,
         )
 
     @staticmethod
@@ -1002,6 +1034,8 @@ class ProviderGoogleGenAI(Provider):
         finished = False
         # Buffer server-side tool parts until a custom tool call is emitted.
         pending_server_side_parts: list[dict] = []
+        last_usage_chunk: types.GenerateContentResponse | None = None
+        last_response_id: str | None = None
 
         async with (
             self._conversation_header(conversation_id),
@@ -1049,21 +1083,30 @@ class ProviderGoogleGenAI(Provider):
                     continue
 
             async for chunk in result:
+                if chunk.response_id:
+                    last_response_id = chunk.response_id
                 if chunk.usage_metadata is not None:
                     request.usage = self._extract_usage(chunk.usage_metadata)
                     context_token_usage = request.usage.total - (
                         chunk.usage_metadata.thoughts_token_count or 0
                     )
+                    last_usage_chunk = chunk
                 # Some endpoints send their final usage in a metadata-only frame.
                 if finished:
                     continue
                 llm_response = LLMResponse("assistant", is_chunk=True)
 
                 if not chunk.candidates:
-                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                    if not chunk.usage_metadata:
+                        logger.warning(
+                            f"Gemini stream chunk has empty candidates: {chunk}"
+                        )
                     continue
                 if not chunk.candidates[0].content:
-                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                    if not chunk.usage_metadata:
+                        logger.warning(
+                            f"Gemini stream chunk has empty content: {chunk}"
+                        )
                     continue
 
                 chunk_parts = chunk.candidates[0].content.parts or []
@@ -1101,7 +1144,7 @@ class ProviderGoogleGenAI(Provider):
                             llm_response.reasoning_content = accumulated_reasoning + (
                                 llm_response.reasoning_content or ""
                             )
-                    llm_response.id = chunk.response_id
+                    llm_response.id = chunk.response_id or last_response_id
                     request.mark_first_token()
                     tool_response = llm_response
                     finished = True
@@ -1116,7 +1159,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 _f = False
 
-                # 提取 reasoning content
+                # Extract reasoning content
                 reasoning = self._extract_reasoning_content(chunk.candidates[0])
                 if reasoning:
                     _f = True
@@ -1133,7 +1176,8 @@ class ProviderGoogleGenAI(Provider):
                     yield llm_response
 
                 if chunk.candidates[0].finish_reason:
-                    # Process the final chunk for potential tool calls or other content
+                    # Process the final candidate chunk; keep consuming any
+                    # trailing usage-only SSE chunk emitted after finish_reason.
                     if chunk.candidates[0].content.parts:
                         final_response = LLMResponse("assistant", is_chunk=False)
                         final_response.raw_completion = chunk
@@ -1142,21 +1186,37 @@ class ProviderGoogleGenAI(Provider):
                             final_response,
                             validate_output=False,
                         )
-                        final_response.id = chunk.response_id
+                        final_response.id = chunk.response_id or last_response_id
                     finished = True
 
+        target_response = tool_response or final_response
+        if target_response is None:
+            target_response = LLMResponse("assistant", is_chunk=False)
+
+        if not target_response.id and last_response_id:
+            target_response.id = last_response_id
+
+        if request.usage is not None:
+            target_response.usage = request.usage
+        target_response.context_token_usage = context_token_usage
+        if last_usage_chunk is not None:
+            if target_response.raw_completion is None:
+                target_response.raw_completion = last_usage_chunk
+            elif target_response.raw_completion is not last_usage_chunk:
+                if hasattr(target_response.raw_completion, "model_copy"):
+                    target_response.raw_completion = (
+                        target_response.raw_completion.model_copy(
+                            update={"usage_metadata": last_usage_chunk.usage_metadata}
+                        )
+                    )
+                else:
+                    target_response.raw_completion = last_usage_chunk
+
         if tool_response is not None:
-            tool_response.usage = request.usage
-            tool_response.context_token_usage = context_token_usage
             yield tool_response
             return
 
-        # Yield final complete response with accumulated text
-        if not final_response:
-            final_response = LLMResponse("assistant", is_chunk=False)
-
-        final_response.usage = request.usage
-        final_response.context_token_usage = context_token_usage
+        final_response = target_response
 
         # Set the complete accumulated reasoning in the final response
         if accumulated_reasoning:
