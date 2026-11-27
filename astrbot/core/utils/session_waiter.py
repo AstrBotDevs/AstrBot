@@ -15,6 +15,10 @@ USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
 FILTERS: list["SessionFilter"] = []  # 存储 SessionFilter 实例
 
 
+class SessionWaiterSupersededError(Exception):
+    """Raised when an active session waiter is replaced by a newer registration."""
+
+
 class SessionController:
     """控制一个 Session 是否已经结束"""
 
@@ -129,6 +133,7 @@ class SessionWaiter:
         self._lock = asyncio.Lock()
         """需要保证一个 session 同时只有一个 trigger"""
         self._cleaned_up = False
+        self._active_trigger_tasks: set[asyncio.Task[Any]] = set()
 
     async def register_wait(
         self,
@@ -138,8 +143,15 @@ class SessionWaiter:
         """等待外部输入并处理"""
         previous = USER_SESSIONS.get(self.session_id)
         if previous is not None and previous is not self:
-            previous._cleanup()
+            previous._cleanup(
+                SessionWaiterSupersededError(
+                    "Session waiter was superseded by a newer registration."
+                )
+            )
 
+        if self.session_controller.future.done():
+            self.session_controller = SessionController()
+        self._cleaned_up = False
         self.handler = handler
         USER_SESSIONS[self.session_id] = self
 
@@ -155,15 +167,18 @@ class SessionWaiter:
 
     def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
+        if USER_SESSIONS.get(self.session_id) is self:
+            USER_SESSIONS.pop(self.session_id, None)
         if self._cleaned_up:
             return
         self._cleaned_up = True
-        if USER_SESSIONS.get(self.session_id) is self:
-            USER_SESSIONS.pop(self.session_id, None)
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:
             pass
+        for task in list(self._active_trigger_tasks):
+            if not task.done():
+                task.cancel()
         self.session_controller.stop(error)
 
     @classmethod
@@ -179,12 +194,22 @@ class SessionWaiter:
                     session.session_controller.history_chains.append(
                         [copy.deepcopy(comp) for comp in event.get_messages()],
                     )
+                assert session.handler is not None
+                handler_task = asyncio.create_task(
+                    session.handler(session.session_controller, event)
+                )
+                session._active_trigger_tasks.add(handler_task)
                 try:
-                    # TODO: 这里使用 create_task，跟踪 task，防止超时后这里 handler 仍然在执行
-                    assert session.handler is not None
-                    await session.handler(session.session_controller, event)
+                    await handler_task
+                except asyncio.CancelledError:
+                    if not session._cleaned_up:
+                        raise
                 except Exception as e:
                     session.session_controller.stop(e)
+                finally:
+                    session._active_trigger_tasks.discard(handler_task)
+                    if not handler_task.done():
+                        handler_task.cancel()
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
