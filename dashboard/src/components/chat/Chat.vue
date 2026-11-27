@@ -358,11 +358,15 @@
       >
         <Teleport to="#chat-workbench-header">
           <!-- Stays in the top bar while the workbench is open: highlighted
-               while open, click again to close. -->
-          <button
-            type="button"
-            class="workbench-launcher"
-            :class="{ 'workbench-launcher--active': workbenchVisible }"
+               while open, click again to close. Same button, icon set and
+               highlight as the project files button. -->
+          <v-btn
+            class="chat-action-btn workspace-files-trigger workbench-launcher"
+            :class="{ 'workspace-files-trigger--active': workbenchVisible }"
+            variant="text"
+            size="small"
+            rounded="sm"
+            icon
             :title="tm('workbench.title')"
             :aria-label="tm('workbench.title')"
             :aria-pressed="workbenchVisible"
@@ -374,8 +378,8 @@
                   : openWorkbenchPage()
             "
           >
-            <PanelRightOpen :size="18" />
-          </button>
+            <v-icon size="20">mdi-web</v-icon>
+          </v-btn>
         </Teleport>
         <v-progress-linear
           v-if="activeSessionPagination?.loading"
@@ -663,7 +667,6 @@ import {
   ChevronRight,
   Box,
   PanelLeft,
-  PanelRightOpen,
   Pencil,
   Settings,
   SquarePen,
@@ -2868,20 +2871,11 @@ async function stopCurrentSession() {
   justify-content: center;
   gap: 28px;
 }
+/* The header's button rules (`.top-header .header-actions .v-btn` and
+   `.workspace-files-trigger--active`) style this teleported button like the
+   project files button; only keep it clickable inside the drag region. */
 .workbench-launcher {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--astrbot-radius-control);
-  color: rgb(var(--v-theme-on-surface));
-  cursor: pointer;
   -webkit-app-region: no-drag;
-}
-.workbench-launcher:hover,
-.workbench-launcher--active {
-  background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .messages-panel {

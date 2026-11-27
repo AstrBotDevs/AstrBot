@@ -2233,7 +2233,9 @@ onMounted(async () => {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.workspace-files-trigger--active {
+/* Outranks `.top-header .header-actions .v-btn`, which clears every header
+   button's background, so an open panel's button stays highlighted. */
+.top-header .header-actions .v-btn.workspace-files-trigger--active {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
@@ -2782,7 +2784,9 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 #chat-workbench-header:has(.workbench-launcher) {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  /* No left padding: the header actions' own gap spaces the button like the
+     project files button before it. */
+  padding: 0 8px 0 0;
   height: var(--astrbot-toolbar-height);
 }
 .top-header:has(#chat-workbench-header:not(:empty)) .header-actions {
