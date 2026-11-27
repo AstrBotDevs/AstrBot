@@ -2101,6 +2101,14 @@
         "description": "reference_id",
         "hint": "fishaudio TTS の参照モデル ID（任意）です。指定すると、キャラクター名で検索せずにモデル ID を直接使用します。例: 626bb6d3f3364c9cbc3aa6a67300a664。その他のモデル: https://fish.audio/zh-CN/discovery。モデル詳細画面でモデル ID をコピーできます。"
       },
+      "fishaudio-tts-format": {
+        "description": "音声フォーマット",
+        "hint": "FishAudio TTS が返す音声フォーマットです。互換性維持のためデフォルトは wav です。長文音声ではファイルサイズを大幅に削減できる mp3 を推奨します。"
+      },
+      "fishaudio-tts-mp3-bitrate": {
+        "description": "MP3 ビットレート (kbps)",
+        "hint": "音声フォーマットに mp3 を選択した場合のみ有効です。64 / 128 / 192 kbps から選択でき、デフォルトは 128 です。"
+      },
       "whisper_hint": {
         "description": "Whisper モデルをローカルデプロイする際の注意事項",
         "hint": "有効にする前に、pip で openai-whisper ライブラリをインストールし（NVIDIA GPU ユーザーは主に torch と cuda のため約 2 GB、CPU ユーザーは約 1 GB をダウンロードします）、ffmpeg もインストールしてください。未導入の場合、正常に文字起こしできません。"

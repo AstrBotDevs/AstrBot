@@ -2018,6 +2018,14 @@
         "description": "reference_id",
         "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID"
       },
+      "fishaudio-tts-format": {
+        "description": "音频格式",
+        "hint": "FishAudio TTS 返回的音频格式。默认 wav 保持兼容；长语音场景推荐选择 mp3 以显著减小音频体积并降低传输开销。"
+      },
+      "fishaudio-tts-mp3-bitrate": {
+        "description": "MP3 码率 (kbps)",
+        "hint": "仅当音频格式选择 mp3 时生效，可选 64 / 128 / 192 kbps，默认 128。"
+      },
       "whisper_hint": {
         "description": "本地部署 Whisper 模型须知",
         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
