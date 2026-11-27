@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -7,8 +8,13 @@ from google.genai import types
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.astr_agent_runtime.history import save_agent_history
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
@@ -486,3 +492,83 @@ async def test_prepare_conversation_pairs_reused_ids_and_replays_tool_parts():
         assert (call.function_call.name, call.function_call.id) == (name, "call_0")
         response = contents[i + 1].parts[0].function_response
         assert (response.name, response.id) == (name, "call_0")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gemini_thinking_usage_preserves_context_estimate(streaming):
+    provider = _gemini_stream_provider()
+    provider.model_name = "gemini-2.5-flash"
+    provider.api_keys = ["unused"]
+    response = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.ModelContent(parts=[types.Part(text="Answer")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=78_000,
+            candidates_token_count=2000,
+            thoughts_token_count=12000,
+        ),
+    )
+
+    async def stream():
+        yield response.model_copy(update={"usage_metadata": None})
+        yield types.GenerateContentResponse(usage_metadata=response.usage_metadata)
+
+    query = AsyncMock(return_value=response)
+    stream_query = AsyncMock(side_effect=lambda **kwargs: stream())
+    provider.client.models.generate_content = query
+    provider.client.models.generate_content_stream = stream_query
+    conversation = Conversation(platform_id="test", user_id="test", cid="test")
+    request = ProviderRequest(
+        prompt="Question",
+        contexts=[
+            {"role": "user", "content": "Previous question"},
+            {"role": "assistant", "content": "Previous answer"},
+        ],
+        conversation=conversation,
+    )
+    runner = ToolLoopAgentRunner()
+    options = {
+        "provider": provider,
+        "run_context": ContextWrapper(context=None),
+        "tool_executor": SimpleNamespace(),
+        "agent_hooks": BaseAgentRunHooks(),
+        "streaming": streaming,
+        "max_context_tokens": 100000,
+    }
+    await runner.reset(request=request, **options)
+    async for _ in runner.step_until_done(3):
+        pass
+
+    commit = AsyncMock()
+    await save_agent_history(
+        req=request,
+        llm_response=runner.final_llm_resp,
+        all_messages=runner.run_context.messages,
+        runner_stats=runner.stats,
+        commit=commit,
+    )
+    history, stored_context_tokens = commit.call_args.args
+    assert runner.stats.token_usage.total == 92_000
+    assert conversation.token_usage == stored_context_tokens == 80_000
+
+    conversation.token_usage = stored_context_tokens
+    await runner.reset(
+        request=ProviderRequest(
+            prompt="Continue", contexts=history, conversation=conversation
+        ),
+        **options,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    last_call = (stream_query if streaming else query).call_args
+    sent_contents = last_call.kwargs["contents"]
+    assert any(
+        part.text == "Previous question"
+        for content in sent_contents
+        for part in content.parts
+    )

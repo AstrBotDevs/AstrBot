@@ -484,6 +484,8 @@ class LLMResponse:
     """The ID of the response. For chunked responses, it's the ID of the chunk; for non-chunked responses, it's the ID of the response."""
     usage: TokenUsage | None = None
     """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
+    context_token_usage: int | None = None
+    """Provider estimate of tokens retained in the conversation after this response."""
 
     def __init__(
         self,

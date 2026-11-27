@@ -971,6 +971,10 @@ class ProviderGoogleGenAI(Provider):
         llm_response.id = result.response_id
         if result.usage_metadata:
             llm_response.usage = self._extract_usage(result.usage_metadata)
+            # Internal thinking is billed, but its tokens are not replayed as history.
+            llm_response.context_token_usage = llm_response.usage.total - (
+                result.usage_metadata.thoughts_token_count or 0
+            )
         return llm_response
 
     async def _query_stream(
@@ -994,6 +998,7 @@ class ProviderGoogleGenAI(Provider):
         accumulated_reasoning = ""
         final_response = None
         tool_response = None
+        context_token_usage = None
         finished = False
         # Buffer server-side tool parts until a custom tool call is emitted.
         pending_server_side_parts: list[dict] = []
@@ -1046,6 +1051,9 @@ class ProviderGoogleGenAI(Provider):
             async for chunk in result:
                 if chunk.usage_metadata is not None:
                     request.usage = self._extract_usage(chunk.usage_metadata)
+                    context_token_usage = request.usage.total - (
+                        chunk.usage_metadata.thoughts_token_count or 0
+                    )
                 # Some endpoints send their final usage in a metadata-only frame.
                 if finished:
                     continue
@@ -1139,6 +1147,7 @@ class ProviderGoogleGenAI(Provider):
 
         if tool_response is not None:
             tool_response.usage = request.usage
+            tool_response.context_token_usage = context_token_usage
             yield tool_response
             return
 
@@ -1147,6 +1156,7 @@ class ProviderGoogleGenAI(Provider):
             final_response = LLMResponse("assistant", is_chunk=False)
 
         final_response.usage = request.usage
+        final_response.context_token_usage = context_token_usage
 
         # Set the complete accumulated reasoning in the final response
         if accumulated_reasoning:
