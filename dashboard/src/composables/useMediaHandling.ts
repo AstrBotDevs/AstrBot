@@ -211,16 +211,39 @@ export function useMediaHandling() {
     }
 
     async function handlePaste(event: ClipboardEvent) {
-        const items = event.clipboardData?.items;
-        if (!items) return;
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return;
 
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
-                const file = items[i].getAsFile();
-                if (file) {
-                    await processAndUploadImage(file);
-                }
+        // Snapshot pasted files synchronously before awaiting uploads,
+        // because browsers clear clipboardData once the paste event finishes.
+        const directoryNames = new Set<string>();
+        const itemFiles: File[] = [];
+        for (const item of Array.from(clipboardData.items)) {
+            if (item.kind !== 'file') continue;
+            const entry = item.webkitGetAsEntry();
+            if (entry?.isDirectory) {
+                directoryNames.add(entry.name);
+                continue;
             }
+            const file = item.getAsFile();
+            if (file) {
+                itemFiles.push(file);
+            }
+        }
+
+        const fallbackFiles = Array.from(clipboardData.files).filter(
+            file => !directoryNames.has(file.name)
+        );
+        const pastedFiles =
+            fallbackFiles.length > itemFiles.length ? fallbackFiles : itemFiles;
+
+        if (directoryNames.size > 0 || pastedFiles.length > 0) {
+            event.preventDefault();
+        }
+        if (pastedFiles.length === 0) return;
+
+        for (const file of pastedFiles) {
+            await uploadStagedFile(file);
         }
     }
 
