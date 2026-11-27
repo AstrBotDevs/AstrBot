@@ -63,6 +63,8 @@ class AstrBotCoreLifecycle:
     该类还负责加载和执行插件, 以及处理事件总线的分发。
     """
 
+    _RESTART_TASK_CANCEL_TIMEOUT_S: float = 5.0
+
     def __init__(self, log_broker: LogBroker, db: BaseDatabase) -> None:
         self.log_broker = log_broker  # 初始化日志代理
         self.astrbot_config = astrbot_config  # 初始化配置
@@ -447,23 +449,38 @@ class AstrBotCoreLifecycle:
     async def restart(self) -> None:
         """Restart the core lifecycle after gracefully stopping active components."""
         if temp_dir_cleaner := getattr(self, "temp_dir_cleaner", None):
-            await temp_dir_cleaner.stop()
+            try:
+                await temp_dir_cleaner.stop()
+            except Exception as e:
+                logger.warning(f"Failed to stop temp dir cleaner during restart: {e}")
 
         curr_tasks = list(getattr(self, "curr_tasks", ()))
         for task in curr_tasks:
             task.cancel()
 
         if event_bus := getattr(self, "event_bus", None):
-            await event_bus.close()
+            try:
+                await event_bus.close()
+            except Exception as e:
+                logger.warning(f"Failed to close event bus during restart: {e}")
 
         if cron_manager := getattr(self, "cron_manager", None):
-            await cron_manager.shutdown()
+            try:
+                await cron_manager.shutdown()
+            except Exception as e:
+                logger.warning(f"Failed to shut down cron manager during restart: {e}")
 
         context = getattr(self, "star_context", None)
         if isinstance(context, Context):
-            await context.agent.close()
+            try:
+                await context.agent.close()
+            except Exception as e:
+                logger.warning(f"Failed to close agent context during restart: {e}")
         if self.subagents is not None:
-            await self.subagents.close()
+            try:
+                await self.subagents.close()
+            except Exception as e:
+                logger.warning(f"Failed to close subagents during restart: {e}")
 
         if plugin_manager := getattr(self, "plugin_manager", None):
             for plugin in plugin_manager.context.get_all_stars():
@@ -476,25 +493,51 @@ class AstrBotCoreLifecycle:
                         "which may lead to resource leaks.",
                     )
 
-        await self.provider_manager.terminate()
-        await self.platform_manager.terminate()
-        await self.kb_manager.terminate()
+        for label, coro in (
+            ("provider manager", self.provider_manager.terminate()),
+            ("platform manager", self.platform_manager.terminate()),
+            ("knowledge base manager", self.kb_manager.terminate()),
+        ):
+            try:
+                await coro
+            except Exception as e:
+                logger.warning(f"Failed to terminate {label} during restart: {e}")
+
         if sp.db_helper is self.db:
-            await sp.close()
+            try:
+                await sp.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to close shared preferences during restart: {e}"
+                )
         self.dashboard_shutdown_event.set()
 
-        for task in curr_tasks:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.error(f"Task {task.get_name()} failed during restart: {e}")
+        if curr_tasks:
+            done, pending = await asyncio.wait(
+                curr_tasks,
+                timeout=self._RESTART_TASK_CANCEL_TIMEOUT_S,
+            )
+            for task in done:
+                if task.cancelled():
+                    continue
+                if exc := task.exception():
+                    logger.error(f"Task {task.get_name()} failed during restart: {exc}")
+            for task in pending:
+                logger.warning(
+                    f"Task {task.get_name()} did not finish within "
+                    f"{self._RESTART_TASK_CANCEL_TIMEOUT_S:.1f}s during restart; continuing."
+                )
 
         from astrbot.core.utils.trace_store import close_trace_store
 
-        await asyncio.to_thread(close_trace_store)
-        await self.db.chat_usage_writer.close()
+        try:
+            await asyncio.to_thread(close_trace_store)
+        except Exception as e:
+            logger.warning(f"Failed to close trace store during restart: {e}")
+        try:
+            await self.db.chat_usage_writer.close()
+        except Exception as e:
+            logger.warning(f"Failed to close chat usage writer during restart: {e}")
         try:
             await self.db.engine.dispose()
         except Exception as e:
