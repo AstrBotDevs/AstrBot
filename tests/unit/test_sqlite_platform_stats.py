@@ -28,10 +28,10 @@ async def test_get_platform_stats_aggregates_counts_and_returns_models(
             count=100,
             timestamp=now - timedelta(hours=48),
         )
-        # Multiple in-window buckets for bot_a
+        # Multiple in-window buckets for bot_a across different platform_type values
         await db.insert_platform_stats(
             "bot_a",
-            "aiocqhttp",
+            "onebot",
             count=5,
             timestamp=now - timedelta(hours=3),
         )
@@ -52,6 +52,7 @@ async def test_get_platform_stats_aggregates_counts_and_returns_models(
         stats = await db.get_platform_stats(offset_sec=86400)
         assert len(stats) == 2
         assert all(isinstance(item, PlatformStat) for item in stats)
+        assert all(isinstance(item.id, int) and item.id > 0 for item in stats)
 
         # Ordered by latest timestamp descending: bot_a (-1h) before bot_b (-2h)
         assert stats[0].platform_id == "bot_a"

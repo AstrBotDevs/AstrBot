@@ -367,36 +367,58 @@ class SQLiteDatabase(BaseDatabase):
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
         """Get platform statistics within the specified offset in seconds.
 
+        Rows are grouped by ``platform_id`` with ``count`` summed across the
+        lookback window and ``id``, ``timestamp``, and ``platform_type`` taken
+        from the latest row (``timestamp DESC, id DESC``).
+
         Args:
             offset_sec: Lookback window in seconds from the current local time.
 
         Returns:
-            Aggregated ``PlatformStat`` rows grouped by platform ID and type,
+            Aggregated ``PlatformStat`` rows grouped by ``platform_id``,
             ordered by latest timestamp descending.
         """
         async with self.get_db() as session:
             session: AsyncSession
             now = datetime.now()
             start_time = now - timedelta(seconds=offset_sec)
-            latest_ts = func.max(col(PlatformStat.timestamp)).label("timestamp")
-            total_count = func.sum(col(PlatformStat.count)).label("count")
-            stmt = (
+            windowed = (
                 select(
-                    latest_ts,
-                    col(PlatformStat.platform_id),
-                    col(PlatformStat.platform_type),
-                    total_count,
+                    col(PlatformStat.id).label("id"),
+                    col(PlatformStat.timestamp).label("timestamp"),
+                    col(PlatformStat.platform_id).label("platform_id"),
+                    col(PlatformStat.platform_type).label("platform_type"),
+                    func.sum(col(PlatformStat.count))
+                    .over(partition_by=col(PlatformStat.platform_id))
+                    .label("count"),
+                    func.row_number()
+                    .over(
+                        partition_by=col(PlatformStat.platform_id),
+                        order_by=(
+                            desc(col(PlatformStat.timestamp)),
+                            desc(col(PlatformStat.id)),
+                        ),
+                    )
+                    .label("rn"),
                 )
                 .where(col(PlatformStat.timestamp) >= start_time)
-                .group_by(
-                    col(PlatformStat.platform_id),
-                    col(PlatformStat.platform_type),
+                .subquery()
+            )
+            stmt = (
+                select(
+                    windowed.c.id,
+                    windowed.c.timestamp,
+                    windowed.c.platform_id,
+                    windowed.c.platform_type,
+                    windowed.c.count,
                 )
-                .order_by(desc(latest_ts))
+                .where(windowed.c.rn == 1)
+                .order_by(desc(windowed.c.timestamp), desc(windowed.c.id))
             )
             result = await session.execute(stmt)
             return [
                 PlatformStat(
+                    id=int(row.id),
                     timestamp=row.timestamp,
                     platform_id=row.platform_id,
                     platform_type=row.platform_type,
