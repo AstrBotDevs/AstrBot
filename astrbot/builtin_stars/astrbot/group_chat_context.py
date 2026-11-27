@@ -136,6 +136,16 @@ class GroupChatContext:
         self._record_ids.pop(umo, None)
         return len(records) if records else 0
 
+    def clear_platform(self, platform_id: str) -> None:
+        """Discard all buffered observations owned by one adapter instance.
+
+        Args:
+            platform_id: Exact platform instance ID being cleaned up.
+        """
+        for umo in list(self.raw_records):
+            if umo.partition(":")[0] == platform_id:
+                self.clear_session(umo)
+
     async def handle_message(self, event: AstrMessageEvent) -> None:
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return

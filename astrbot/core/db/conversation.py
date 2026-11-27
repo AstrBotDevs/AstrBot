@@ -1537,6 +1537,22 @@ class ConversationStore:
             await session.commit()
             return replacement
 
+    async def has_records(self, *, umo: str, cid: str | None = None) -> bool:
+        """Check whether a deletion target still exists without loading history.
+
+        Args:
+            umo: Exact owner of the target records.
+            cid: Optional single conversation ID within this origin.
+
+        Returns:
+            Whether at least one matching row remains.
+        """
+        query = select(ConversationV3.id).where(ConversationV3.umo == umo).limit(1)
+        if cid is not None:
+            query = query.where(ConversationV3.conversation_id == cid)
+        async with self.db.get_db() as session:
+            return await session.scalar(query) is not None
+
     async def delete(self, *, cid=None, umo=None) -> None:
         """Delete conversations; independent forks retain their own contexts.
 

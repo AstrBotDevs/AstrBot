@@ -39,6 +39,9 @@ class Main(star.Star):
             context.conversation_manager.on_current_conversation_deleted = (
                 self.group_chat_context.clear_session
             )
+            context.conversation_manager.on_platform_conversations_deleted = (
+                self.group_chat_context.clear_platform
+            )
         except BaseException as e:
             logger.error(f"group chat context init failed: {e}")
 
@@ -50,6 +53,7 @@ class Main(star.Star):
             == self.group_chat_context.clear_session
         ):
             manager.on_current_conversation_deleted = None
+            manager.on_platform_conversations_deleted = None
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):
