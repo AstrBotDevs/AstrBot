@@ -62,3 +62,8 @@
 - Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
 - `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
 - Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
+
+### First-run onboarding / 首次使用引导
+
+- 新增首次使用引导（`/chat/onboarding`）：在原生 ChatUI 中通过对话与内嵌交互卡片依次完成使用须知确认、AI 模型配置与测活、在线试聊及消息平台接入。仅在全新安装完成账户初始化后自动进入，已有配置、升级、重置密码和普通登录不会触发；仍可从「系统设置 → 维护 → 重新进入首次引导」手动打开。
+- Add conversational first-run onboarding inside ChatUI (`/chat/onboarding`) with inline interactive widgets for usage notice, AI model setup & connection testing, live model trial, and messaging platform setup. Triggered automatically only after account setup on a fresh installation; upgrades, existing configs, password resets, and ordinary logins skip it, while manual reentry remains available in Settings → Maintenance.

@@ -37,6 +37,7 @@ export const getAuthSetupStatus = <ThrowOnError extends boolean = false>(options
 
 /**
  * Complete first-run dashboard account setup
+ * Successful responses include data.onboarding_required, true only for a new installation without configured models or platforms. Missing or false means no automatic onboarding.
  */
 export const setupAuth = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetupAuthData, ThrowOnError>) => {
     return (options?.client ?? client).post<SetupAuthResponse, SetupAuthError, ThrowOnError>({

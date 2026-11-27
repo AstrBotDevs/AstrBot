@@ -193,7 +193,7 @@
             spellcheck="false"
           ></textarea>
         </div>
-        <div class="input-left-actions">
+        <div v-if="!minimal" class="input-left-actions">
           <!-- Settings Menu -->
           <StyledMenu
             offset="8"
@@ -295,6 +295,7 @@
         />
         <div class="input-right-actions">
           <input
+            v-if="!minimal"
             type="file"
             ref="imageInputRef"
             @change="handleFileSelect"
@@ -304,6 +305,7 @@
           <!-- Provider/Model Selector Menu -->
           <ProviderModelMenu
             v-if="
+              !minimal &&
               !recordingMode &&
               props.showProviderSelector &&
               providerSelectorAvailable
@@ -339,7 +341,7 @@
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
           <v-btn
-            v-if="recordingMode !== 'transcribe'"
+            v-if="!minimal && recordingMode !== 'transcribe'"
             @click="
               recordingMode === 'audio'
                 ? emit('cancelRecording')
@@ -491,6 +493,7 @@ interface Props {
   activeUploads?: ActiveUploadView[];
   disabled: boolean;
   showSettings?: boolean;
+  minimal?: boolean;
   isRecording: boolean;
   recordingMode?: "transcribe" | "audio" | null;
   voiceBusy?: boolean;
@@ -517,6 +520,7 @@ const props = withDefaults(defineProps<Props>(), {
   sendShortcut: "shift_enter",
   showProviderSelector: true,
   showSettings: false,
+  minimal: false,
   tokenUsage: null,
   recordingMode: null,
   voiceBusy: false,
@@ -841,7 +845,7 @@ function handleKeyDown(e: KeyboardEvent) {
   const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
-    if (e.ctrlKey && e.keyCode === 66) {
+    if (!props.minimal && e.ctrlKey && e.keyCode === 66) {
       e.preventDefault();
       if (ctrlKeyDown.value) return;
 
@@ -989,6 +993,7 @@ function handleKeyUp(e: KeyboardEvent) {
 }
 
 function handlePaste(e: ClipboardEvent) {
+  if (props.minimal) return;
   const pastedText = e.clipboardData?.getData("text/plain") || "";
   if (pastedText.length > longPasteThreshold) {
     e.preventDefault();
@@ -1031,7 +1036,7 @@ function handleConfigChange(payload: {
 }
 
 function getCurrentSelection() {
-  if (!props.showProviderSelector || !providerSelectorAvailable.value) {
+  if (props.minimal || !props.showProviderSelector || !providerSelectorAvailable.value) {
     return null;
   }
   return providerModelMenuRef.value?.getCurrentSelection();

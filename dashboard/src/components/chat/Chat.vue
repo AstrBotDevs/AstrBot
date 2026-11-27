@@ -3,12 +3,13 @@
     v-if="props.active"
     class="chat-ui"
     :style="{
-      '--astrbot-chat-sidebar-width': `${isMobile ? 0 : isSidebarCollapsed ? 56 : 245}px`,
+      '--astrbot-chat-sidebar-width': `${isMobile || isOnboardingWorkspace ? 0 : isSidebarCollapsed ? 56 : 245}px`,
       '--astrbot-workbench-preferred-width': chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
     }"
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
     <v-navigation-drawer
+      v-if="!isOnboardingWorkspace"
       class="chat-sidebar"
       :class="{ collapsed: isSidebarCollapsed, 'sidebar-page-navigation': sidebarNavigation, 'chat-sidebar--paired': pairedNavigation }"
       :model-value="isMobile ? mobileDrawer.open : true"
@@ -168,7 +169,9 @@
             class="session-item"
             :class="{
               active:
-                !isProviderWorkspace && currSessionId === session.session_id,
+                !isProviderWorkspace &&
+                !isOnboardingWorkspace &&
+                currSessionId === session.session_id,
               running: isSessionRunning(session.session_id),
             }"
             role="button"
@@ -269,7 +272,7 @@
     >
       <transition name="drop-fade">
         <div
-          v-if="isDragging && !isProviderWorkspace"
+          v-if="isDragging && !isProviderWorkspace && !isOnboardingWorkspace"
           class="chat-drop-overlay"
         >
           <div class="chat-drop-overlay-content">
@@ -289,6 +292,15 @@
           class="provider-workspace-page"
           :default-tab="providerWorkspaceType"
           embedded
+        />
+      </section>
+
+      <section v-else-if="isOnboardingWorkspace" class="onboarding-workspace-shell">
+        <OnboardingSetup
+          :key="onboardingMountKey"
+          @model-saved="handleOnboardingModelSaved"
+          @session-created="handleOnboardingSessionCreated"
+          @open-session="handleOnboardingOpenSession"
         />
       </section>
 
@@ -625,6 +637,7 @@
 <script setup lang="ts">
 import {
   computed,
+  defineAsyncComponent,
   markRaw,
   nextTick,
   onBeforeUnmount,
@@ -691,6 +704,9 @@ import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
+const OnboardingSetup = defineAsyncComponent(
+  () => import("@/components/OnboardingSetup.vue"),
+);
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
@@ -729,6 +745,7 @@ const customizer = useCustomizerStore();
 const sidebarNavigation = computed(() => customizer.chatNavigationInSidebar && !props.chatboxMode);
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
+const { tm: welcomeTm } = useModuleI18n("features/welcome");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
 const {
@@ -773,18 +790,25 @@ const {
 } = useMediaHandling();
 
 const { isDragging, dragEvents } = useDragUpload((files) => {
-  if (isProviderWorkspace.value) return;
+  if (isProviderWorkspace.value || isOnboardingWorkspace.value) return;
   handleFilesSelected(files);
 });
 
-type WorkspaceView = "chat" | "providers";
+type WorkspaceView = "chat" | "providers" | "onboarding";
 
 interface TokenProviderConfig extends ProviderMetadataSource {
   id: string;
   enable?: boolean;
 }
 
-const activeWorkspace = ref<WorkspaceView>("chat");
+const activeWorkspace = ref<WorkspaceView>(
+  getRouteSessionId() === "models"
+    ? "providers"
+    : getRouteSessionId() === "onboarding"
+      ? "onboarding"
+      : "chat",
+);
+const onboardingMountKey = ref(0);
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
 const projectDialogError = ref("");
@@ -892,6 +916,9 @@ const isSidebarCollapsed = computed(
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
+);
+const isOnboardingWorkspace = computed(
+  () => activeWorkspace.value === "onboarding",
 );
 
 const providerWorkspaceType = computed(() =>
@@ -1029,7 +1056,7 @@ const selectedProject = computed(
     ) || null,
 );
 const activeProject = computed(() => {
-  if (isProviderWorkspace.value) return null;
+  if (isProviderWorkspace.value || isOnboardingWorkspace.value) return null;
   if (selectedProject.value) return selectedProject.value;
   const projectId = sessionProject.value?.project_id;
   return (
@@ -1039,13 +1066,19 @@ const activeProject = computed(() => {
 const isEmptyChat = computed(
   () =>
     !isProviderWorkspace.value &&
+    !isOnboardingWorkspace.value &&
     !selectedProject.value &&
     !loadingMessages.value &&
     !activeMessages.value.length,
 );
 const { state: workbench, closeTab: closeWorkbenchTab, openPage: openWorkbenchPage } = useChatWorkbench(currSessionId, toRef(chatHeader, "workbenchWidth"));
 const workbenchVisible = computed(() =>
-  Boolean(workbench.value?.open && !isProviderWorkspace.value && !selectedProject.value),
+  Boolean(
+    workbench.value?.open &&
+      !isProviderWorkspace.value &&
+      !isOnboardingWorkspace.value &&
+      !selectedProject.value,
+  ),
 );
 watch(workbenchVisible, (open) => {
   if (open) closeSecondaryPanels();
@@ -1053,11 +1086,13 @@ watch(workbenchVisible, (open) => {
 watch([threadPanelOpen, refsSidebarOpen, () => chatHeader.workspaceFilesOpen], (panels) => {
   if (panels.some(Boolean) && workbench.value) workbench.value.open = false;
 });
-const chatHeaderTitle = computed(
-  () => currentSessionTitle.value || selectedProject.value?.title || "",
+const chatHeaderTitle = computed(() =>
+  isOnboardingWorkspace.value
+    ? welcomeTm("guide.title")
+    : currentSessionTitle.value || selectedProject.value?.title || "",
 );
 const chatHeaderSubtitle = computed(() =>
-  currentSessionTitle.value
+  !isOnboardingWorkspace.value && currentSessionTitle.value
     ? sessionProject.value?.title || selectedProject.value?.title || ""
     : "",
 );
@@ -1263,6 +1298,10 @@ onMounted(async () => {
     const routeSessionId = getRouteSessionId();
     if (routeSessionId === "models") {
       activeWorkspace.value = "providers";
+    } else if (routeSessionId === "onboarding") {
+      if (activeWorkspace.value !== "onboarding") {
+        enterOnboardingWorkspace();
+      }
     } else if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
@@ -1328,11 +1367,19 @@ watch(
       activeWorkspace.value = "providers";
       return;
     }
+    if (routeSessionId === "onboarding") {
+      enterOnboardingWorkspace();
+      return;
+    }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
       showChatWorkspace();
       selectedProjectId.value = null;
       await selectSession(routeSessionId, false);
-    } else if (!routeSessionId && currSessionId.value) {
+    } else if (
+      !routeSessionId &&
+      (currSessionId.value ||
+        (route.path === basePath() && activeWorkspace.value !== "chat"))
+    ) {
       showChatWorkspace();
       currSessionId.value = "";
     }
@@ -1365,6 +1412,37 @@ function closeSecondaryPanels() {
 
 function showChatWorkspace() {
   activeWorkspace.value = "chat";
+}
+
+function enterOnboardingWorkspace() {
+  closeSecondaryPanels();
+  selectedProjectId.value = null;
+  currSessionId.value = "";
+  replyTarget.value = null;
+  activeWorkspace.value = "onboarding";
+  onboardingMountKey.value += 1;
+}
+
+function handleOnboardingModelSaved(payload: {
+  providerId: string;
+  modelName: string;
+}) {
+  if (payload.providerId) {
+    setProviderSelection(payload.providerId, payload.modelName);
+  }
+  void loadTokenProviders();
+}
+
+function handleOnboardingSessionCreated() {
+  void getSessions();
+}
+
+function handleOnboardingOpenSession(sessionId?: string) {
+  if (sessionId) {
+    void selectSession(sessionId);
+  } else {
+    void startNewChat();
+  }
 }
 
 async function openProviderWorkspace(type = "chat_completion") {
@@ -2787,6 +2865,14 @@ async function stopCurrentSession() {
 .provider-workspace-shell {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.onboarding-workspace-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 

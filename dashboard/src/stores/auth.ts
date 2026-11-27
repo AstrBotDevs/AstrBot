@@ -22,7 +22,7 @@ export const useAuthStore = defineStore("auth", {
     returnUrl: null,
   }),
   actions: {
-    async finishAuthenticatedSession(data: any): Promise<void> {
+    async finishAuthenticatedSession(data: any, continueSetup = false): Promise<void> {
       this.username = data.username;
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
@@ -59,7 +59,13 @@ export const useAuthStore = defineStore("auth", {
         router.replace({ path: '/auth/setup', query: { redirect: installReturnUrl } });
         return;
       }
-      if (installReturnUrl) {
+      if (continueSetup && data?.onboarding_required === true) {
+        router.replace(
+          installReturnUrl
+            ? { path: '/chat/onboarding', query: { redirect: installReturnUrl } }
+            : '/chat/onboarding',
+        );
+      } else if (installReturnUrl) {
         router.replace(installReturnUrl);
       } else if (await this.checkOnboardingCompleted()) {
         router.push('/dashboard/default');
@@ -147,7 +153,7 @@ export const useAuthStore = defineStore("auth", {
           return Promise.reject(res.data.message);
         }
 
-        await this.finishAuthenticatedSession(res.data.data);
+        await this.finishAuthenticatedSession(res.data.data, true);
       } catch (error) {
         return Promise.reject(error);
       }
@@ -166,7 +172,7 @@ export const useAuthStore = defineStore("auth", {
         const sources = providerRes.data.data?.provider_sources || [];
         const sourceMap = new Map();
         sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
-        
+
         const hasProvider = providers.some((provider: any) => {
           if (provider.provider_type) return provider.provider_type === 'chat_completion';
           if (provider.provider_source_id) {

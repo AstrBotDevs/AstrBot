@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthSetup from '../authForms/AuthSetup.vue';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
@@ -11,10 +11,12 @@ import { authApi } from '@/api/v1';
 import { getPluginInstallReturnUrl } from '@/utils/pluginInstallLink.mjs';
 
 const router = useRouter();
+const ready = ref(false);
 const authStore = useAuthStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
+let active = true;
 
 const themeOptions = [
   { mode: 'light'  as const, icon: 'mdi-white-balance-sunny', labelKey: 'theme.light'  },
@@ -33,35 +35,41 @@ const currentThemeIcon = computed(() => {
   return 'mdi-white-balance-sunny';
 });
 
+onBeforeUnmount(() => {
+  active = false;
+});
+
 onMounted(async () => {
   const hasToken = authStore.has_token();
   const redirect = getPluginInstallReturnUrl(router, router.currentRoute.value.query.redirect);
 
   try {
     const setupStatus = await authApi.setupStatus();
+    if (!active) return;
+    if (setupStatus.data.status !== 'ok') throw new Error('Unable to check setup status');
     const setupRequired = !!setupStatus.data?.data?.setup_required;
     const canSkipDefaultPassword = !!setupStatus.data?.data?.skip_default_password_auth;
-    if (
-      !setupRequired ||
-      (!hasToken && !canSkipDefaultPassword)
-    ) {
+    if (!setupRequired || (!hasToken && !canSkipDefaultPassword)) {
       router.replace({ path: '/auth/login', query: { redirect } });
+    } else {
+      ready.value = true;
     }
   } catch {
-    router.replace({ path: '/auth/login', query: { redirect } });
+    if (active) router.replace({ path: '/auth/login', query: { redirect } });
   }
 });
 </script>
 
 <template>
   <div class="setup-page-container">
-    <v-card class="setup-card" elevation="1">
+    <v-progress-circular v-if="!ready" indeterminate color="primary" />
+    <v-card v-else class="setup-card" elevation="1">
       <v-card-title>
         <div class="setup-header">
           <div class="setup-brand">
             <img width="80" src="/favicon.svg" alt="AstrBot Logo">
           </div>
-          <div class="d-flex align-center gap-1">
+          <div class="d-flex align-center gap-1 flex-shrink-0">
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
               style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
@@ -116,7 +124,7 @@ onMounted(async () => {
             </v-menu>
           </div>
         </div>
-        <div class="setup-title">{{ t('setup.title') }}</div>
+        <h1 class="setup-title">{{ t('setup.title') }}</h1>
         <div class="setup-subtitle">{{ t('setup.subtitle') }}</div>
       </v-card-title>
       <v-card-text>
@@ -126,13 +134,13 @@ onMounted(async () => {
   </div>
 </template>
 
-<style lang="scss">
+<style lang="scss" scoped>
 .setup-page-container {
   background-color: rgb(var(--v-theme-containerBg));
   position: relative;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
+  width: 100%;
+  min-height: 100dvh;
+  padding: 24px 16px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -140,7 +148,12 @@ onMounted(async () => {
 
 .setup-card {
   width: 420px;
+  max-width: 100%;
   padding: 8px;
+}
+
+.setup-card .v-card-title {
+  white-space: normal;
 }
 
 .setup-header {

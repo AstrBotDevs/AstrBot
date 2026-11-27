@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ChevronDown } from "@lucide/vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 
@@ -11,6 +12,7 @@ const route = useRoute();
 const router = useRouter();
 const { tm } = useModuleI18n("features/provider");
 const isProviderWorkspace = computed(() => route.params.conversationId === "models");
+const isOnboardingWorkspace = computed(() => route.params.conversationId === "onboarding");
 const providerTypes = computed(() => [
   { value: "chat_completion", label: tm("providers.tabs.chatCompletion") },
   { value: "speech_to_text", label: tm("providers.tabs.speechToText") },
@@ -29,8 +31,18 @@ const title = computed(() => {
 </script>
 
 <template>
-  <div class="chat-toolbar-context">
-    <StyledMenu v-if="isProviderWorkspace" location="bottom start" :offset="8">
+  <div
+    class="chat-toolbar-context"
+    :class="{ 'chat-toolbar-context--onboarding': isOnboardingWorkspace }"
+  >
+    <div v-if="isOnboardingWorkspace" class="chat-onboarding-brand Outfit">
+      <ChatUILogo class="chat-onboarding-brand-logo" />
+      <span class="chat-onboarding-brand-copy">
+        <span class="chat-onboarding-brand-name">AstrBot</span>
+        <span class="chat-onboarding-brand-mode">ChatUI</span>
+      </span>
+    </div>
+    <StyledMenu v-else-if="isProviderWorkspace" location="bottom start" :offset="8">
       <template #activator="{ props }">
         <button v-bind="props" type="button" class="provider-type-trigger">
           {{ selectedType.label }}
@@ -55,6 +67,41 @@ const title = computed(() => {
 </template>
 
 <style scoped>
+.chat-onboarding-brand {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.05;
+  user-select: none;
+}
+
+.chat-onboarding-brand-logo {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: block;
+}
+
+.chat-onboarding-brand-copy {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.chat-onboarding-brand-name {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.chat-onboarding-brand-mode {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 18px;
+  font-weight: 500;
+}
+
 .provider-type-trigger {
   display: inline-flex;
   align-items: center;
@@ -103,6 +150,44 @@ const title = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 959.98px) {
+  .chat-toolbar-context--onboarding {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .chat-toolbar-context--onboarding .chat-onboarding-brand {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .chat-toolbar-context--onboarding .chat-onboarding-brand-logo {
+    width: 19px;
+    height: 19px;
+    flex: 0 0 19px;
+  }
+
+  .chat-toolbar-context--onboarding .chat-onboarding-brand-name,
+  .chat-toolbar-context--onboarding .chat-onboarding-brand-mode {
+    font-size: 15px;
+  }
+
+  .chat-toolbar-context--onboarding .chat-toolbar-context-title {
+    max-width: 44vw;
+    padding-left: 10px;
+    border-left: 1px solid rgba(var(--v-theme-on-surface), 0.16);
+    font-size: 0.8125rem;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 599.98px) {
+  .chat-toolbar-context--onboarding .chat-onboarding-brand-mode {
+    display: none;
+  }
 }
 
 @media (min-width: 960px) {

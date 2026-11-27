@@ -147,16 +147,18 @@ const hasAvailableUpdate = computed(
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
+const isOnboardingPath = computed(() => route.path === "/chat/onboarding");
 const isDarkTheme = computed(
   () => theme.global.current.value.dark || customizer.uiTheme.includes("Dark"),
 );
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth = smAndDown.value
-    ? 0
-    : customizer.chatSidebarCollapsed
-      ? 56
-      : 245;
+  const sidebarWidth =
+    smAndDown.value || isOnboardingPath.value
+      ? 0
+      : customizer.chatSidebarCollapsed
+        ? 56
+        : 245;
   return {
     // The chat toolbar is window chrome, so it must paint the full window. The
     // sidebar width remains available to contextual content through this CSS
@@ -164,7 +166,14 @@ const chatHeaderStyle = computed(() => {
     // window material in the top-left corner.
     left: "0px",
     width: "100%",
-    "--astrbot-chat-sidebar-width": `${sidebarWidth + (!smAndDown.value && customizer.chatNavigationInSidebar ? 56 : 0)}px`,
+    "--astrbot-chat-sidebar-width": `${
+      sidebarWidth +
+      (!smAndDown.value &&
+      !isOnboardingPath.value &&
+      customizer.chatNavigationInSidebar
+        ? 56
+        : 0)
+    }px`,
     "--astrbot-workbench-preferred-width": chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
   };
 });
@@ -954,7 +963,7 @@ onMounted(() => {
       // 保存 chat ID
       const parts = route.fullPath.split("/");
       const sessionId = parts[2];
-      if (sessionId) {
+      if (sessionId && sessionId !== "onboarding") {
         sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
         console.log("Initial save chat ID:", sessionId);
       }
@@ -997,7 +1006,7 @@ watch(
         const parts = newPath.split("/");
         const sessionId = parts[2];
 
-        if (sessionId) {
+        if (sessionId && sessionId !== "onboarding") {
           sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
         }
       }
@@ -1096,7 +1105,7 @@ onMounted(async () => {
   >
     <!-- Mobile: open the navigation drawer (sidebars become temporary overlays). -->
     <v-btn
-      v-if="$vuetify.display.smAndDown"
+      v-if="$vuetify.display.smAndDown && !isOnboardingPath"
       class="header-menu-btn"
       :class="{ 'header-menu-btn--browser': !isDesktopReleaseMode }"
       icon
@@ -1155,9 +1164,9 @@ onMounted(async () => {
         </v-icon>
       </v-btn>
 
-      <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
+      <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu and onboarding -->
       <v-btn
-        v-if="!customizer.chatNavigationInSidebar && (!isChatPath || !$vuetify.display.smAndDown)"
+        v-if="!isOnboardingPath && !customizer.chatNavigationInSidebar && (!isChatPath || !$vuetify.display.smAndDown)"
         class="mode-switch-btn"
         :class="{ 'mr-4 hidden-xs': !isChatPath }"
         variant="text"
@@ -1198,6 +1207,7 @@ onMounted(async () => {
         <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
         <template
           v-if="
+            !isOnboardingPath &&
             !customizer.chatNavigationInSidebar && (
               (isChatPath && $vuetify.display.smAndDown) ||
               (!isChatPath && $vuetify.display.xs)
