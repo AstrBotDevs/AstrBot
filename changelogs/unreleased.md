@@ -21,6 +21,9 @@
 - 「插件 → 管理行为 → 函数工具」现在只列出插件工具。Agent 运行时工具由配置文件的 AI 功能设置控制，MCP 工具可在「插件 → MCP」查看。
 - Extensions → Handlers → Function Tools now lists plugin tools. Configure Agent runtime tools in the profile's AI capability settings and view MCP tools under Extensions → MCP Servers.
 
+- WebUI 排队的提示条现在会按时自动关闭：前一条提示显示期间到达的提示不再一直停留到手动关闭。
+- WebUI: a toast that is queued while another is shown now closes after its timeout instead of staying until closed by hand.
+
 ### ChatUI history / ChatUI 历史记录
 
 - 一轮回复只保存为一条历史记录：流式分段、工具调用和按钮卡片都更新同一条记录，刷新后不再拆成多个气泡（SSE 与 WebSocket 相同）。已拆开的旧记录不会合并。
