@@ -412,11 +412,18 @@ const decisionHintKeys = {
   openai_decision: 'openaiDecisionHints'
 }
 
+const speechHintKeys = {
+  deepseek_tts_api: 'deepseekTtsHints',
+  deepseek_stt_api: 'deepseekSttHints',
+  stepfun_tts_api: 'stepfunTtsHints'
+}
+
 const legacyConfigSchema = computed(() => {
   const schema = JSON.parse(JSON.stringify(configSchema.value || {}))
   const providerType = selectedLegacyProvider.value?.type
   const hintKey = decisionHintKeys[providerType]
-  if (!hintKey && !['deepseek_tts_api', 'deepseek_stt_api'].includes(providerType)) return schema
+  const speechHintKey = speechHintKeys[providerType]
+  if (!hintKey && !speechHintKey) return schema
 
   const items = schema.provider?.items
   if (!items) return schema
@@ -439,11 +446,11 @@ const legacyConfigSchema = computed(() => {
       items.custom_headers.hint = tm('providers.decisionHints.customHeaders')
     }
   }
-  if (providerType === 'deepseek_tts_api' && items.api_base) {
-    items.api_base.hint = tm('providers.deepseekTtsHints.apiBase')
+  if (speechHintKey && items.api_base) {
+    items.api_base.hint = tm(`providers.${speechHintKey}.apiBase`)
   }
-  if (providerType === 'deepseek_stt_api' && items.api_base) {
-    items.api_base.hint = tm('providers.deepseekSttHints.apiBase')
+  if (providerType === 'stepfun_tts_api' && items.model) {
+    items.model.hint = tm('providers.stepfunTtsHints.model')
   }
   return schema
 })

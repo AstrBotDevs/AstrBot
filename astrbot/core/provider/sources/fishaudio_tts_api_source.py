@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 import ormsgpack
 from httpx import AsyncClient
@@ -13,6 +13,9 @@ from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
+
+SUPPORTED_AUDIO_FORMATS: tuple[Literal["wav", "mp3"], ...] = ("wav", "mp3")
+SUPPORTED_MP3_BITRATES: tuple[Literal[64, 128, 192], ...] = (64, 128, 192)
 
 
 class ServeReferenceAudio(BaseModel):
@@ -53,6 +56,43 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.chosen_api_key: str = provider_config.get("api_key", "")
         self.reference_id: str = provider_config.get("fishaudio-tts-reference-id", "")
         self.character: str = provider_config.get("fishaudio-tts-character", "可莉")
+        raw_format = (
+            str(provider_config.get("fishaudio-tts-format", "wav") or "wav")
+            .strip()
+            .lower()
+        )
+        if raw_format not in SUPPORTED_AUDIO_FORMATS:
+            logger.warning(
+                f"[FishAudio TTS] Unsupported audio format '{raw_format}', falling back to 'wav'."
+            )
+            raw_format = "wav"
+        self.audio_format: Literal["wav", "mp3"] = cast(
+            Literal["wav", "mp3"], raw_format
+        )
+        raw_bitrate = provider_config.get("fishaudio-tts-mp3-bitrate", 128)
+        if raw_bitrate is None or (
+            isinstance(raw_bitrate, str) and not raw_bitrate.strip()
+        ):
+            bitrate = 128
+        elif isinstance(raw_bitrate, bool):
+            logger.warning(
+                f"[FishAudio TTS] Invalid MP3 bitrate '{raw_bitrate}', falling back to 128."
+            )
+            bitrate = 128
+        else:
+            try:
+                bitrate = int(raw_bitrate)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"[FishAudio TTS] Invalid MP3 bitrate '{raw_bitrate}', falling back to 128."
+                )
+                bitrate = 128
+        if bitrate not in SUPPORTED_MP3_BITRATES:
+            logger.warning(
+                f"[FishAudio TTS] Unsupported MP3 bitrate '{bitrate}', falling back to 128."
+            )
+            bitrate = 128
+        self.mp3_bitrate: Literal[64, 128, 192] = cast(Literal[64, 128, 192], bitrate)
         self.api_base: str = provider_config.get(
             "api_base",
             "https://api.fish-audio.cn/v1",
@@ -141,14 +181,17 @@ class ProviderFishAudioTTSAPI(TTSProvider):
 
         return ServeTTSRequest(
             text=text,
-            format="wav",
+            format=self.audio_format,
+            mp3_bitrate=self.mp3_bitrate,
             reference_id=reference_id,
         )
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
+        os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(
-            temp_dir, f"fishaudio_tts_api_{generate_timestamp_id()}.wav"
+            temp_dir,
+            f"fishaudio_tts_api_{generate_timestamp_id()}.{self.audio_format}",
         )
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)

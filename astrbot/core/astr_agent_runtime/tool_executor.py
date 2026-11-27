@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from contextlib import aclosing
+from copy import copy
 
 import mcp
 
@@ -34,8 +35,8 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     PythonTool,
     ShellSessionTool,
 )
-from astrbot.core.chatui import ViewResult, emit_view
 from astrbot.core.message.components import Image
+from astrbot.core.message.interactive_ui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -44,6 +45,7 @@ from astrbot.core.star.tool_execution import call_local_llm_tool
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
+from astrbot.core.utils.plugin_scope import plugin_id_for_callback, plugin_scope
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
@@ -63,104 +65,6 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    @classmethod
-    def detach(cls, *, tool, run_context, executor, pending_result, task_id, arguments):
-        """Continue an in-flight tool in the background and wake its original session.
-
-        Args:
-            tool: Tool already executing.
-            run_context: Context of the initiating turn.
-            executor: Owned iterator, resumed after the pending read completes.
-            pending_result: Existing in-flight read; never execute the tool again.
-            task_id: Execution identity linking submission and completion.
-            arguments: Actual tool arguments included in the completion notice.
-
-        Returns:
-            A submission result, or None when no native session can receive completion.
-        """
-        context = run_context.context
-        session = getattr(context, "agent_session", None)
-        if session is None:
-            return None
-        event = context.event
-        permissions = get_agent_permissions(run_context)
-        stop_signal = active_event_registry.get_background_stop_signal(event)
-        if stop_signal.is_set():
-            return None
-
-        async def complete() -> None:
-            result = mcp.types.CallToolResult(content=[])
-            error = None
-            try:
-                # Register after starting so cancellation always runs iterator cleanup.
-                active_event_registry.register_background_task(
-                    event, asyncio.current_task()
-                )
-                try:
-                    item = await pending_result
-                    while True:
-                        if isinstance(item, mcp.types.CallToolResult):
-                            result.content.extend(item.content)
-                            result.isError = result.isError or item.isError
-                            if item.structuredContent is not None:
-                                result.structuredContent = item.structuredContent
-                        item = await anext(executor)
-                except StopAsyncIteration:
-                    pass
-                except Exception as exc:
-                    error = {"code": type(exc).__name__, "message": str(exc)}
-            finally:
-                if not pending_result.done():
-                    pending_result.cancel()
-                await asyncio.gather(pending_result, return_exceptions=True)
-                try:
-                    await executor.aclose()
-                except Exception as exc:
-                    error = {"code": type(exc).__name__, "message": str(exc)}
-            if error is not None:
-                result.isError = True
-                result.content.append(
-                    mcp.types.TextContent(
-                        type="text", text=f"{error['code']}: {error['message']}"
-                    )
-                )
-            try:
-                await wake_main_agent(
-                    ctx=context.context,
-                    umo=event.unified_msg_origin,
-                    source="background_task",
-                    source_id=task_id,
-                    user_prompt=BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(
-                        background_task_result=json.dumps(
-                            {
-                                "task_id": task_id,
-                                "tool_name": tool.name,
-                                "tool_args": arguments,
-                            },
-                            ensure_ascii=False,
-                        )
-                    ),
-                    role=permissions.role.value,
-                    stop_signal=stop_signal,
-                    agent_session=session,
-                    tool_result=(tool.name, result),
-                    source_event=event,
-                )
-            except Exception:
-                logger.exception("Unable to deliver background tool result %s", task_id)
-
-        asyncio.create_task(complete(), name=f"background-tool:{task_id}")
-        return mcp.types.CallToolResult(
-            content=[
-                mcp.types.TextContent(
-                    type="text",
-                    text=f"Tool continues in background. task_id={task_id}. "
-                    "Its result will arrive in a separate wakeup; do not repeat the tool call.",
-                )
-            ],
-            structuredContent={"background_task_id": task_id, "status": "running"},
-        )
-
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -314,19 +218,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def _get_runtime_computer_tools(
         cls,
         runtime: str,
-        tool_mgr,
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
         booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(PythonTool)
-            upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
-            download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+            shell_tool = ExecuteShellTool()
+            python_tool = PythonTool()
+            upload_tool = FileUploadTool()
+            download_tool = FileDownloadTool()
+            read_tool = FileReadTool()
+            write_tool = FileWriteTool()
+            edit_tool = FileEditTool()
+            grep_tool = GrepTool()
             tools = {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
@@ -338,9 +241,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 grep_tool.name: grep_tool,
             }
             if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
+                screenshot_tool = CuaScreenshotTool()
+                mouse_click_tool = CuaMouseClickTool()
+                keyboard_type_tool = CuaKeyboardTypeTool()
                 tools.update(
                     {
                         screenshot_tool.name: screenshot_tool,
@@ -351,12 +254,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return tools
         if runtime == "local":
             shell_tool = LocalExecuteShellTool()
-            shell_session_tool = tool_mgr.get_builtin_tool(ShellSessionTool)
-            python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
+            shell_session_tool = ShellSessionTool()
+            python_tool = LocalPythonTool()
+            read_tool = FileReadTool()
+            write_tool = FileWriteTool()
+            edit_tool = FileEditTool()
+            grep_tool = GrepTool()
             return {
                 shell_tool.name: shell_tool,
                 shell_session_tool.name: shell_session_tool,
@@ -374,6 +277,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
     ) -> ToolSet | None:
+        toolset = ToolSet()
+        if tools is not None:
+            available_tools = run_context.tools
+            for tool in tools:
+                if isinstance(tool, str):
+                    resolved = (
+                        available_tools.get_tool(tool) if available_tools else None
+                    )
+                    if resolved is not None and resolved.active:
+                        toolset.add_tool(resolved)
+                elif isinstance(tool, FunctionTool):
+                    toolset.add_tool(tool)
+            return None if toolset.empty() else toolset
+
         ctx = run_context.context.context
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
@@ -386,43 +303,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
-            tool_mgr,
             provider_settings.get("sandbox", {}).get("booter"),
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
-        if tools is None:
-            toolset = ToolSet()
-            handoff_names = {
-                tool.name
-                for tool in tool_mgr.func_list
-                if isinstance(tool, HandoffTool)
-            }
-            for registered_tool in tool_mgr.get_full_tool_set():
-                if registered_tool.name in handoff_names:
-                    continue
-                if registered_tool.active:
-                    toolset.add_tool(registered_tool)
-            for runtime_tool in runtime_computer_tools.values():
-                toolset.add_tool(runtime_tool)
-            return None if toolset.empty() else toolset
-
-        if not tools:
-            return None
-
-        toolset = ToolSet()
-        for tool_name_or_obj in tools:
-            if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
-                    toolset.add_tool(registered_tool)
-                    continue
-                runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
-                if runtime_tool:
-                    toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool):
-                toolset.add_tool(tool_name_or_obj)
+        handoff_names = {
+            tool.name for tool in tool_mgr.func_list if isinstance(tool, HandoffTool)
+        }
+        for registered_tool in tool_mgr.get_full_tool_set():
+            if registered_tool.name not in handoff_names and registered_tool.active:
+                toolset.add_tool(registered_tool)
+        for runtime_tool in runtime_computer_tools.values():
+            toolset.add_tool(runtime_tool)
         return None if toolset.empty() else toolset
 
     @classmethod
@@ -434,6 +327,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         image_urls_prepared: bool = False,
         **tool_args: T.Any,
     ):
+        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
         if image_urls_prepared:
@@ -452,9 +346,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_args.get("image_urls"),
             )
         tool_args["image_urls"] = image_urls
-
-        # Build handoff toolset from registered tools plus runtime computer tools.
-        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -532,6 +423,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if active_event_registry.get_background_stop_signal(event).is_set():
             return
         task_id = uuid.uuid4().hex
+        # The SDK may reuse the run context before the background handoff starts.
+        run_context = copy(run_context)
 
         async def _run_handoff_in_background() -> None:
             try:
@@ -732,13 +625,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name=method_name,
             **tool_args,
         )
+        plugin_id = plugin_id_for_callback(awaitable, tool.handler_module_path)
         async with aclosing(wrapper):
             while True:
                 try:
-                    resp = await asyncio.wait_for(
-                        anext(wrapper),
-                        timeout=effective_timeout,
-                    )
+                    with plugin_scope(plugin_id):
+                        resp = await asyncio.wait_for(
+                            anext(wrapper),
+                            timeout=effective_timeout,
+                        )
                     if resp is not None:
                         if isinstance(resp, ViewResult):
                             if resp.name is None:

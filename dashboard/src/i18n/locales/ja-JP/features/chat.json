@@ -95,6 +95,8 @@
     "output": "出力"
   },
   "toolStatus": {
+    "interrupted": "中断（結果不明）",
+    "interruptedDetail": "結果を受け取る前に実行が中断されました（停止・タイムアウト・エラー）。操作が反映されている可能性があるため、再実行の前に確認してください。",
     "done": "完了",
     "running": "実行中"
   },
@@ -306,6 +308,10 @@
     "connection": {
       "title": "接続に問題が発生しました",
       "description": "ネットワーク接続を確認して、しばらくしてから再試行してください。"
+    },
+    "ffmpegNotFound": {
+      "title": "FFmpeg が見つかりません",
+      "description": "AstrBot の実行環境に FFmpeg をインストールし、PATH に追加してから再試行してください。"
     },
     "generic": {
       "title": "返信を完了できませんでした",

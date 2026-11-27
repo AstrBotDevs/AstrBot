@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -7,8 +8,13 @@ from google.genai import types
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.astr_agent_runtime.history import save_agent_history
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
@@ -51,7 +57,9 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
         ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
     ],
 )
-async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider_config):
+async def test_gemini_omits_unset_or_unsupported_thinking_config(
+    model, provider_config
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = provider_config
     provider.provider_settings = {}
@@ -207,23 +215,24 @@ def test_gemini_reasoning_only_output_is_allowed():
     )
 
 
-def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
+def test_gemini_extract_usage_counts_thoughts_and_tool_input_without_double_counting_cache():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
     usage_metadata = SimpleNamespace(
         prompt_token_count=100,
         cached_content_token_count=30,
         candidates_token_count=50,
+        thoughts_token_count=8,
+        tool_use_prompt_token_count=2,
     )
 
     usage = provider._extract_usage(usage_metadata)
 
-    # prompt_token_count already includes cached tokens; input_other must
-    # exclude them so input (input_other + input_cached) is not inflated.
-    assert usage.input_other == 70
+    # Prompt tokens include cache reads; tool prompts are reported separately.
+    assert usage.input_other == 72
     assert usage.input_cached == 30
-    assert usage.input == 100
-    assert usage.output == 50
+    assert usage.input == 102
+    assert usage.output == 58
 
 
 def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
@@ -331,14 +340,12 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
         for chunk in chunks:
             yield chunk
 
-    async def fake_retry(
-        provider_name,
-        request_factory,
-        max_attempts=None,
-    ):
+    async def generate_content_stream(**kwargs):
         return fake_stream()
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models, "generate_content_stream", generate_content_stream
+    )
     return [
         response
         async for response in provider._query_stream(
@@ -403,10 +410,12 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
         observed_headers.append(headers.get("x-astrbot-conversation-id"))
         yield _gemini_stream_chunk(text="ok")
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def generate_content_stream(**kwargs):
         return fake_stream()
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models, "generate_content_stream", generate_content_stream
+    )
     responses = [
         response
         async for response in provider._query_stream(
@@ -446,3 +455,120 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+async def test_prepare_conversation_pairs_reused_ids_and_replays_tool_parts():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    messages = [{"role": "user", "content": "start"}]
+    for name in ("first", "second"):
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": [],
+                    "tool_calls": [
+                        {
+                            "id": "call_0",
+                            "function": {"name": name, "arguments": "{}"},
+                            "extra_content": {
+                                "google": {
+                                    "server_parts": [{"text": "server output"}],
+                                    "thought_signature": "c2ln",
+                                }
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_0", "content": "done"},
+            ]
+        )
+
+    contents = await provider._prepare_conversation({"messages": messages})
+    for i, name in ((1, "first"), (3, "second")):
+        server, call = contents[i].parts
+        assert server.text == "server output"
+        assert call.thought_signature == b"sig"
+        assert (call.function_call.name, call.function_call.id) == (name, "call_0")
+        response = contents[i + 1].parts[0].function_response
+        assert (response.name, response.id) == (name, "call_0")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gemini_thinking_usage_preserves_context_estimate(streaming):
+    provider = _gemini_stream_provider()
+    provider.model_name = "gemini-2.5-flash"
+    provider.api_keys = ["unused"]
+    response = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.ModelContent(parts=[types.Part(text="Answer")]),
+                finish_reason="STOP",
+            )
+        ],
+        usage_metadata=types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=78_000,
+            candidates_token_count=2000,
+            thoughts_token_count=12000,
+        ),
+    )
+
+    async def stream():
+        yield response.model_copy(update={"usage_metadata": None})
+        yield types.GenerateContentResponse(usage_metadata=response.usage_metadata)
+
+    query = AsyncMock(return_value=response)
+    stream_query = AsyncMock(side_effect=lambda **kwargs: stream())
+    provider.client.models.generate_content = query
+    provider.client.models.generate_content_stream = stream_query
+    conversation = Conversation(platform_id="test", user_id="test", cid="test")
+    request = ProviderRequest(
+        prompt="Question",
+        contexts=[
+            {"role": "user", "content": "Previous question"},
+            {"role": "assistant", "content": "Previous answer"},
+        ],
+        conversation=conversation,
+    )
+    runner = ToolLoopAgentRunner()
+    options = {
+        "provider": provider,
+        "run_context": ContextWrapper(context=None),
+        "tool_executor": SimpleNamespace(),
+        "agent_hooks": BaseAgentRunHooks(),
+        "streaming": streaming,
+        "max_context_tokens": 100000,
+    }
+    await runner.reset(request=request, **options)
+    async for _ in runner.step_until_done(3):
+        pass
+
+    commit = AsyncMock()
+    await save_agent_history(
+        req=request,
+        llm_response=runner.final_llm_resp,
+        all_messages=runner.run_context.messages,
+        runner_stats=runner.stats,
+        commit=commit,
+    )
+    history, stored_context_tokens = commit.call_args.args
+    assert runner.stats.token_usage.total == 92_000
+    assert conversation.token_usage == stored_context_tokens == 80_000
+
+    conversation.token_usage = stored_context_tokens
+    await runner.reset(
+        request=ProviderRequest(
+            prompt="Continue", contexts=history, conversation=conversation
+        ),
+        **options,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    last_call = (stream_query if streaming else query).call_args
+    sent_contents = last_call.kwargs["contents"]
+    assert any(
+        part.text == "Previous question"
+        for content in sent_contents
+        for part in content.parts
+    )

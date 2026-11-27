@@ -12,6 +12,7 @@ import io
 import math
 import mimetypes
 import os
+import re
 import shutil
 import stat
 import struct
@@ -91,6 +92,7 @@ AUDIO_FORMAT_MIME_TYPES = {
     "amr": "audio/amr",
     "flac": "audio/flac",
     "mp3": "audio/mp3",
+    "mp4": "audio/mp4",
     "ogg": "audio/ogg",
     "opus": "audio/opus",
     "silk": "audio/silk",
@@ -196,6 +198,14 @@ class ResolvedMediaFile:
         _cleanup_paths(self.cleanup_paths)
 
 
+# Rejection-only guard matching any prefix CPython's urlsplit() can normalize
+# to the "file" scheme, keeping large data:/base64:// refs out of its LRU cache.
+_FILE_SCHEME_PREFIX = re.compile(
+    r"[\x00-\x20]*f[\t\r\n]*i[\t\r\n]*l[\t\r\n]*e[\t\r\n]*:",
+    re.ASCII | re.IGNORECASE,
+)
+
+
 def is_file_uri(value: object) -> bool:
     """Return whether a value is a ``file:`` URI.
 
@@ -207,6 +217,8 @@ def is_file_uri(value: object) -> bool:
     """
 
     if not isinstance(value, str):
+        return False
+    if not _FILE_SCHEME_PREFIX.match(value):
         return False
     try:
         return urlsplit(value).scheme.lower() == "file"
@@ -342,22 +354,32 @@ def describe_media_ref(media_ref: object | None) -> str:
 
     ref_len = len(media_ref)
     if media_ref.startswith("data:"):
-        header, _, payload = media_ref.partition(",")
+        comma_idx = media_ref.find(",")
+        header = media_ref[:comma_idx] if comma_idx != -1 else media_ref
+        payload_len = ref_len - comma_idx - 1 if comma_idx != -1 else 0
         mime_type = header[5:].split(";", 1)[0] or "unknown"
-        return f"data URI mime={mime_type!r} payload_len={len(payload)}"
+        return f"data URI mime={mime_type!r} payload_len={payload_len}"
 
     if media_ref.startswith("base64://"):
-        return f"base64 media payload_len={len(media_ref.removeprefix('base64://'))}"
+        return f"base64 media payload_len={ref_len - len('base64://')}"
 
-    parsed = urlparse(media_ref)
-    if parsed.scheme in {"http", "https"}:
-        filename = Path(unquote(parsed.path or "")).name
-        suffix = f" file={filename!r}" if filename else ""
-        return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={ref_len}"
+    # Skip URL parsing (and its global LRU cache) for plain ASCII strings
+    # without scheme or IPv6 delimiters, such as bare base64 payloads.
+    if not (
+        media_ref.isascii()
+        and ":" not in media_ref
+        and "[" not in media_ref
+        and "]" not in media_ref
+    ):
+        parsed = urlparse(media_ref)
+        if parsed.scheme in {"http", "https"}:
+            filename = Path(unquote(parsed.path or "")).name
+            suffix = f" file={filename!r}" if filename else ""
+            return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={ref_len}"
 
-    if is_file_uri(media_ref):
-        filename = Path(file_uri_to_path(media_ref)).name
-        return f"file URI name={filename!r} len={ref_len}"
+        if is_file_uri(media_ref):
+            filename = Path(file_uri_to_path(media_ref)).name
+            return f"file URI name={filename!r} len={ref_len}"
 
     media_path_exists = False
     try:
@@ -449,6 +471,65 @@ async def detect_image_mime_type_async(
 def _guess_mime_type(path: Path, fallback: str | None = None) -> str | None:
     """Guess a MIME type from a filename, with an optional fallback."""
     return mimetypes.guess_type(path.name)[0] or fallback
+
+
+_BASE64_AUDIO_HEADER_CHARS = 64
+"""Base64 characters decoded for audio header sniffing (about 48 bytes)."""
+
+
+def detect_audio_mime_type(
+    data: bytes | None,
+    *,
+    default_mime_type: str = "audio/mpeg",
+) -> str:
+    """Detect an audio MIME type by sniffing the payload header.
+
+    Only the first bytes of the payload are inspected, so detection cost and
+    memory stay constant regardless of the payload size.
+
+    Args:
+        data: Encoded audio bytes, or ``None`` when no payload is available.
+        default_mime_type: MIME type to return when detection fails.
+
+    Returns:
+        The detected MIME type, or ``default_mime_type`` when the header does
+        not match a known audio format.
+    """
+
+    header = (data or b"")[:64]
+    format_name = _detect_audio_format_from_header(header)
+    if format_name == "mp3":
+        # ``audio/mp3`` is a legacy alias; emit the registered type.
+        return "audio/mpeg"
+    return AUDIO_FORMAT_MIME_TYPES.get(format_name, default_mime_type)
+
+
+def detect_audio_mime_type_from_base64(
+    base64_data: str | None,
+    *,
+    default_mime_type: str = "audio/mpeg",
+) -> str:
+    """Detect an audio MIME type from the leading base64 characters.
+
+    Decoding only the head keeps large payloads from being materialized twice.
+
+    Args:
+        base64_data: Raw base64 payload without a ``data:`` URI prefix.
+        default_mime_type: MIME type to return when detection fails.
+
+    Returns:
+        The detected MIME type, or ``default_mime_type`` when the header does
+        not match a known audio format.
+    """
+
+    prefix = (base64_data or "")[:_BASE64_AUDIO_HEADER_CHARS]
+    if not prefix:
+        return default_mime_type
+    try:
+        header = base64.b64decode(prefix + "=" * (-len(prefix) % 4))
+    except (binascii.Error, ValueError):
+        return default_mime_type
+    return detect_audio_mime_type(header, default_mime_type=default_mime_type)
 
 
 def _cleanup_paths(cleanup_paths: list[Path] | None) -> None:
@@ -692,9 +773,11 @@ class MediaResolver:
         """Materialize the source and apply media-type-specific conversion.
 
         For audio, ``target_format`` controls the output format, including the
-        QQ / Wechat / Wecom ``tencent_silk`` upload format. When it is not set, audio
-        resolves to WAV unless ``preserve_mp3`` is true and the source already
-        appears to be MP3.
+        QQ / Wechat / Wecom ``tencent_silk`` upload format. When it is not set,
+        audio resolves to WAV unless ``preserve_mp3`` is true and the payload
+        itself is MP3, which is detected from the magic bytes rather than from
+        the file name (``base64://`` payloads and suffix-less CDN URLs carry no
+        usable extension).
         """
         local_file = await _materialize_media_ref(
             self.media_ref,
@@ -709,10 +792,17 @@ class MediaResolver:
         try:
             if self.media_type == "audio":
                 audio_format = target_format
+                detected_source_format = ""
                 if not audio_format:
-                    audio_format = (
-                        "mp3" if preserve_mp3 and resolved_format == "mp3" else "wav"
-                    )
+                    if preserve_mp3:
+                        detected_source_format = await asyncio.to_thread(
+                            _get_audio_magic_type, str(resolved_path)
+                        )
+                        audio_format = (
+                            "mp3" if detected_source_format == "mp3" else "wav"
+                        )
+                    else:
+                        audio_format = "wav"
 
                 if audio_format == "tencent_silk":
                     intermediate_cleanup_paths = list(cleanup_paths)
@@ -742,7 +832,10 @@ class MediaResolver:
                         converted_audio_path = Path(
                             await ensure_wav(str(resolved_path))
                         )
-                    elif resolved_format == audio_format:
+                    elif (
+                        resolved_format == audio_format
+                        or detected_source_format == audio_format
+                    ):
                         converted_audio_path = resolved_path
                     else:
                         converted_audio_path = Path(
@@ -854,8 +947,10 @@ class MediaResolver:
             strict: Raise on invalid or unreadable media instead of returning
                 ``None`` where the resolver can safely ignore the reference.
             target_format: Optional output format for audio conversion.
-            preserve_mp3: Keep existing MP3 audio as MP3 when no target format is
-                provided; otherwise audio defaults to WAV.
+            preserve_mp3: Keep MP3 payloads in their original container when no
+                target format is provided. The format is detected from the payload
+                magic bytes, so ``base64://`` payloads and suffix-less URLs are
+                handled correctly; other audio is converted to WAV.
             default_mime_type: Fallback MIME type for legacy image base64 payloads
                 whose bytes cannot be identified.
         """
@@ -1338,9 +1433,10 @@ async def resolve_audio_ref_to_base64_data(
 ) -> ResolvedMediaData:
     """Resolve an audio reference to base64 data.
 
-    Audio is converted to WAV by default. Pass preserve_mp3=True for legacy
-    provider payloads that intentionally keep MP3 input unchanged.
-    ``target_format`` overrides both defaults when provided.
+    Audio is converted to WAV by default. Pass ``preserve_mp3=True`` for payloads
+    that intentionally keep MP3 input unchanged (detected from the magic bytes,
+    so references without a usable file name work too); ``target_format``
+    overrides both defaults when provided.
     """
 
     audio_data = await MediaResolver(
@@ -1878,8 +1974,62 @@ async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
         raise
 
 
-def _get_audio_magic_type(audio_path: str) -> str:
+def _detect_audio_format_from_header(header: bytes) -> str:
     """Detect common audio formats from magic bytes.
+
+    Args:
+        header: Leading bytes of an audio payload (64 bytes is enough).
+
+    Returns:
+        A normalized format name such as ``wav``, ``mp3``, ``opus``, ``silk``, or
+        an empty string when the type cannot be detected.
+    """
+
+    if len(header) < 12:
+        return ""
+
+    if header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return "wav"
+
+    if header[:4] == b"#!AM":
+        return "amr"
+
+    if header[:4] == b"OggS":
+        if b"OpusHead" in header:
+            return "opus"
+        return "ogg"
+
+    if header[:3] == b"fLa":
+        return "flac"
+
+    if header[:3] == b"ID3":
+        return "mp3"
+
+    # MP4 family: the ``ftyp`` box starts at offset 4, and audio-only files use
+    # brands such as ``M4A ``.
+    if header[4:8] == b"ftyp":
+        return "mp4"
+
+    if header.startswith(b"#!SILK_V3"):
+        return "silk"
+
+    # Tencent SILK may have a leading 0x02 or 0x03 marker before the header.
+    if header.startswith((b"\x02#!SILK_V3", b"\x03#!SILK_V3")):
+        return "silk"
+
+    if header[0] == 0xFF:
+        # ADTS AAC and MPEG audio share the 0xFFF sync word; the layer bits in
+        # the second byte tell them apart.
+        if header[1] & 0xF6 == 0xF0:
+            return "aac"
+        if header[1] & 0xE0 == 0xE0:
+            return "mp3"
+
+    return ""
+
+
+def _get_audio_magic_type(audio_path: str) -> str:
+    """Detect common audio formats from a local file's magic bytes.
 
     Args:
         audio_path: Local audio path to inspect.
@@ -1902,37 +2052,7 @@ def _get_audio_magic_type(audio_path: str) -> str:
         )
         return ""
 
-    if len(header) < 12:
-        return ""
-
-    if header[:4] == b"RIFF" and header[8:12] == b"WAVE":
-        return "wav"
-
-    if header[:4] == b"#!AM":
-        return "amr"
-
-    if header[:4] == b"OggS":
-        if b"OpusHead" in header:
-            return "opus"
-        return "ogg"
-
-    if header[:3] == b"fLa":
-        return "flac"
-
-    if header[:3] == b"ID3" or header[:2] == b"\xff\xfb":
-        return "mp3"
-
-    if header[:4] == b"ftyp" and b"mp4" in header[:8]:
-        return "mp4"
-
-    if header.startswith(b"#!SILK_V3"):
-        return "silk"
-
-    # Tencent SILK may have a leading 0x02 or 0x03 marker before the header.
-    if header.startswith((b"\x02#!SILK_V3", b"\x03#!SILK_V3")):
-        return "silk"
-
-    return ""
+    return _detect_audio_format_from_header(header)
 
 
 async def extract_video_cover(

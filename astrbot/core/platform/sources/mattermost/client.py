@@ -301,7 +301,9 @@ class MattermostClient:
                 )
             elif isinstance(segment, ActionRow):
                 attachments.append(
-                    self._build_action_row_attachment(segment, row_index)
+                    await asyncio.to_thread(
+                        self._build_action_row_attachment, segment, row_index
+                    )
                 )
             else:
                 logger.debug(

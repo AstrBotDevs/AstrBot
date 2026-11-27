@@ -30,6 +30,7 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import Any, Literal, TypeAlias
 
 from deprecated import deprecated
@@ -71,6 +72,7 @@ class ComponentType(str, Enum):
     ActionRow = "ActionRow"  # a row of interactive controls
     Button = "Button"  # an interactive button
     ButtonInteraction = "ButtonInteraction"  # an inbound button click
+    InteractiveView = "InteractiveView"  # an outbound view reference
     UIInteraction = "UIInteraction"  # an inbound plugin view action
 
     # IM-specific Segment Types
@@ -216,6 +218,9 @@ class Button(BaseMessageComponent):
         }
 
 
+_action_row_deadline_lock = Lock()
+
+
 class ActionRow(BaseMessageComponent):
     """A group of buttons that should be displayed on one row when possible."""
 
@@ -232,8 +237,12 @@ class ActionRow(BaseMessageComponent):
         Returns:
             Unix timestamp for this row's callback expiry, or None if unlimited.
         """
-        if self.action_timeout is not None and self._action_expires_at is None:
-            self._action_expires_at = time.time() + self.action_timeout
+        timeout = self.action_timeout
+        if timeout is not None and self._action_expires_at is None:
+            # Platform workers may render the same row concurrently.
+            with _action_row_deadline_lock:
+                if self._action_expires_at is None:
+                    self._action_expires_at = time.time() + timeout
         return self._action_expires_at
 
     def toDict(self) -> dict:
@@ -260,6 +269,18 @@ class ButtonInteraction(BaseMessageComponent):
     callback_data: str | None = None
 
 
+class InteractiveView(BaseMessageComponent):
+    """An outbound reference to a persisted interactive view."""
+
+    type: ComponentType = ComponentType.InteractiveView
+    view_id: str
+    module: str
+    name: str
+    version: int
+    fallback_text: str
+    title: str = ""
+
+
 class ViewContext(BaseModel):
     """Persisted snapshot of the card that initiated an interaction."""
 
@@ -271,7 +292,7 @@ class ViewContext(BaseModel):
 
 
 class UIInteraction(BaseMessageComponent):
-    """Authenticated user input from a plugin-owned chat view."""
+    """Authenticated user input from a plugin-owned interactive view."""
 
     type: ComponentType = ComponentType.UIInteraction
     action_id: str
@@ -406,6 +427,10 @@ class Record(BaseMessageComponent):
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
 
+        MP3 payloads keep their original container so the base64 body stays
+        small; every other format is still converted to WAV, so the returned
+        payload is not guaranteed to be WAV.
+
         Returns:
             str: 语音的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
 
@@ -413,11 +438,17 @@ class Record(BaseMessageComponent):
         file_source = await self._resolve_file_source()
         if not file_source:
             raise Exception(f"not a valid file: {self.file}")
+        # v4.26.0 (#8764) started transcoding every record to WAV before base64
+        # encoding, which inflates MP3 payloads by roughly 4.4x and can exceed
+        # platform frame limits. Keep MP3 in its original container; the format is
+        # sniffed from the payload bytes by the resolver, so references without a
+        # usable suffix behave the same. Non-MP3 formats still take the v4.26.0
+        # WAV path; their inflation is tracked separately.
         return await MediaResolver(
             file_source,
             media_type="audio",
             default_suffix=".wav",
-        ).to_base64(target_format="wav")
+        ).to_base64(preserve_mp3=True)
 
     async def register_to_file_service(self) -> str:
         """将语音注册到文件服务。

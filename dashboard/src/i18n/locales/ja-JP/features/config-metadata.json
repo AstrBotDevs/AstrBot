@@ -973,10 +973,6 @@
         "description": "統合 Webhook モード",
         "hint": "Webhook モードで AstrBot の統合 Webhook エントリーポイントを使用し、個別のポートを開く必要をなくします。コールバックアドレスは /api/v1/webhooks/platforms/{webhook_uuid} です。"
       },
-      "use_markdown": {
-        "description": "プロアクティブメッセージで Markdown を使用",
-        "hint": "有効にすると、Bot が自発的に送信するメッセージは既定で Markdown モードで送信されます。プラグインが use_markdown() を明示的に呼び出して指定した場合は、この設定の影響を受けません。"
-      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "統合 Webhook モードの一意識別子です。プラットフォームの作成時に自動生成されます。"
@@ -1837,6 +1833,9 @@
       "dashscope_embedding": {
         "hint": "Alibaba Cloud BailianEmbedding のデフォルトアドレスは https://dashscope.aliyuncs.com/api/v1 です。"
       },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding、デフォルトのアドレスは https://ark.cn-beijing.volces.com/api/v3 です。Agent Plan は https://ark.cn-beijing.volces.com/api/plan/v3 です。"
+      },
       "volcengine_cluster": {
         "description": "Volcengine クラスター",
         "hint": "音声クローンモデルを使用する場合は volcano_icl または volcano_icl_concurr を選択できます。デフォルトは volcano_tts です。"
@@ -2038,6 +2037,9 @@
         "description": "voice",
         "hint": "OpenAI TTS のボイスです。OpenAI のデフォルト対応値: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "stepfun-tts-voice": {
+        "description": "ボイス ID"
+      },
       "deepseek-tts-voice": {
         "description": "ボイス",
         "hint": "DeepSeek TTS のボイスです。対応する voice_id が API に送信されます。",
@@ -2098,6 +2100,14 @@
       "fishaudio-tts-reference-id": {
         "description": "reference_id",
         "hint": "fishaudio TTS の参照モデル ID（任意）です。指定すると、キャラクター名で検索せずにモデル ID を直接使用します。例: 626bb6d3f3364c9cbc3aa6a67300a664。その他のモデル: https://fish.audio/zh-CN/discovery。モデル詳細画面でモデル ID をコピーできます。"
+      },
+      "fishaudio-tts-format": {
+        "description": "音声フォーマット",
+        "hint": "FishAudio TTS が返す音声フォーマットです。互換性維持のためデフォルトは wav です。長文音声ではファイルサイズを大幅に削減できる mp3 を推奨します。"
+      },
+      "fishaudio-tts-mp3-bitrate": {
+        "description": "MP3 ビットレート (kbps)",
+        "hint": "音声フォーマットに mp3 を選択した場合のみ有効です。64 / 128 / 192 kbps から選択でき、デフォルトは 128 です。"
       },
       "whisper_hint": {
         "description": "Whisper モデルをローカルデプロイする際の注意事項",

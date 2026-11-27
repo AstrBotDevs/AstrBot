@@ -95,6 +95,8 @@
     "output": "Output"
   },
   "toolStatus": {
+    "interrupted": "Interrupted, result unknown",
+    "interruptedDetail": "Execution was interrupted (stopped, timed out or failed) before a result arrived. The action may have taken effect; check before retrying.",
     "done": "Done",
     "running": "Running"
   },
@@ -306,6 +308,10 @@
     "connection": {
       "title": "Connection problem",
       "description": "Check your network connection and try again shortly."
+    },
+    "ffmpegNotFound": {
+      "title": "FFmpeg is not available",
+      "description": "Install FFmpeg in the AstrBot runtime environment and ensure it is in PATH, then try again."
     },
     "generic": {
       "title": "This reply could not be completed",

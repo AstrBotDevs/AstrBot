@@ -56,6 +56,7 @@ const category = computed(() => {
     return "modelConfiguration";
   }
   if (props.code === "connection_error") return "connection";
+  if (props.code === "ffmpegNotFound") return "ffmpegNotFound";
   return "generic";
 });
 const configurationError = computed(() =>

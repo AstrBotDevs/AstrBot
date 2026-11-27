@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -346,6 +346,75 @@ async def test_kook_standalone_media_enters_event_pipeline(
     assert queued_event.message_obj.message == [expected_component]
     assert queued_event.message_str == f"[{message_type.name.lower()}]"
     media_resolver.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event_path", "scene"),
+    [
+        (KookEventDataPath.PRIVATE_MESSAGE, "private"),
+        (KookEventDataPath.GROUP_MESSAGE, "channel"),
+    ],
+)
+async def test_kook_voice_card_enters_pipeline_as_record(
+    monkeypatch, event_path, scene
+):
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    http = MagicMock()
+    http.post.return_value.__aenter__.return_value = Mock(
+        json=AsyncMock(return_value={"code": 0, "data": {"url": TEST_MEDIA_URL}})
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_client.aiohttp.ClientSession",
+        Mock(return_value=http),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.KookClient", KookClient
+    )
+    resolver = Mock()
+    resolver.return_value.to_path = AsyncMock(return_value=TEST_AUDIO_WAV_PATH)
+    monkeypatch.setattr("astrbot.core.message.components.MediaResolver", resolver)
+
+    queue = asyncio.Queue()
+    adapter = KookPlatformAdapter({}, {}, queue)
+    raw = json.loads(event_path.read_text(encoding="utf-8"))
+    data = raw["d"]
+    data["type"] = data["extra"]["type"] = KookMessageType.CARD.value
+    data["content"] = json.dumps(
+        [
+            {
+                "type": "card",
+                "modules": [
+                    {
+                        "type": "voice",
+                        "media_id": 42,
+                        "src": "https://example.com/original",
+                    }
+                ],
+            }
+        ]
+    )
+    conversation = (
+        {"chat_code": data["extra"]["code"]}
+        if scene == "private"
+        else {"channel_id": data["target_id"]}
+    )
+
+    await adapter.client._handle_signal(KookWebsocketEvent.from_dict(raw))
+
+    http.post.assert_not_called()
+    resolver.assert_not_called()
+    messages = queue.get_nowait().get_messages()
+    record = next(message for message in messages if isinstance(message, Record))
+    assert await record.convert_to_file_path() == TEST_AUDIO_WAV_PATH
+    assert await record.convert_to_file_path() == TEST_AUDIO_WAV_PATH
+
+    http.post.assert_called_once_with(
+        "https://www.kookapp.cn/api/v3/asset/voice-token",
+        json={"scene": scene, "msg_id": data["msg_id"], "media_id": 42, **conversation},
+    )
+    assert [call.args[0] for call in resolver.call_args_list].count(TEST_MEDIA_URL) == 1
 
 
 @pytest.mark.asyncio

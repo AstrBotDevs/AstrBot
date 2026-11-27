@@ -2590,7 +2590,7 @@ export type ListCommandConflictsError = unknown;
 export type ListToolsData = {
     query?: {
         enabled?: boolean;
-        origin?: 'builtin' | 'plugin' | 'mcp';
+        origin?: 'plugin' | 'mcp';
     };
 };
 
@@ -3425,6 +3425,10 @@ export type ListConversationsData = {
          * Paginate by UMO and return all conversation summaries for each selected session.
          */
         group_by_session?: boolean;
+        /**
+         * Combine matching WebChat conversations into one group when group_by_session is enabled.
+         */
+        group_webchat?: boolean;
         /**
          * Include full message history in each conversation.
          */

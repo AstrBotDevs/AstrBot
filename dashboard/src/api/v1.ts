@@ -46,6 +46,7 @@ import {
   type PluginVersionSupportRequest,
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
+  type PluginSourceRequest,
   type ProviderConfigRequest,
   type PypiIndexTestRequest,
   type RuntimeInfo,
@@ -162,7 +163,7 @@ export interface ProviderListParams {
 }
 
 export interface ToolListParams {
-  origin?: 'builtin' | 'plugin' | 'mcp';
+  origin?: 'plugin' | 'mcp';
   enabled?: boolean;
 }
 
@@ -1397,6 +1398,9 @@ export const pluginApi = {
   },
   sources() {
     return typed<any>(openApiV1.listPluginSources());
+  },
+  createSource(body: PluginSourceRequest) {
+    return typed<OpenConfig>(openApiV1.createPluginSource({ body }));
   },
   replaceSources(sources: OpenConfig[]) {
     return typed<OpenConfig>(

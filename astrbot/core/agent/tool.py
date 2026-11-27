@@ -1,17 +1,21 @@
 import copy
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any, Generic
+from typing import TYPE_CHECKING, Any, Generic
 
 import jsonschema
 import mcp
 from deprecated import deprecated
 from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
+from typing_extensions import TypeVar
 
 from astrbot.core.message.message_event_result import MessageEventResult
 
-from .run_context import ContextWrapper, TContext
+if TYPE_CHECKING:
+    from .run_context import ContextWrapper
+
+TContext = TypeVar("TContext", default=Any)
 
 ParametersType = dict[str, Any]
 ToolExecResult = str | mcp.types.CallToolResult
@@ -70,7 +74,9 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: "ContextWrapper[TContext]", **kwargs
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."

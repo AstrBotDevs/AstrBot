@@ -11,13 +11,8 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
-from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.cron.manager import CronJobSchedulingError
 from astrbot.core.platform.message_type import MessageType
-
-_CRON_TOOL_CONFIG = {
-    "provider_settings.proactive_capability.add_cron_tools": True,
-}
 
 
 def _extract_job_session(job: Any) -> str | None:
@@ -51,7 +46,6 @@ def _parse_run_at(run_at: Any) -> datetime | None:
     return datetime.fromisoformat(str(run_at))
 
 
-@builtin_tool(config=_CRON_TOOL_CONFIG)
 @dataclass
 class FutureTaskTool(FunctionTool[AstrAgentContext]):
     name: str = "future_task"

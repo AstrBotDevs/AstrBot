@@ -84,7 +84,6 @@ const {
 // 工具操作方法
 const {
   toolSearch,
-  showBuiltinTools,
   filteredTools,
   toolSummary,
   toggleTool,
@@ -101,11 +100,11 @@ const handleUpdatePermission = async (cmd: CommandItem, permission: CommandPermi
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
-  await toggleTool(tool, tmTool('messages.toggleToolReadonly'), tmTool('messages.toggleToolSuccess'), tmTool('messages.toggleToolError', { error: '' }));
+  await toggleTool(tool, tmTool('messages.toggleToolSuccess'), tmTool('messages.toggleToolError', { error: '' }));
 };
 
 const handleUpdateToolPermission = async (tool: ToolItem, permission: 'admin' | 'member') => {
-  await updateToolPermission(tool, permission, tmTool('messages.updateToolPermissionSuccess', { name: tool.name }), tmTool('messages.updateToolPermissionBuiltin'), tmTool('messages.updateToolPermissionFailed'));
+  await updateToolPermission(tool, permission, tmTool('messages.updateToolPermissionSuccess', { name: tool.name }), tmTool('messages.updateToolPermissionFailed'));
 };
 
 // 处理确认重命名
@@ -269,15 +268,6 @@ watch(viewMode, async (mode) => {
                   <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.inactive') }}:</span>
                   <span class="text-body-1 font-weight-bold text-error">{{ toolSummary.inactive }}</span>
                 </div>
-
-                <v-divider vertical class="mx-1" style="height: 20px;" />
-                <v-checkbox
-                  v-model="showBuiltinTools"
-                  :label="tmTool('functionTools.filter.showBuiltin')"
-                  density="compact"
-                  hide-details
-                  class="builtin-tools-checkbox"
-                />
               </div>
             </div>
 
@@ -318,13 +308,3 @@ watch(viewMode, async (mode) => {
     {{ snackbar.message }}
   </v-snackbar>
 </template>
-
-<style scoped>
-.builtin-tools-checkbox {
-  flex: none;
-}
-
-.builtin-tools-checkbox :deep(.v-selection-control) {
-  min-height: auto;
-}
-</style>

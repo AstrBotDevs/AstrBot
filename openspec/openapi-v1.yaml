@@ -3088,7 +3088,7 @@ paths:
   /api/v1/tools:
     get:
       tags: [Tools]
-      summary: List LLM tools
+      summary: List registered plugin and MCP tools
       operationId: listTools
       x-astrbot-scope: tool
       parameters:
@@ -3096,7 +3096,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [builtin, plugin, mcp]
+            enum: [plugin, mcp]
         - name: enabled
           in: query
           schema:
@@ -4455,6 +4455,12 @@ paths:
             type: boolean
             default: false
           description: Paginate by UMO and return all conversation summaries for each selected session.
+        - name: group_webchat
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Combine matching WebChat conversations into one group when group_by_session is enabled.
         - name: include_history
           in: query
           schema:

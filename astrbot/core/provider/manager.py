@@ -525,6 +525,10 @@ class ProviderManager:
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
                 )
+            case "stepfun_tts_api":
+                from .sources.stepfun_tts_api_source import (
+                    ProviderStepFunTTSAPI as ProviderStepFunTTSAPI,
+                )
             case "deepseek_tts_api":
                 from .sources.deepseek_tts_api_source import (
                     ProviderDeepSeekTTSAPI as ProviderDeepSeekTTSAPI,
@@ -596,6 +600,10 @@ class ProviderManager:
             case "dashscope_embedding":
                 from .sources.dashscope_embedding_source import (
                     DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
+                )
+            case "volcengine_embedding":
+                from .sources.volcengine_embedding_source import (
+                    VolcengineEmbeddingProvider as VolcengineEmbeddingProvider,
                 )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (

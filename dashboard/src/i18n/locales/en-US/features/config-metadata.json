@@ -868,10 +868,6 @@
         "description": "Unified Webhook Mode",
         "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
-      "use_markdown": {
-        "description": "Use Markdown for Proactive Messages",
-        "hint": "When enabled, proactive messages are sent in Markdown mode by default; an explicit use_markdown() call from a plugin takes precedence over this option."
-      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
@@ -1733,6 +1729,9 @@
       "dashscope_embedding": {
         "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
       },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding, the default address is https://ark.cn-beijing.volces.com/api/v3. Agent Plan is https://ark.cn-beijing.volces.com/api/plan/v3."
+      },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
         "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
@@ -1934,6 +1933,9 @@
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
       },
+      "stepfun-tts-voice": {
+        "description": "Voice ID"
+      },
       "deepseek-tts-voice": {
         "description": "Voice",
         "hint": "DeepSeek TTS voice. The corresponding voice_id is sent to the API.",
@@ -1994,6 +1996,14 @@
       "fishaudio-tts-reference-id": {
         "description": "reference_id",
         "hint": "Fishaudio TTS reference model ID (optional). If set, the model ID is used directly instead of looking up by role name. Example: 626bb6d3f3364c9cbc3aa6a67300a664. More models: https://fish.audio/zh-CN/discovery; open a model detail page to copy the model ID."
+      },
+      "fishaudio-tts-format": {
+        "description": "Audio Format",
+        "hint": "Audio format returned by FishAudio TTS. Defaults to wav for backward compatibility; mp3 is recommended for long speech to significantly reduce file size and transfer overhead."
+      },
+      "fishaudio-tts-mp3-bitrate": {
+        "description": "MP3 Bitrate (kbps)",
+        "hint": "Applies only when Audio Format is set to mp3. Supports 64, 128, or 192 kbps (default: 128)."
       },
       "whisper_hint": {
         "description": "Notes for local Whisper deployment",

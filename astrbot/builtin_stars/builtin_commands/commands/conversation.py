@@ -1,5 +1,4 @@
-from sqlalchemy import case, func, select
-from sqlmodel import col
+from sqlalchemy import func, select
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -9,7 +8,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_THREAD_ID_KEY,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.chat_usage import chat_usage
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from ..i18n import translate
@@ -137,7 +136,9 @@ class ConversationCommands:
 
         message.set_extra("_clean_group_context_session", True)
         message.set_result(
-            MessageEventResult().message(translate("reset", self.context.locale(umo)))
+            MessageEventResult().message(
+                translate("reset", await self.context.get_locale(umo))
+            )
         )
 
     async def stop(self, message: AstrMessageEvent) -> None:
@@ -146,7 +147,7 @@ class ConversationCommands:
         Args:
             message: Stop command event, excluded from the request.
         """
-        locale = self.context.locale(message.unified_msg_origin)
+        locale = await self.context.get_locale(message.unified_msg_origin)
         stopped_count = active_event_registry.request_agent_stop_all(
             message.unified_msg_origin, exclude=message
         )
@@ -190,7 +191,7 @@ class ConversationCommands:
             MessageEventResult().message(
                 translate(
                     "new_conversation",
-                    self.context.locale(message.unified_msg_origin),
+                    await self.context.get_locale(message.unified_msg_origin),
                     cid=cid[:4],
                 )
             ),
@@ -199,7 +200,7 @@ class ConversationCommands:
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation."""
         umo = message.unified_msg_origin
-        locale = self.context.locale(umo)
+        locale = await self.context.get_locale(umo)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
 
         if not cid:
@@ -212,22 +213,17 @@ class ConversationCommands:
         async with db.get_db() as session:
             result = await session.execute(
                 select(
-                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
-                        "record_count",
-                    ),
-                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                    func.count().label("record_count"),
+                    func.coalesce(func.sum(chat_usage.c.token_input_other), 0).label(
                         "total_input_other",
                     ),
-                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                    func.coalesce(func.sum(chat_usage.c.token_input_cached), 0).label(
                         "total_input_cached",
                     ),
-                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                    func.coalesce(func.sum(chat_usage.c.token_output), 0).label(
                         "total_output",
                     ),
-                ).where(
-                    col(ProviderStat.agent_type) == "internal",
-                    col(ProviderStat.conversation_id) == cid,
-                )
+                ).where(chat_usage.c.conversation_id == cid)
             )
             stats = result.one()
 

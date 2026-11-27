@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.conversation import main_conversation_filter
 from astrbot.core.db.migration.migra_conversation_events import migrate_conversations
 from astrbot.core.db.po import (
     ApiKey,
@@ -138,11 +139,20 @@ class SQLiteDatabase(BaseDatabase):
         super().__init__()
 
         @event.listens_for(self.engine.sync_engine, "connect")
-        def enable_foreign_keys(connection, _record):
-            """Enforce event ownership and ancestry on every pooled connection."""
+        def configure_sqlite_connection(connection, _record):
+            """Apply per-connection SQLite integrity, durability, and memory PRAGMAs."""
             cursor = connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
+            try:
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                # Negative cache_size sets KiB (~8 MiB); positive values count 4 KiB pages.
+                cursor.execute("PRAGMA cache_size=-8000")
+                # Leave file caching to the OS page cache so memory stays reclaimable.
+                cursor.execute("PRAGMA mmap_size=0")
+            finally:
+                cursor.close()
 
     async def initialize(self) -> None:
         """Serialize schema migration before allowing application traffic."""
@@ -163,11 +173,6 @@ class SQLiteDatabase(BaseDatabase):
                 )
             )
             await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA busy_timeout=30000"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
@@ -360,22 +365,72 @@ class SQLiteDatabase(BaseDatabase):
             return count if count is not None else 0
 
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
-        """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        """Get platform statistics within the specified offset in seconds.
+
+        Rows are grouped by ``platform_id`` with ``count`` summed across the
+        lookback window and ``id``, ``timestamp``, and ``platform_type`` taken
+        from the latest row (``timestamp DESC, id DESC``).
+
+        Args:
+            offset_sec: Lookback window in seconds from the current local time.
+
+        Returns:
+            Aggregated ``PlatformStat`` rows grouped by ``platform_id``,
+            ordered by latest timestamp descending.
+        """
         async with self.get_db() as session:
             session: AsyncSession
             now = datetime.now()
             start_time = now - timedelta(seconds=offset_sec)
-            result = await session.execute(
-                text("""
-                SELECT * FROM platform_stats
-                WHERE timestamp >= :start_time
-                GROUP BY platform_id
-                ORDER BY timestamp DESC
-                """),
-                {"start_time": start_time},
+            windowed = (
+                select(
+                    col(PlatformStat.id).label("id"),
+                    col(PlatformStat.timestamp).label("timestamp"),
+                    col(PlatformStat.platform_id).label("platform_id"),
+                    col(PlatformStat.platform_type).label("platform_type"),
+                    func.sum(col(PlatformStat.count))
+                    .over(partition_by=col(PlatformStat.platform_id))
+                    .label("count"),
+                    func.row_number()
+                    .over(
+                        partition_by=col(PlatformStat.platform_id),
+                        order_by=(
+                            desc(col(PlatformStat.timestamp)),
+                            desc(col(PlatformStat.id)),
+                        ),
+                    )
+                    .label("rn"),
+                )
+                .where(col(PlatformStat.timestamp) >= start_time)
+                .subquery()
             )
-            return list(result.scalars().all())
+            stmt = (
+                select(
+                    windowed.c.id,
+                    windowed.c.timestamp,
+                    windowed.c.platform_id,
+                    windowed.c.platform_type,
+                    windowed.c.count,
+                )
+                .where(windowed.c.rn == 1)
+                .order_by(desc(windowed.c.timestamp), desc(windowed.c.id))
+            )
+            result = await session.execute(stmt)
+            return [
+                PlatformStat(
+                    id=int(row.id),
+                    timestamp=row.timestamp,
+                    platform_id=row.platform_id,
+                    platform_type=row.platform_type,
+                    count=int(row.count or 0),
+                )
+                for row in result.all()
+            ]
 
+    @deprecated(
+        version="4.30.0",
+        reason="Managed Chat Providers record request usage automatically.",
+    )
     async def insert_provider_stat(
         self,
         *,
@@ -387,7 +442,7 @@ class SQLiteDatabase(BaseDatabase):
         stats: dict | None = None,
         agent_type: str = "internal",
     ) -> ProviderStat:
-        """Insert a provider stat record for a single agent response."""
+        """Insert a legacy provider statistic for an Agent turn."""
         stats = stats or {}
         token_usage = stats.get("token_usage", {})
 
@@ -427,7 +482,7 @@ class SQLiteDatabase(BaseDatabase):
     async def get_conversations(self, user_id=None, platform_id=None):
         async with self.get_db(consistent_read=True) as session:
             session: AsyncSession
-            query = select(ConversationV3)
+            query = select(ConversationV3).where(main_conversation_filter())
 
             if user_id:
                 query = query.where(ConversationV3.umo == user_id)
@@ -444,7 +499,9 @@ class SQLiteDatabase(BaseDatabase):
     async def get_conversation_by_id(self, cid):
         async with self.get_db(consistent_read=True) as session:
             session: AsyncSession
-            query = select(ConversationV3).where(ConversationV3.conversation_id == cid)
+            query = select(ConversationV3).where(
+                ConversationV3.conversation_id == cid, main_conversation_filter()
+            )
             result = await session.execute(query)
             conv = result.scalar_one_or_none()
             return (
@@ -459,6 +516,7 @@ class SQLiteDatabase(BaseDatabase):
             offset = (page - 1) * page_size
             result = await session.execute(
                 select(ConversationV3)
+                .where(main_conversation_filter())
                 .order_by(desc(ConversationV3.created_at))
                 .offset(offset)
                 .limit(page_size),
@@ -480,7 +538,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             # Build the base query with filters
             base_query = select(ConversationV3)
-            conditions = []
+            conditions = [main_conversation_filter()]
 
             if platform_ids:
                 conditions.append(col(ConversationV3.platform_id).in_(platform_ids))
@@ -549,12 +607,16 @@ class SQLiteDatabase(BaseDatabase):
                 base_query = base_query.where(*conditions)
 
             group_by_session = bool(kwargs.get("group_by_session", False))
+            session_key = col(ConversationV3.umo)
+            if group_by_session and kwargs.get("group_webchat"):
+                session_key = case(
+                    (ConversationV3.platform_id == "webchat", "webchat"),
+                    else_=literal("umo:").concat(session_key),
+                )
 
             # Get total count matching the filters
             count_target = (
-                func.distinct(ConversationV3.umo)
-                if group_by_session
-                else ConversationV3.id
+                func.distinct(session_key) if group_by_session else ConversationV3.id
             )
             count_query = select(func.count(count_target))
             if conditions:
@@ -581,7 +643,7 @@ class SQLiteDatabase(BaseDatabase):
                     "session_tie_breaker"
                 )
                 session_query = select(
-                    ConversationV3.umo,
+                    session_key,
                     session_sort,
                     session_tie_breaker,
                 )
@@ -596,22 +658,22 @@ class SQLiteDatabase(BaseDatabase):
                     else session_tie_breaker.desc
                 )
                 session_rows = await session.execute(
-                    session_query.group_by(ConversationV3.umo)
+                    session_query.group_by(session_key)
                     .order_by(session_order())
                     .order_by(session_tie_order())
                     .offset(offset)
                     .limit(page_size)
                 )
-                session_ids = [row[0] for row in session_rows.all()]
-                if not session_ids:
+                session_keys = [row[0] for row in session_rows.all()]
+                if not session_keys:
                     return [], total
                 session_rank = case(
-                    {session_id: index for index, session_id in enumerate(session_ids)},
-                    value=ConversationV3.umo,
-                    else_=len(session_ids),
+                    {key: index for index, key in enumerate(session_keys)},
+                    value=session_key,
+                    else_=len(session_keys),
                 )
                 result_query = (
-                    base_query.where(col(ConversationV3.umo).in_(session_ids))
+                    base_query.where(session_key.in_(session_keys))
                     .order_by(session_rank)
                     .order_by(order())
                     .order_by(tie_breaker())
@@ -658,6 +720,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             result = await session.execute(
                 select(ConversationV3.platform_id)
+                .where(main_conversation_filter())
                 .distinct()
                 .order_by(ConversationV3.platform_id)
             )
@@ -690,8 +753,8 @@ class SQLiteDatabase(BaseDatabase):
     async def update_conversation(
         self, cid, title=None, persona_id=None, content=None, token_usage=None
     ):
-        snapshot = await self.conversation_store.read(cid)
-        if snapshot is None:
+        current = await self.get_conversation_by_id(cid)
+        if current is None:
             return None
         changes = {}
         if title is not None:
@@ -708,12 +771,20 @@ class SQLiteDatabase(BaseDatabase):
             cid,
             drafts,
             history=content,
-            expected_head=snapshot.revision.head_seq,
-            expected_leaf=snapshot.revision.leaf_event_id,
+            expected_head=current.revision.head_seq,
+            expected_leaf=current.revision.leaf_event_id,
         )
         return await self.get_conversation_by_id(cid)
 
     async def delete_conversation(self, cid) -> None:
+        async with self.get_db() as session:
+            main_id = await session.scalar(
+                select(ConversationV3.id).where(
+                    ConversationV3.conversation_id == cid, main_conversation_filter()
+                )
+            )
+        if main_id is None:
+            return
         await self.conversation_store.delete(cid=cid)
 
     async def delete_conversations_by_user_id(self, user_id: str) -> None:

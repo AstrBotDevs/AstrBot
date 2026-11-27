@@ -218,6 +218,7 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    _plugin_id: str | None = field(default=None, init=False, repr=False)
 
     def __repr__(self) -> str:
         return (
@@ -483,6 +484,8 @@ class LLMResponse:
     """The ID of the response. For chunked responses, it's the ID of the chunk; for non-chunked responses, it's the ID of the response."""
     usage: TokenUsage | None = None
     """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
+    context_token_usage: int | None = None
+    """Provider estimate of tokens retained in the conversation after this response."""
 
     def __init__(
         self,

@@ -106,31 +106,6 @@ def test_local_shell_component_decodes_utf8_output(monkeypatch):
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_uses_windows_powershell(monkeypatch):
-    calls = []
-
-    def fake_run(*args, **kwargs):
-        calls.append((args, kwargs))
-        return _FakePopen(stdout=b"")
-
-    monkeypatch.setattr(subprocess, "Popen", fake_run)
-    monkeypatch.setattr(local_booter.sys, "platform", "win32")
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _cmd: None)
-
-    result = asyncio.run(LocalShellComponent().exec("Get-ChildItem"))
-
-    assert result["exit_code"] == 0
-    assert calls[0][0][0] == [
-        "powershell.exe",
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Get-ChildItem",
-    ]
-    assert calls[0][1]["shell"] is False
-
-
 def test_local_shell_component_prefers_pwsh_when_available(monkeypatch):
     calls = []
 

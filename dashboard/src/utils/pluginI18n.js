@@ -53,25 +53,46 @@ export function usePluginI18n() {
     return resolvePluginI18n(i18n, locale.value, key, fallback);
   };
 
+  const resolveMetadata = (plugin, key, fallback) => {
+    const i18n = plugin?.i18n;
+    return resolve(i18n, `metadata.${key}`, resolve(i18n, key, fallback));
+  };
+
   const pluginName = (plugin) => {
     const fallback = plugin?.display_name?.length
       ? plugin.display_name
       : plugin?.name;
-    return resolve(plugin?.i18n, "metadata.display_name", fallback || "");
+    return resolveMetadata(plugin, "display_name", fallback || "");
+  };
+
+  const categoryName = (category) => {
+    const languageTag = locale.value.toLowerCase();
+    const translations = Object.entries(category?.i18n || {});
+    for (const candidate of [languageTag, languageTag.split("-")[0]]) {
+      const translation = translations.find(
+        ([tag]) => tag.toLowerCase() === candidate,
+      )?.[1]?.display_name;
+      if (typeof translation === "string" && translation.trim()) {
+        return translation.trim();
+      }
+    }
+    return typeof category?.display_name === "string"
+      ? category.display_name.trim()
+      : "";
   };
 
   const pluginDesc = (plugin, fallback = "") => {
-    return resolve(
-      plugin?.i18n,
-      "metadata.desc",
+    return resolveMetadata(
+      plugin,
+      "desc",
       fallback || plugin?.desc || plugin?.description || "",
     );
   };
 
   const pluginShortDesc = (plugin, fallback = "") => {
-    return resolve(
-      plugin?.i18n,
-      "metadata.short_desc",
+    return resolveMetadata(
+      plugin,
+      "short_desc",
       fallback ||
         plugin?.short_desc ||
         plugin?.desc ||
@@ -106,6 +127,7 @@ export function usePluginI18n() {
     locale,
     resolve,
     pluginName,
+    categoryName,
     pluginDesc,
     pluginShortDesc,
     pluginPageText,

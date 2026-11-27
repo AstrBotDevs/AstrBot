@@ -282,7 +282,7 @@ async def run_agent(
                             status_msg = _build_tool_result_status_message(
                                 msg_chain,
                                 tool_name_by_call_id,
-                                agent_runner.run_context.context.context.locale(
+                                await agent_runner.run_context.context.context.get_locale(
                                     astr_event.unified_msg_origin
                                 ),
                             )
@@ -317,7 +317,7 @@ async def run_agent(
                             chain = MessageChain(type="tool_call").message(
                                 _build_tool_call_status_message(
                                     tool_info,
-                                    agent_runner.run_context.context.context.locale(
+                                    await agent_runner.run_context.context.context.get_locale(
                                         astr_event.unified_msg_origin
                                     ),
                                 )

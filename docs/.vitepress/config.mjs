@@ -253,6 +253,7 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: "版本列表", link: "/" },
+                  { text: "2026-11-25", link: "/2026-11-25" },
                   { text: "2026-06-27", link: "/2026-06-27" },
                 ],
               },
@@ -554,6 +555,7 @@ export default defineConfig({
                 collapsed: true,
                 items: [
                   { text: "Versions", link: "/" },
+                  { text: "2026-11-25", link: "/2026-11-25" },
                   { text: "2026-06-27", link: "/2026-06-27" },
                 ],
               },

@@ -13,6 +13,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.plugin_scope import plugin_scope
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
@@ -170,7 +171,8 @@ class ResultDecorateStage(Stage):
                         "Plugins that depend on the pre-send event hook may not work "
                         "correctly when streaming output is enabled.",
                     )
-                await handler.handler(event)
+                with plugin_scope(star_map[handler.handler_module_path].plugin_id):
+                    await handler.handler(event)
 
                 if (result := event.get_result()) is None or not result.chain:
                     logger.debug(
@@ -300,7 +302,10 @@ class ResultDecorateStage(Stage):
             ):
                 # inject reasoning content to chain
                 reasoning_content = str(event.get_extra("_llm_reasoning_content"))
-                if event.get_platform_name() == "lark":
+                if event.get_platform_name() == "webchat":
+                    # Deliver reasoning with the reply, outside its plain-text segments.
+                    event.set_extra("_webchat_pending_reasoning", reasoning_content)
+                elif event.get_platform_name() == "lark":
                     result.chain.insert(
                         0,
                         Json(
