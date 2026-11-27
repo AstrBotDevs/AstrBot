@@ -35,6 +35,35 @@ if TYPE_CHECKING:
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 
+# 可重建的通用缓存目录（在所有备份目录中均可安全跳过）
+EXCLUDED_CACHE_DIR_NAMES = frozenset(
+    {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+)
+# 插件及插件数据目录下的临时/媒体缓存目录名
+EXCLUDED_PLUGIN_CACHE_DIR_NAMES = frozenset({"cache", ".cache"})
+# 跳过无法读取的文件时，汇总告警最多附带的样例条数
+SKIPPED_FILE_SAMPLE_LIMIT = 5
+
+
+def _should_skip_backup_dir(dir_name: str, parent_dir: Path, subdir_name: str) -> bool:
+    """判断备份目录遍历时是否应跳过某个子目录。
+
+    - ``__pycache__`` / ``.pytest_cache`` / ``.ruff_cache`` / ``.mypy_cache`` 始终跳过；
+    - ``plugin_data`` 下的 ``cache`` / ``.cache`` 属于可重建运行缓存，始终跳过；
+    - ``plugins`` 下的 ``.cache`` 始终跳过；名为 ``cache`` 的目录仅在不包含
+      ``__init__.py`` 时视为运行缓存跳过（避免误跳插件自身的 Python ``cache`` 包）。
+    """
+    lowered = subdir_name.lower()
+    if lowered in EXCLUDED_CACHE_DIR_NAMES:
+        return True
+    if dir_name == "plugin_data" and lowered in EXCLUDED_PLUGIN_CACHE_DIR_NAMES:
+        return True
+    if dir_name == "plugins" and lowered in EXCLUDED_PLUGIN_CACHE_DIR_NAMES:
+        if lowered == ".cache":
+            return True
+        return not (parent_dir / subdir_name / "__init__.py").exists()
+    return False
+
 
 class AstrBotExporter:
     """AstrBot 数据导出器
@@ -320,6 +349,8 @@ class AstrBotExporter:
         """
         stats: dict[str, dict[str, int]] = {}
         backup_directories = get_backup_directories()
+        skipped_files = 0
+        skipped_samples: list[str] = []
 
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
@@ -332,24 +363,40 @@ class AstrBotExporter:
 
             try:
                 for root, dirs, files in os.walk(full_path):
-                    # 跳过 __pycache__ 目录
-                    dirs[:] = [d for d in dirs if d != "__pycache__"]
+                    root_path = Path(root)
+                    # 跳过编译缓存与插件可重建缓存目录
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if not _should_skip_backup_dir(dir_name, root_path, d)
+                    ]
 
                     for file in files:
-                        # 跳过 .pyc 文件
-                        if file.endswith(".pyc"):
+                        # 跳过 .pyc / .pyo 字节码文件
+                        if file.endswith((".pyc", ".pyo")):
                             continue
 
-                        file_path = Path(root) / file
+                        file_path = root_path / file
                         try:
-                            # 计算相对路径
+                            # 计算相对路径；先取大小再写入，确保失败时统计与归档一致
                             rel_path = file_path.relative_to(full_path)
                             archive_path = f"directories/{dir_name}/{rel_path}"
+                            file_size = file_path.stat().st_size
                             zf.write(str(file_path), archive_path)
-                            file_count += 1
-                            total_size += file_path.stat().st_size
+                        except OSError as e:
+                            skipped_files += 1
+                            if len(skipped_samples) < SKIPPED_FILE_SAMPLE_LIMIT:
+                                skipped_samples.append(f"{file_path} ({e})")
+                            logger.debug(f"备份导出跳过无法读取的文件 {file_path}: {e}")
+                            continue
                         except Exception as e:
-                            logger.warning(f"导出文件 {file_path} 失败: {e}")
+                            skipped_files += 1
+                            if len(skipped_samples) < SKIPPED_FILE_SAMPLE_LIMIT:
+                                skipped_samples.append(f"{file_path} ({e})")
+                            logger.debug(f"备份导出跳过异常文件 {file_path}: {e}")
+                            continue
+                        file_count += 1
+                        total_size += file_size
 
                 stats[dir_name] = {"files": file_count, "size": total_size}
                 logger.debug(
@@ -358,6 +405,12 @@ class AstrBotExporter:
             except Exception as e:
                 logger.warning(f"导出目录 {dir_path} 失败: {e}")
                 stats[dir_name] = {"files": 0, "size": 0}
+
+        if skipped_files:
+            samples_str = ", ".join(skipped_samples)
+            logger.warning(
+                f"备份导出跳过 {skipped_files} 个无法读取或被占用的文件；样例: {samples_str}"
+            )
 
         return stats
 
