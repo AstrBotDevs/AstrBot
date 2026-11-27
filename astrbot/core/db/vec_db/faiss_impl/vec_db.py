@@ -246,6 +246,8 @@ class FaissVecDB(BaseVecDB):
         fetched_docs = await self.document_storage.get_documents(
             metadata_filters=metadata_filters or {},
             ids=indices[0],
+            offset=None,
+            limit=None,
         )
         if not fetched_docs:
             return []

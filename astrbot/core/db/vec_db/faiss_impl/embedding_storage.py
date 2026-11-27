@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import tempfile
+import threading
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -69,6 +71,9 @@ class EmbeddingStorage:
             )
         self.dimension = dimension
         self.path = path
+        self._lock = threading.RLock()
+        self._async_lock: asyncio.Lock | None = None
+        self._async_lock_loop: asyncio.AbstractEventLoop | None = None
         self.index = None
         if path and os.path.exists(path):
             self.index = self._read_index(path)
@@ -80,6 +85,14 @@ class EmbeddingStorage:
                 )
             base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)
+
+    def _get_async_lock(self) -> asyncio.Lock:
+        """Return the per-event-loop lock serializing async FAISS access."""
+        loop = asyncio.get_running_loop()
+        if self._async_lock is None or self._async_lock_loop is not loop:
+            self._async_lock = asyncio.Lock()
+            self._async_lock_loop = loop
+        return self._async_lock
 
     @staticmethod
     def _read_index(path: str) -> faiss.Index:
@@ -105,65 +118,102 @@ class EmbeddingStorage:
 
     @staticmethod
     def _write_index(index: faiss.Index, path: str) -> None:
-        """保存 Faiss 索引，兼容含非 ASCII 字符的 Windows 路径。"""
+        """Atomically persist a Faiss index, bridging non-ASCII Windows paths."""
         import faiss
 
-        dirname = os.path.dirname(path)
-        if dirname:
-            os.makedirs(dirname, exist_ok=True)
+        target_dir = os.path.dirname(os.path.abspath(path))
+        os.makedirs(target_dir, exist_ok=True)
 
-        if not _needs_bridge(path):
-            faiss.write_index(index, path)
-            return
-
-        tmp = _make_temp_file("_faiss_write")
+        sibling_fd, sibling_tmp = tempfile.mkstemp(
+            prefix=".faiss_tmp_", suffix=".faiss", dir=target_dir
+        )
+        os.close(sibling_fd)
+        bridge_tmp: str | None = None
         try:
-            faiss.write_index(index, tmp)
-            shutil.move(tmp, path)
+            if not _needs_bridge(path):
+                faiss.write_index(index, sibling_tmp)
+            else:
+                bridge_tmp = _make_temp_file("_faiss_write")
+                faiss.write_index(index, bridge_tmp)
+                shutil.copy2(bridge_tmp, sibling_tmp)
+            os.replace(sibling_tmp, path)
         finally:
-            if os.path.exists(tmp):
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
+            for tmp_path in (bridge_tmp, sibling_tmp):
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+
+    def _save_index_sync(self) -> None:
+        with self._lock:
+            if self.index is None or not self.path:
+                return
+            self._write_index(self.index, self.path)
+
+    def _insert_sync(self, vector: np.ndarray, id: int) -> None:
+        with self._lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            if vector.shape[0] != self.dimension:
+                raise ValueError(
+                    f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
+                )
+            self.index.add_with_ids(
+                vector.reshape(1, -1), np.array([id], dtype=np.int64)
+            )
+            self._save_index_sync()
+
+    def _insert_batch_sync(self, vectors: np.ndarray, ids: list[int]) -> None:
+        with self._lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            if len(vectors.shape) != 2:
+                raise ValueError(
+                    f"向量必须是二维数组, 当前维度: {len(vectors.shape)}",
+                )
+            if vectors.shape[1] != self.dimension:
+                raise ValueError(
+                    f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
+                )
+            self.index.add_with_ids(vectors, np.array(ids, dtype=np.int64))
+            self._save_index_sync()
+
+    def _search_sync(self, vector: np.ndarray, k: int) -> tuple:
+        with self._lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            flat = np.asarray(vector, dtype=np.float32).ravel()
+            if flat.shape[0] != self.dimension:
+                raise ValueError(
+                    f"向量维度不匹配, 期望: {self.dimension}, 实际: {flat.shape[0]}",
+                )
+            return self.index.search(flat.reshape(1, -1), k)
+
+    def _delete_sync(self, ids: list[int]) -> None:
+        with self._lock:
+            assert self.index is not None, "FAISS index is not initialized."
+            try:
+                self.index.remove_ids(np.array(ids, dtype=np.int64))
+            except RuntimeError:
+                # Idempotent: ignore missing IDs when removing from FAISS.
+                pass
+            self._save_index_sync()
 
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量"""
-        assert self.index is not None, "FAISS index is not initialized."
-        if vector.shape[0] != self.dimension:
-            raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
-            )
-        self.index.add_with_ids(vector.reshape(1, -1), np.array([id], dtype=np.int64))
-        await self.save_index()
+        async with self._get_async_lock():
+            await asyncio.to_thread(self._insert_sync, vector, id)
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
         """批量插入向量"""
-        assert self.index is not None, "FAISS index is not initialized."
-        if len(vectors.shape) != 2:
-            raise ValueError(
-                f"向量必须是二维数组, 当前维度: {len(vectors.shape)}",
-            )
-        if vectors.shape[1] != self.dimension:
-            raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
-            )
-        self.index.add_with_ids(vectors, np.array(ids, dtype=np.int64))
-        await self.save_index()
+        async with self._get_async_lock():
+            await asyncio.to_thread(self._insert_batch_sync, vectors, ids)
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
         """搜索向量
 
         接受 1D (d,) 或 2D (1, d) 向量，自动展平为 Faiss 期望的 (1, d)。
         """
-        assert self.index is not None, "FAISS index is not initialized."
-        vector = np.asarray(vector, dtype=np.float32).ravel()
-        if vector.shape[0] != self.dimension:
-            raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
-            )
-        distances, indices = self.index.search(vector.reshape(1, -1), k)
-        return distances, indices
+        async with self._get_async_lock():
+            return await asyncio.to_thread(self._search_sync, vector, k)
 
     async def delete(self, ids: list[int]) -> None:
         """删除向量
@@ -171,16 +221,10 @@ class EmbeddingStorage:
         删除不存在的 ID 时 Faiss 会抛 RuntimeError。
         由于 remove_ids 为幂等操作，此处忽略该错误。
         """
-        assert self.index is not None, "FAISS index is not initialized."
-        try:
-            self.index.remove_ids(np.array(ids, dtype=np.int64))
-        except RuntimeError:
-            # 幂等：删除已不存在的 ID，安全忽略
-            pass
-        await self.save_index()
+        async with self._get_async_lock():
+            await asyncio.to_thread(self._delete_sync, ids)
 
     async def save_index(self) -> None:
         """保存索引（兼容含非 ASCII 字符的 Windows 路径）"""
-        if self.index is None or not self.path:
-            return
-        self._write_index(self.index, self.path)
+        async with self._get_async_lock():
+            await asyncio.to_thread(self._save_index_sync)
