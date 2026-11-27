@@ -399,7 +399,8 @@ class AiocqhttpAdapter(Platform):
                 continue
             elif t == "inline_keyboard":
                 logger.debug(
-                    f"忽略 aiocqhttp 不支持的消息段类型: {t}, count={sum(1 for _ in m_group)}"
+                    f"Ignoring unsupported aiocqhttp message segment type: {t}, "
+                    f"count={sum(1 for _ in m_group)}"
                 )
                 continue
             elif t == "markdown":
