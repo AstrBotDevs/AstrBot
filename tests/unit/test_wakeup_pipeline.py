@@ -185,7 +185,6 @@ async def runtime(monkeypatch):
         return MainAgentBuildResult(runner, prepared.request, provider)
 
     monkeypatch.setattr(native_builder, "build_main_agent", build)
-    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setitem(trace_module.astrbot_config, "trace_enable", True)
     monkeypatch.setattr(

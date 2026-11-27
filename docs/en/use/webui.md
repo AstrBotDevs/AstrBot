@@ -175,7 +175,9 @@ Select `Data & Logs` in the left sidebar to switch between `Statistics`, `Conver
 
 ### Statistics
 
-The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, model usage rankings, and conversation model usage rankings. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, and token usage by provider and conversation. The call count includes historical Agent turns and individual Chat Provider request attempts, including retries and fallbacks. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+
+Average cache hit rate is the share of input tokens served from cache in the selected range.
 
 ### Conversations
 

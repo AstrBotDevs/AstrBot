@@ -35,7 +35,11 @@ async def test_message_handler_trace_category(monkeypatch, event_filter, categor
     monkeypatch.setitem(
         star_request.star_map,
         "test_plugin",
-        SimpleNamespace(name="test_plugin", display_name="Test Plugin"),
+        SimpleNamespace(
+            name="test_plugin",
+            display_name="Test Plugin",
+            plugin_id="author/test_plugin",
+        ),
     )
     extras = {"activated_handlers": [handler], "handlers_parsed_params": {}}
     event = MagicMock()
@@ -82,7 +86,11 @@ async def test_event_hook_trace_category(monkeypatch, hook_type, category, fails
     monkeypatch.setitem(
         context_utils.star_map,
         "test_plugin",
-        SimpleNamespace(name="test_plugin", display_name="Test Plugin"),
+        SimpleNamespace(
+            name="test_plugin",
+            display_name="Test Plugin",
+            plugin_id="author/test_plugin",
+        ),
     )
     extras = {}
     event = MagicMock()

@@ -42,6 +42,7 @@ from astrbot.core.utils.astrbot_path import (
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.plugin_scope import plugin_scope
 from astrbot.core.utils.requirements_utils import (
     MissingRequirementsPlan,
     plan_missing_requirements_install,
@@ -1239,20 +1240,21 @@ class PluginManager:
 
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
-                        if plugin_config and metadata.star_cls_type:
-                            try:
+                        with plugin_scope(plugin_id):
+                            if plugin_config and metadata.star_cls_type:
+                                try:
+                                    metadata.star_cls = metadata.star_cls_type(
+                                        context=self.context,
+                                        config=plugin_config,
+                                    )
+                                except TypeError as _:
+                                    metadata.star_cls = metadata.star_cls_type(
+                                        context=self.context,
+                                    )
+                            elif metadata.star_cls_type:
                                 metadata.star_cls = metadata.star_cls_type(
                                     context=self.context,
-                                    config=plugin_config,
                                 )
-                            except TypeError as _:
-                                metadata.star_cls = metadata.star_cls_type(
-                                    context=self.context,
-                                )
-                        elif metadata.star_cls_type:
-                            metadata.star_cls = metadata.star_cls_type(
-                                context=self.context,
-                            )
 
                         if metadata.star_cls:
                             setattr(metadata.star_cls, "name", p_name)
@@ -1472,7 +1474,8 @@ class PluginManager:
 
                 # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
-                    await metadata.star_cls.initialize()
+                    with plugin_scope(metadata.plugin_id):
+                        await metadata.star_cls.initialize()
 
                 # 触发插件加载事件
                 handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -1488,7 +1491,10 @@ class PluginManager:
                             f"hook(on_plugin_loaded) -> {handler_plugin_name} - {handler.handler_name}",
                             extra={"plugin_name": handler_plugin_name},
                         )
-                        await handler.handler(metadata)
+                        with plugin_scope(
+                            handler_plugin.plugin_id if handler_plugin else None
+                        ):
+                            await handler.handler(metadata)
                     except Exception:
                         logger.error(
                             traceback.format_exc(),
@@ -2024,7 +2030,8 @@ class PluginManager:
 
             future.add_done_callback(_log_del_exception)
         elif "terminate" in star_metadata.star_cls_type.__dict__:
-            await star_metadata.star_cls.terminate()
+            with plugin_scope(star_metadata.plugin_id):
+                await star_metadata.star_cls.terminate()
 
         # 触发插件卸载事件
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -2035,7 +2042,8 @@ class PluginManager:
                 logger.info(
                     f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
-                await handler.handler(star_metadata)
+                with plugin_scope(star_map[handler.handler_module_path].plugin_id):
+                    await handler.handler(star_metadata)
             except Exception:
                 logger.error(traceback.format_exc())
 

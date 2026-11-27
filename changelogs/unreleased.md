@@ -1,5 +1,12 @@
 # Unreleased
 
+### Chat usage statistics / 聊天用量统计
+
+- Chat Provider 按上游请求尝试记录用量。`insert_provider_stat()` 和旧轮次统计表 `provider_stats` 进入弃用期。历史轮次继续计入 Token 总量，备份仍可导入和导出。
+- Chat Providers record usage per upstream attempt. The legacy `insert_provider_stat()` method and `provider_stats` table are deprecated. Historical turn totals continue to contribute to token totals and remain supported in backups.
+- 计划在至少一个稳定版本周期后迁移历史轮次汇总。迁移将保留 Token 总量和备份恢复能力，旧表将在验证跨版本升级与备份恢复后退场。
+- Historical turn aggregates are planned for migration after at least one stable release cycle. The migration will preserve token totals and backup restore support. Retirement of the legacy table follows verification of direct upgrades and backup restores.
+
 - QQ 官方适配器移除「主动消息使用 Markdown」配置项：主动消息默认使用 Markdown，插件仍可通过 `MessageChain.use_markdown(False)` 强制纯文本。
 - QQ Official: remove the `use_markdown` platform option. Proactive messages now default to Markdown; plugins can still force plain text with `MessageChain.use_markdown(False)`.
 
