@@ -719,36 +719,61 @@ async def test_native_web_search_sources_persist_and_emit_refs(chat_service_inst
             "title": "AstrBot Docs",
         }
     ]
+    tool_source = {
+        "index": "abcd.1",
+        "url": "https://example.org/tool",
+        "title": "Tool",
+        "snippet": None,
+    }
     stream = await service.build_chat_stream(
         "alice", {"message": "hello", "session_id": session_id}
     )
     run = next(iter(service.chat_runs.values()))
     try:
+        for kind, data in [
+            ("tool_call", {"id": "call", "name": "web_search_tavily"}),
+            (
+                "tool_call_result",
+                {"id": "call", "result": json.dumps({"results": [tool_source]})},
+            ),
+        ]:
+            await WebChatMessageEvent._send(
+                run.run_id, MessageChain(chain=[Json(data)], type=kind), session_id
+            )
         await WebChatMessageEvent._send(
-            run.run_id,
-            MessageChain().message("Grounded answer"),
-            session_id,
-            streaming=True,
+            run.run_id, MessageChain().message("Answer <ref>abcd.1</ref>"), session_id
         )
         await WebChatMessageEvent._send(
             run.run_id,
             MessageChain(chain=[Json({"sources": sources})], type="web_search_sources"),
             session_id,
-            streaming=False,
         )
         await chat_service.webchat_queue_mgr.put_back_queue(
-            run.run_id,
-            {"type": "complete", "data": "Grounded answer", "streaming": True},
+            run.run_id, {"type": "plain", "chain_type": "agent_stats", "data": "{}"}
         )
+        while True:
+            frame = await asyncio.wait_for(anext(stream), timeout=1)
+            if (
+                frame.startswith("data: ")
+                and _decode_sse_event(frame)["type"] == "agent_stats"
+            ):
+                break
+        expected = {"used": [tool_source, *sources]}
+        snapshot = service.get_active_chat_runs("alice", session_id)[0]
+        assert snapshot["content"]["refs"] == expected
+        assert service.save_bot_message.await_args.args[3] == {"used": [tool_source]}
         await WebChatMessageEvent._send(run.run_id, None, session_id)
         frames = [_decode_sse_event(frame) async for frame in stream]
         await asyncio.wait_for(run.task, timeout=1)
-
-        assert run.message_parts == [{"type": "plain", "text": "Grounded answer"}]
-        assert service.save_bot_message.await_args.args[3] == {"used": sources}
-        saved_events = [frame for frame in frames if frame["type"] == "message_saved"]
-        assert saved_events
-        assert all(event["data"]["refs"] == {"used": sources} for event in saved_events)
+        last_save = service.save_bot_message.await_args
+        assert last_save.kwargs["record"] is service.save_bot_message.return_value
+        assert last_save.args[3] == expected
+        assert (
+            next(frame for frame in frames if frame["type"] == "message_saved")["data"][
+                "refs"
+            ]
+            == expected
+        )
     finally:
         await stream.aclose()
         if run.task and not run.task.done():

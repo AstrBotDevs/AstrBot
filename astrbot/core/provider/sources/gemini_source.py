@@ -655,7 +655,7 @@ class ProviderGoogleGenAI(Provider):
             sources: Accumulated source entries for the current response.
             seen_urls: URLs already recorded in ``sources``.
         """
-        grounding_metadata = getattr(candidate, "grounding_metadata", None)
+        grounding_metadata = candidate.grounding_metadata
         if grounding_metadata and grounding_metadata.grounding_chunks:
             for chunk in grounding_metadata.grounding_chunks:
                 web = chunk.web
@@ -670,7 +670,7 @@ class ProviderGoogleGenAI(Provider):
                     }
                 )
 
-        url_context_metadata = getattr(candidate, "url_context_metadata", None)
+        url_context_metadata = candidate.url_context_metadata
         if url_context_metadata and url_context_metadata.url_metadata:
             for item in url_context_metadata.url_metadata:
                 if (
@@ -1018,19 +1018,16 @@ class ProviderGoogleGenAI(Provider):
             async for chunk in result:
                 if chunk.usage_metadata is not None:
                     request.usage = self._extract_usage(chunk.usage_metadata)
-                # Some endpoints send their final usage in a metadata-only frame.
+                if chunk.candidates:
+                    self._collect_web_search_sources(
+                        chunk.candidates[0], web_search_sources, seen_source_urls
+                    )
                 if finished:
                     continue
-                llm_response = LLMResponse("assistant", is_chunk=True)
-
                 if not chunk.candidates:
                     logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
                     continue
-                self._collect_web_search_sources(
-                    chunk.candidates[0],
-                    web_search_sources,
-                    seen_source_urls,
-                )
+                llm_response = LLMResponse("assistant", is_chunk=True)
                 if not chunk.candidates[0].content:
                     logger.warning(f"Gemini stream chunk has empty content: {chunk}")
                     continue

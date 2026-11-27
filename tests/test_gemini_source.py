@@ -308,6 +308,8 @@ def _gemini_stream_chunk(
         candidates=[
             SimpleNamespace(
                 content=SimpleNamespace(parts=parts),
+                grounding_metadata=None,
+                url_context_metadata=None,
                 finish_reason=finish_reason,
             )
         ],
@@ -537,6 +539,7 @@ async def test_gemini_stream_collects_grounding_sources_across_chunks(monkeypatc
                     role="model",
                     parts=[types.Part.from_text(text="Part 1. ")],
                 ),
+                finish_reason=types.FinishReason.STOP,
                 grounding_metadata=types.GroundingMetadata(
                     grounding_chunks=[
                         types.GroundingChunk(

@@ -516,6 +516,7 @@ class LLMResponse:
             result_chain (MessageChain, optional): 返回的消息链. Defaults to None.
             tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
             tools_call_name (List[str], optional): 工具调用名称. Defaults to None.
+            web_search_sources: Native search citations with a URL, title, and index.
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
 
         """

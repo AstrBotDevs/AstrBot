@@ -324,6 +324,25 @@ class BotMessageAccumulator:
         return parsed if isinstance(parsed, dict) else None
 
 
+def merge_native_search_refs(refs: dict, sources: list[dict]) -> dict:
+    """Append native citations while preserving existing tool citation indices.
+
+    Args:
+        refs: Previously collected references for the turn.
+        sources: Native sources in encounter order.
+
+    Returns:
+        History references with one added entry per new URL.
+    """
+    used = list(refs.get("used", []))
+    seen = {ref["url"] for ref in used}
+    for source in sources:
+        if source["url"] not in seen:
+            seen.add(source["url"])
+            used.append(source)
+    return {"used": used} if used else {}
+
+
 def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
     supported = [
         "web_search_baidu",
@@ -1139,7 +1158,7 @@ class ChatService:
             if not (parts or run.refs or run.agent_stats):
                 return
 
-            extracted_refs: dict[str, Any] = {}
+            extracted_refs = run.refs
             try:
                 extracted_refs = extract_web_search_refs(
                     collect_plain_text_from_message_parts(parts), parts
@@ -1150,15 +1169,9 @@ class ChatService:
                     exc_info=True,
                 )
 
-            if pending_refs:
-                merged = list(extracted_refs.get("used", []))
-                seen_urls = {ref["url"] for ref in merged}
-                merged.extend(
-                    ref for ref in pending_refs["used"] if ref["url"] not in seen_urls
-                )
-                extracted_refs = {"used": merged}
-
-            run.refs = extracted_refs
+            run.refs = merge_native_search_refs(
+                extracted_refs, pending_refs.get("used", [])
+            )
 
             record = await self.save_bot_message(
                 run.session_id,
@@ -1254,7 +1267,7 @@ class ChatService:
                                 seen_urls.add(src["url"])
                                 used.append({**src, "index": str(len(used) + 1)})
                         pending_refs = {"used": used}
-                        run.refs = pending_refs
+                        run.refs = merge_native_search_refs(run.refs, used)
                     continue
 
                 attachment_saved_payload = None
