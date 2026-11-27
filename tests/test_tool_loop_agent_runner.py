@@ -644,7 +644,7 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     if structured is None:
-        assert "工具执行结果" in tool_messages[0].content
+        assert tool_messages[0].content == "工具执行结果"
     else:
         import json
 
