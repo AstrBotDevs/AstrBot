@@ -203,6 +203,10 @@ class NeoFileSystemComponent(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        *,
+        max_results: int | None = None,
+        max_output_bytes: int | None = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
         return await search_files_via_shell(
             self._shell,
@@ -211,6 +215,9 @@ class NeoFileSystemComponent(FileSystemComponent):
             glob=glob,
             after_context=after_context,
             before_context=before_context,
+            max_results=max_results,
+            max_output_bytes=max_output_bytes,
+            timeout=timeout,
         )
 
     async def edit_file(

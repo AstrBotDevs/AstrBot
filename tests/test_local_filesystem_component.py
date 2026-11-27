@@ -65,23 +65,12 @@ def test_local_file_system_component_falls_back_to_gbk_on_windows(
 def test_local_file_system_component_searches_with_rg_glob_and_context(monkeypatch):
     calls = []
 
-    def fake_run(command, **kwargs):
+    def fake_search(command, **kwargs):
         calls.append((command, kwargs))
-        return subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=b"src\\demo.py:4:needle\n",
-            stderr=b"",
-        )
+        return {"success": True, "content": "src\\demo.py:4:needle\n"}
 
-    monkeypatch.setattr(
-        local_booter.shutil,
-        "which",
-        lambda _executable: r"C:\tools\rg.exe",
-    )
-    monkeypatch.setattr(local_booter.sys, "version_info", (3, 14))
-    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
-
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _: r"C:\tools\rg.exe")
+    monkeypatch.setattr(local_booter, "run_search", fake_search)
     result = asyncio.run(
         LocalFileSystemComponent().search_files(
             "needle",
@@ -89,232 +78,232 @@ def test_local_file_system_component_searches_with_rg_glob_and_context(monkeypat
             glob="*.py",
             after_context=2,
             before_context=1,
+            max_results=5,
+            max_output_bytes=4096,
+            timeout=7,
         )
     )
-
     assert result == {"success": True, "content": "src\\demo.py:4:needle\n"}
-    assert calls == [
-        (
-            [
-                r"C:\tools\rg.exe",
-                "--color=never",
-                "-n",
-                "-e",
-                "needle",
-                "-g",
-                "*.py",
-                "-A",
-                "2",
-                "-B",
-                "1",
-                "--",
-                r"C:\workspace",
-            ],
-            {
-                "capture_output": True,
-                "timeout": 30,
-            },
-        )
+    command, options = calls[0]
+    assert command == [
+        r"C:\tools\rg.exe",
+        "--color=never",
+        "-n",
+        "--max-columns",
+        "1000",
+        "--max-columns-preview",
+        "-e",
+        "needle",
+        "-g",
+        "*.py",
+        "-A",
+        "2",
+        "-B",
+        "1",
+        "--",
+        r"C:\workspace",
     ]
+    assert options["max_results"] == 5
+    assert options["max_output_bytes"] == 4096
+    assert options["timeout"] == 7
+    assert options["has_context"] is True
 
 
-def test_local_file_system_component_treats_rg_no_match_as_success(monkeypatch):
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _executable: "/bin/rg")
-    monkeypatch.setattr(local_booter.sys, "version_info", (3, 14))
-    monkeypatch.setattr(
-        local_booter.subprocess,
-        "run",
-        lambda command, **_kwargs: subprocess.CompletedProcess(
-            command,
-            1,
-            stdout=b"",
-            stderr=b"",
-        ),
+@pytest.fixture(params=[False, True], ids=["rg", "fallback"])
+def local_search_backend(request, monkeypatch):
+    if request.param:
+        monkeypatch.setattr(local_booter.shutil, "which", lambda _: None)
+    elif local_booter.shutil.which("rg") is None:
+        pytest.skip("ripgrep executable unavailable")
+    return request.param
+
+
+def test_local_file_system_component_treats_rg_no_match_as_success(
+    tmp_path, local_search_backend
+):
+    target = tmp_path / "text.txt"
+    target.write_text("available\n", encoding="utf-8")
+    result = asyncio.run(
+        LocalFileSystemComponent().search_files("missing", str(target))
     )
-
-    result = asyncio.run(LocalFileSystemComponent().search_files("missing"))
-
     assert result == {"success": True, "content": ""}
 
 
 def test_local_file_system_component_truncates_rg_long_lines_after_search(
-    monkeypatch,
+    tmp_path, local_search_backend
 ):
-    long_line = b"result.py:1:" + (b"x" * 1200) + b"\n"
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _executable: "/bin/rg")
-    monkeypatch.setattr(local_booter.sys, "version_info", (3, 14))
-    monkeypatch.setattr(
-        local_booter.subprocess,
-        "run",
-        lambda command, **_kwargs: subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=long_line,
-            stderr=b"",
-        ),
-    )
-
-    result = asyncio.run(LocalFileSystemComponent().search_files("x"))
-
-    assert result["success"] is True
-    assert result["content"] == long_line.decode()[:1000] + "\n"
+    target = tmp_path / "large.txt"
+    target.write_text("x" * (2 * 1024 * 1024) + "needle\n", encoding="utf-8")
+    result = asyncio.run(LocalFileSystemComponent().search_files("needle", str(target)))
+    assert result == {"success": True, "content": "1:" + "x" * 998 + "\n"}
 
 
 def test_local_file_system_component_requires_rg_on_python_314(monkeypatch):
-    calls = []
-
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _executable: None)
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _: None)
     monkeypatch.setattr(local_booter.sys, "version_info", (3, 14))
-    monkeypatch.setattr(
-        local_booter.subprocess,
-        "run",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
-    )
-
     result = asyncio.run(LocalFileSystemComponent().search_files("needle"))
-
     assert result == {
         "success": False,
         "content": "",
         "error": (
-            "The ripgrep (rg) executable is required for file search on Python 3.14 "
-            "or later because python-ripgrep 0.0.8 is incompatible."
+            "The ripgrep (rg) executable is required for file search "
+            "on Python 3.14 or later because python-ripgrep 0.0.8 is incompatible."
         ),
     }
-    assert calls == []
 
 
-def test_local_file_system_component_preserves_python_ripgrep_before_314(monkeypatch):
+def test_local_file_system_component_prefers_rg_before_314(monkeypatch):
+    monkeypatch.setattr(local_booter.sys, "version_info", (3, 13))
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _: "/bin/rg")
     calls = []
 
-    def fake_search(**kwargs):
-        calls.append(kwargs)
-        return ["技能内容\n"]
+    def fake_search(command, **kwargs):
+        calls.append(command)
+        return {"success": True, "content": "技能内容\n"}
 
-    monkeypatch.setattr(local_booter.sys, "version_info", (3, 13))
-    monkeypatch.setattr(local_booter, "search", fake_search)
-    monkeypatch.setattr(
-        local_booter.subprocess,
-        "run",
-        lambda *_args, **_kwargs: pytest.fail("subprocess should not be used"),
-    )
-
-    result = asyncio.run(
-        LocalFileSystemComponent().search_files(
-            "skill",
-            path="skills",
-            glob="*.md",
-            after_context=3,
-            before_context=2,
-        )
-    )
-
+    monkeypatch.setattr(local_booter, "run_search", fake_search)
+    result = asyncio.run(LocalFileSystemComponent().search_files("skill"))
     assert result == {"success": True, "content": "技能内容\n"}
-    assert calls == [
-        {
-            "patterns": ["skill"],
-            "paths": ["skills"],
-            "globs": ["*.md"],
-            "after_context": 3,
-            "before_context": 2,
-            "line_number": True,
-        }
-    ]
+    assert calls[0][0] == "/bin/rg"
 
 
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14),
-    reason="python-ripgrep is only used before Python 3.14",
-)
+@pytest.mark.parametrize("fallback", [False, True])
+@pytest.mark.parametrize("limited", [False, True])
 def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox(
-    monkeypatch,
-    tmp_path,
+    monkeypatch, tmp_path, fallback, limited
 ):
+    import json
+
     sandbox_calls = []
 
     class FakeSandbox:
-        def run(self, argv, spec, *, env=None, timeout=None, **kwargs):
-            sandbox_calls.append(
-                {
-                    "argv": argv,
-                    "workspace": spec.workspace,
-                    "env": env,
-                    "workspace_writable": spec.workspace_writable,
-                    "timeout": timeout,
-                    "kwargs": kwargs,
-                }
-            )
+        def run(self, argv, spec, **kwargs):
+            sandbox_calls.append((argv, spec, kwargs))
             return process_sandbox.SandboxRunResult(
                 returncode=0,
-                stdout=b"target.txt:1:needle\n",
+                stdout=b"target.txt:1:needle\npartial"
+                if limited
+                else b"target.txt:1:needle\n",
                 stderr=b"",
+                stdout_limited=limited,
             )
 
-    monkeypatch.setattr(local_booter.sys, "version_info", (3, 13))
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _name: "/usr/bin/rg")
     monkeypatch.setattr(
-        local_booter,
-        "create_process_sandbox",
-        lambda: FakeSandbox(),
+        local_booter.shutil, "which", lambda _: None if fallback else "/usr/bin/rg"
     )
-    monkeypatch.setattr(
-        local_booter,
-        "search",
-        lambda **_kwargs: pytest.fail(
-            "Restricted search must not use host python-ripgrep."
-        ),
-    )
-
+    monkeypatch.setattr(local_booter, "create_process_sandbox", lambda: FakeSandbox())
     result = asyncio.run(
         LocalFileSystemComponent().search_files(
             "needle",
             path=str(tmp_path / "target.txt"),
             sandboxed=True,
             sandbox_root=str(tmp_path),
+            max_results=10,
+            max_output_bytes=4096,
+            timeout=5,
         )
     )
-
-    site_packages = str(
-        Path(local_booter.python_ripgrep.__file__).resolve().parent.parent
-    )
-    expected_search_command = [
-        local_booter.sys.executable,
-        "-I",
-        "-S",
-        "-c",
-        local_booter._SANDBOXED_PYTHON_RIPGREP,
-        site_packages,
-        "needle",
-        str(tmp_path / "target.txt"),
-        "",
-        "",
-        "",
-    ]
-    assert result == {"success": True, "content": "target.txt:1:needle\n"}
-    assert sandbox_calls == [
-        {
-            "argv": expected_search_command,
-            "workspace": tmp_path,
-            "env": None,
-            "workspace_writable": False,
-            "timeout": 30,
-            "kwargs": {},
-        }
-    ]
+    assert result["success"] is True
+    assert result["content"] == "target.txt:1:needle\n"
+    assert result.get("truncated", False) is limited
+    argv, spec, options = sandbox_calls[0]
+    assert argv[:4] == [sys.executable, "-I", "-S", "-c"]
+    arguments = json.loads(argv[-1])
+    assert arguments["max_results"] == 10
+    assert arguments["max_output_bytes"] == 4096
+    assert arguments["timeout"] == 5
+    assert spec.workspace == tmp_path
+    assert spec.workspace_writable is False
+    assert options == {"timeout": 5, "output_limit": 4096}
 
 
 def test_local_file_system_component_handles_search_timeout(monkeypatch):
-    def fake_run(command, **kwargs):
-        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _: "/bin/rg")
 
-    monkeypatch.setattr(local_booter.shutil, "which", lambda _executable: "/bin/rg")
-    monkeypatch.setattr(local_booter.sys, "version_info", (3, 14))
-    monkeypatch.setattr(local_booter.subprocess, "run", fake_run)
+    def fake_search(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
 
+    monkeypatch.setattr(local_booter, "run_search", fake_search)
     result = asyncio.run(LocalFileSystemComponent().search_files("needle"))
-
     assert result == {
         "success": False,
         "content": "",
         "error": "File search timed out after 30 seconds.",
     }
+
+
+def test_local_search_glob_context_groups_and_bounds(tmp_path, local_search_backend):
+    (tmp_path / "target.py").write_text(
+        "before\nneedle\nafter\nspace\nspace\nbefore2\nneedle\nafter2\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "excluded.txt").write_text("needle\n", encoding="utf-8")
+    result = asyncio.run(
+        LocalFileSystemComponent().search_files(
+            "needle",
+            str(tmp_path),
+            glob="*.py",
+            after_context=1,
+            before_context=1,
+            max_results=1,
+        )
+    )
+    assert result["success"] is True
+    assert result["truncation_reason"] == "max_results"
+    assert len(result["content"].splitlines()) == 3
+    assert "2:needle" in result["content"]
+    assert "3-after" in result["content"]
+
+
+def test_local_search_byte_limit_and_invalid_regex(tmp_path, local_search_backend):
+    target = tmp_path / "text.txt"
+    target.write_text("needle\n" * 500, encoding="utf-8")
+    result = asyncio.run(
+        LocalFileSystemComponent().search_files(".", str(target), max_output_bytes=128)
+    )
+    assert result["success"] is True
+    assert result["truncation_reason"] == "max_output_bytes"
+    assert len(result["content"].encode()) <= 128
+    result = asyncio.run(LocalFileSystemComponent().search_files("[", str(target)))
+    assert result["success"] is False
+    assert result["error"]
+
+
+def test_local_fallback_hung_regex_is_killed(monkeypatch, tmp_path):
+    monkeypatch.setattr(local_booter.shutil, "which", lambda _: None)
+    target = tmp_path / "text.txt"
+    target.write_text("a" * 500 + "!", encoding="utf-8")
+    result = asyncio.run(
+        LocalFileSystemComponent().search_files("(a+)+$", str(target), timeout=0.2)
+    )
+    assert result == {
+        "success": False,
+        "content": "",
+        "error": "File search timed out after 0.2 seconds.",
+    }
+
+
+def test_local_search_broad_pattern_has_bounded_python_memory(
+    tmp_path, local_search_backend
+):
+    import tracemalloc
+
+    workspace = tmp_path / "node_modules"
+    workspace.mkdir()
+    for index in range(40):
+        (workspace / f"{index:03}.js").write_text("payload\n" * 200, encoding="utf-8")
+    (workspace / "bundle.map").write_text("x" * (2 * 1024 * 1024), encoding="utf-8")
+    tracemalloc.start()
+    try:
+        result = asyncio.run(
+            LocalFileSystemComponent().search_files(
+                ".", str(workspace), max_results=10, max_output_bytes=1024 * 1024
+            )
+        )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert result["success"]
+    assert result["truncation_reason"] == "max_results"
+    assert len(result["content"].splitlines()) == 10
+    assert peak < 10 * 1024 * 1024

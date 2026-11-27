@@ -590,12 +590,21 @@ async def test_isolation_failure_does_not_expand_workspace_file_access(
 ):
     """Keep both roles inside their saved file scope after execution is disabled."""
     _setup_local_fs_tools(monkeypatch, tmp_path)
-    monkeypatch.setattr(computer_util, "get_process_sandbox_status", lambda: {"status": status})
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": status}
+    )
     outside = tmp_path / "outside.txt"
     outside.write_text("original secret", encoding="utf-8")
-    context = _make_context(role=role, local_permissions={role: {
-        "filesystem_scope": "workspace", "allow_execution": True, "allow_network": True,
-    }})
+    context = _make_context(
+        role=role,
+        local_permissions={
+            role: {
+                "filesystem_scope": "workspace",
+                "allow_execution": True,
+                "allow_network": True,
+            }
+        },
+    )
 
     result = await tool_type().call(context, path=str(outside), **arguments)
 
@@ -629,6 +638,7 @@ async def test_restricted_file_access_preserves_files_when_native_open_fails(
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     existing_file = workspace / "existing.txt"
     existing_file.write_text("original secret\n", encoding="utf-8")
+
     def unavailable_open(*args, **kwargs):
         raise PermissionError("Native workspace open denied")
 
@@ -637,7 +647,9 @@ async def test_restricted_file_access_preserves_files_when_native_open_fails(
     result = await tool_type().call(
         _make_context(
             role=role,
-            local_permissions={role: {"filesystem_scope": "workspace", "allow_execution": False}},
+            local_permissions={
+                role: {"filesystem_scope": "workspace", "allow_execution": False}
+            },
         ),
         **arguments,
     )
@@ -780,14 +792,18 @@ async def test_restricted_local_edit_reuses_first_opened_file(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["target.txt", None])
-@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize(
+    "status", ["detected", "missing", "unavailable", "unsupported"]
+)
 async def test_restricted_local_grep_uses_isolation_only_when_available(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     path,
     status,
 ):
-    monkeypatch.setattr(computer_util, "get_process_sandbox_status", lambda: {"status": status})
+    monkeypatch.setattr(
+        computer_util, "get_process_sandbox_status", lambda: {"status": status}
+    )
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     (workspace / "target.txt").write_text("needle\n", encoding="utf-8")
     missing_root = tmp_path / "missing-temp"
@@ -1085,6 +1101,250 @@ async def test_grep_tool_applies_result_limit(
     assert "match-2" in result
     assert "match-3" not in result
     assert "[Truncated to first 2 result groups.]" in result
+
+
+@pytest.mark.asyncio
+async def test_grep_tool_rejects_invalid_limit_before_getting_booter(monkeypatch):
+    get_booter = AsyncMock()
+    monkeypatch.setattr(fs_tools, "get_booter", get_booter)
+
+    result = await fs_tools.GrepTool().call(
+        _make_sandbox_context(), pattern=".", result_limit=0
+    )
+
+    assert "`result_limit` must be greater than or equal to 1" in result
+    get_booter.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_context", [False, True])
+async def test_grep_tool_pushes_bounds_and_preserves_truncated_groups(
+    monkeypatch, has_context
+):
+    content = (
+        "1:needle\n2-after\n--\n8:needle\n9-after\n"
+        if has_context
+        else "1:needle\n2:needle\n"
+    )
+    search = AsyncMock(
+        return_value={
+            "success": True,
+            "content": content,
+            "truncated": True,
+            "truncation_reason": "max_results",
+        }
+    )
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search))
+        ),
+    )
+
+    result = await fs_tools.GrepTool().call(
+        _make_sandbox_context(),
+        pattern="needle",
+        result_limit=2,
+        **({"-A": 1} if has_context else {}),
+    )
+
+    assert result.startswith(content.rstrip())
+    assert result.endswith("[Truncated to first 2 result groups.]")
+    assert search.await_args.kwargs["max_results"] == 2
+    assert (
+        search.await_args.kwargs["max_output_bytes"] == fs_tools._MAX_GREP_OUTPUT_BYTES
+    )
+    assert search.await_args.kwargs["timeout"] == 30
+
+
+@pytest.mark.asyncio
+async def test_grep_tool_supports_legacy_booter_without_retry(monkeypatch):
+    calls = []
+
+    async def search_files(
+        pattern, path=None, glob=None, after_context=None, before_context=None
+    ):
+        calls.append(path)
+        return {"success": True, "content": "1:needle\n2:needle\n3:needle\n"}
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search_files))
+        ),
+    )
+
+    result = await fs_tools.GrepTool().call(
+        _make_sandbox_context(), pattern="needle", result_limit=2
+    )
+
+    assert calls == ["."]
+    assert "2:needle" in result
+    assert "3:needle" not in result
+    assert result.endswith("[Truncated to first 2 result groups.]")
+
+
+@pytest.mark.asyncio
+async def test_grep_tool_does_not_retry_internal_type_error(monkeypatch):
+    search = AsyncMock(side_effect=TypeError("backend failed"))
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search))
+        ),
+    )
+
+    result = await fs_tools.GrepTool().call(_make_sandbox_context(), pattern="needle")
+
+    assert "backend failed" in result
+    assert search.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_context", [False, True])
+async def test_grep_tool_stops_after_first_full_search_path(
+    monkeypatch, tmp_path, has_context
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    content = "1:needle\n2-after\n" if has_context else "1:needle\n"
+    search = AsyncMock(return_value={"success": True, "content": content})
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search))
+        ),
+    )
+    monkeypatch.setattr(
+        fs_tools.GrepTool,
+        "_normalize_search_paths",
+        lambda *args, **kwargs: [str(workspace), str(workspace / "unsearched")],
+    )
+
+    result = await fs_tools.GrepTool().call(
+        _make_context(),
+        pattern="needle",
+        result_limit=1,
+        **({"-A": 1} if has_context else {}),
+    )
+
+    assert search.await_count == 1
+    assert result.startswith(content.rstrip())
+    assert result.endswith("[Truncated to first 1 result groups.]")
+
+
+@pytest.mark.asyncio
+async def test_grep_tool_reduces_group_and_byte_budgets_across_paths(
+    monkeypatch, tmp_path
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    search = AsyncMock(
+        side_effect=[
+            {"success": True, "content": "1:匹配\n2-after\n"},
+            {"success": True, "content": "5:needle\n6-after\n"},
+        ]
+    )
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search))
+        ),
+    )
+    monkeypatch.setattr(
+        fs_tools.GrepTool,
+        "_normalize_search_paths",
+        lambda *args, **kwargs: [str(workspace), str(workspace / "other")],
+    )
+
+    result = await fs_tools.GrepTool().call(
+        _make_context(), pattern="needle", result_limit=3, **{"-A": 1}
+    )
+
+    assert result == "1:匹配\n2-after\n--\n5:needle\n6-after\n"
+    assert search.await_args_list[1].kwargs["max_results"] == 2
+    assert search.await_args_list[1].kwargs["max_output_bytes"] == (
+        fs_tools._MAX_GREP_OUTPUT_BYTES - len("1:匹配\n2-after\n--\n".encode())
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_context", [False, True])
+async def test_grep_tool_bounds_legacy_utf8_output_without_partial_groups(
+    monkeypatch, has_context
+):
+    monkeypatch.setattr(fs_tools, "_MAX_GREP_OUTPUT_BYTES", 36)
+    content = (
+        "1:匹配\n2-after\n--\n3:匹配\n4-after\n"
+        if has_context
+        else "1:匹配\n2:匹配\n3:匹配\n4:匹配\n5:匹配\n"
+    )
+    search = AsyncMock(return_value={"success": True, "content": content})
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search))
+        ),
+    )
+
+    result = await fs_tools.GrepTool().call(
+        _make_sandbox_context(),
+        pattern=".",
+        result_limit=100000,
+        **({"-A": 1} if has_context else {}),
+    )
+
+    body, notice = result.split("\n\n")
+    assert len(body.encode("utf-8")) <= 36
+    assert "�" not in body
+    assert notice == "[Truncated to 36 bytes of search output.]"
+    if has_context:
+        assert body == "1:匹配\n2-after"
+
+
+@pytest.mark.asyncio
+async def test_grep_tool_reports_backend_byte_limit_without_no_match_message(
+    monkeypatch,
+):
+    search = AsyncMock(
+        return_value={
+            "success": True,
+            "content": "",
+            "truncated": True,
+            "truncation_reason": "max_output_bytes",
+        }
+    )
+    monkeypatch.setattr(
+        fs_tools,
+        "get_booter",
+        AsyncMock(
+            return_value=SimpleNamespace(fs=SimpleNamespace(search_files=search))
+        ),
+    )
+
+    result = await fs_tools.GrepTool().call(_make_sandbox_context(), pattern=".")
+
+    assert (
+        result
+        == f"[Truncated to {fs_tools._MAX_GREP_OUTPUT_BYTES} bytes of search output.]"
+    )
+
+
+def test_grep_group_limit_preserves_context_separators():
+    result = fs_tools.GrepTool()._apply_result_limit(
+        "1:one\n2-after\n--\n8:two\n9-after\n--\n15:three\n16-after\n",
+        result_limit=2,
+        has_context=True,
+    )
+
+    assert (
+        result
+        == "1:one\n2-after\n--\n8:two\n9-after\n\n[Truncated to first 2 result groups.]"
+    )
 
 
 @pytest.mark.asyncio

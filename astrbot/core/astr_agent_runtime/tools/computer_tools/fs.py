@@ -31,6 +31,8 @@ Local path resolution rule:
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
+import inspect
+import io
 import os
 import stat
 import uuid
@@ -72,6 +74,7 @@ from .util import (
 )
 
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
+_MAX_GREP_OUTPUT_BYTES = 1024 * 1024
 
 
 def _remote_basename(path: str) -> str:
@@ -741,21 +744,28 @@ class GrepTool(FunctionTool):
         resolved_before = context if before_context is None else before_context
         return resolved_after, resolved_before
 
-    def _split_output_groups(self, output: str, *, has_context: bool) -> list[str]:
+    def _split_output_groups(
+        self, output: str, *, has_context: bool, max_groups: int | None = None
+    ) -> list[str]:
         if not output.strip():
             return []
-
-        if not has_context:
-            return [f"{line}\n" for line in output.splitlines() if line.strip()]
 
         groups: list[str] = []
         current: list[str] = []
 
-        for line in output.splitlines(keepends=True):
+        for line in io.StringIO(output):
+            if not has_context:
+                if line.strip():
+                    groups.append(line.rstrip("\r\n") + "\n")
+                    if max_groups is not None and len(groups) >= max_groups:
+                        break
+                continue
             if line.strip() == "--":
                 if current:
                     groups.append("".join(current))
                     current = []
+                    if max_groups is not None and len(groups) >= max_groups:
+                        break
                 continue
             if not line.strip():
                 continue
@@ -775,11 +785,14 @@ class GrepTool(FunctionTool):
         if result_limit < 1:
             raise ValueError("`result_limit` must be greater than or equal to 1.")
 
-        groups = self._split_output_groups(output, has_context=has_context)
+        groups = self._split_output_groups(
+            output, has_context=has_context, max_groups=result_limit + 1
+        )
         if len(groups) <= result_limit:
             return output if output.strip() else "No matches found."
 
-        limited_output = "".join(groups[:result_limit]).rstrip()
+        separator = "--\n" if has_context else ""
+        limited_output = separator.join(groups[:result_limit]).rstrip()
         return f"{limited_output}\n\n[Truncated to first {result_limit} result groups.]"
 
     def _normalize_search_paths(
@@ -856,6 +869,8 @@ class GrepTool(FunctionTool):
         normalized_pattern = pattern.strip()
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
+        if result_limit < 1:
+            return "Error searching files: `result_limit` must be greater than or equal to 1."
 
         permission_error = check_local_file_permission(context)
         if permission_error:
@@ -888,7 +903,57 @@ class GrepTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
             contents: list[str] = []
-            for search_path in search_paths:
+            collected_groups = 0
+            collected_bytes = 0
+            truncated = False
+            byte_truncated = False
+            search_files = sb.fs.search_files
+            # Older third-party booters may not yet accept the optional bounds.
+            # Inspect once, rather than retrying a search after an internal TypeError.
+            try:
+                search_parameters = inspect.signature(search_files).parameters
+            except (TypeError, ValueError):
+                search_parameters = {}
+            accepts_kwargs = any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in search_parameters.values()
+            )
+            for path_index, search_path in enumerate(search_paths):
+                separator = ""
+                if contents:
+                    separator = ("" if contents[-1].endswith("\n") else "\n") + (
+                        "--\n" if has_context else ""
+                    )
+                remaining_bytes = (
+                    _MAX_GREP_OUTPUT_BYTES - collected_bytes - len(separator)
+                )
+                if remaining_bytes < 1:
+                    truncated = byte_truncated = True
+                    break
+                search_kwargs: dict[str, Any] = {
+                    "pattern": normalized_pattern,
+                    "path": search_path,
+                    "glob": glob,
+                    "after_context": after_context,
+                    "before_context": before_context,
+                }
+                bounds = {
+                    "max_results": result_limit - collected_groups,
+                    "max_output_bytes": remaining_bytes,
+                    "timeout": 30,
+                }
+                search_kwargs.update(
+                    {
+                        key: value
+                        for key, value in bounds.items()
+                        if accepts_kwargs
+                        or (
+                            key in search_parameters
+                            and search_parameters[key].kind
+                            != inspect.Parameter.POSITIONAL_ONLY
+                        )
+                    }
+                )
                 sandboxed = (
                     restricted
                     and computer_util.get_process_sandbox_status()["status"]
@@ -912,23 +977,8 @@ class GrepTool(FunctionTool):
                     sandbox_root = str(
                         max(matching_roots, key=lambda root: len(root.parts))
                     )
-                    result = await cast(Any, sb.fs).search_files(
-                        pattern=normalized_pattern,
-                        path=search_path,
-                        glob=glob,
-                        after_context=after_context,
-                        before_context=before_context,
-                        sandboxed=True,
-                        sandbox_root=sandbox_root,
-                    )
-                else:
-                    result = await sb.fs.search_files(
-                        pattern=normalized_pattern,
-                        path=search_path,
-                        glob=glob,
-                        after_context=after_context,
-                        before_context=before_context,
-                    )
+                    search_kwargs.update(sandboxed=True, sandbox_root=sandbox_root)
+                result = await search_files(**search_kwargs)
                 if not result.get("success", False):
                     error_detail = str(result.get("error", "") or "").strip()
                     logger.error("GrepTool search failed: %s", error_detail)
@@ -937,11 +987,58 @@ class GrepTool(FunctionTool):
                         f"{error_detail or 'unknown filesystem search error'}"
                     )
                 content = str(result.get("content", "") or "")
+                # Bound legacy or non-conforming backends before splitting or
+                # encoding their whole output. At most four bytes per character
+                # are allocated here, regardless of the original output size.
+                bounded_bytes = content[:remaining_bytes].encode("utf-8")
+                exceeds_bytes = (
+                    len(content) > remaining_bytes
+                    or len(bounded_bytes) > remaining_bytes
+                )
+                if exceeds_bytes:
+                    content = bounded_bytes[:remaining_bytes].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    boundary = content.rfind("\n--\n" if has_context else "\n")
+                    content = content[: boundary + 1] if boundary >= 0 else ""
+                    truncated = byte_truncated = True
+                remaining_groups = result_limit - collected_groups
+                groups = self._split_output_groups(
+                    content,
+                    has_context=has_context,
+                    max_groups=remaining_groups + 1,
+                )
+                if len(groups) > remaining_groups:
+                    content = ("--\n" if has_context else "").join(
+                        groups[:remaining_groups]
+                    )
+                    groups = groups[:remaining_groups]
+                    truncated = True
                 if content:
-                    contents.append(content)
+                    contents.append(f"{separator}{content}")
+                    collected_bytes += len(separator) + len(content.encode("utf-8"))
+                    collected_groups += len(groups)
+                if result.get("truncated"):
+                    truncated = True
+                    byte_truncated |= (
+                        result.get("truncation_reason") == "max_output_bytes"
+                    )
+                if truncated:
+                    break
+                if collected_groups >= result_limit:
+                    truncated = path_index < len(search_paths) - 1
+                    break
 
+            output = "".join(contents)
+            if truncated:
+                notice = (
+                    f"[Truncated to {_MAX_GREP_OUTPUT_BYTES} bytes of search output.]"
+                    if byte_truncated
+                    else f"[Truncated to first {result_limit} result groups.]"
+                )
+                return f"{output.rstrip()}\n\n{notice}".lstrip("\n")
             return self._apply_result_limit(
-                "".join(contents),
+                output,
                 result_limit=result_limit,
                 has_context=has_context,
             )

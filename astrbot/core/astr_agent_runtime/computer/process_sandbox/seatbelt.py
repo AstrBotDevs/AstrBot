@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -98,13 +99,14 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
         if spec.allow_network:
             profile = profile.replace("(deny network*)", "(allow network*)")
 
+        executable_read_paths = set(self._executable_read_paths(executable_path))
         root_definitions: list[str] = []
         if spec.filesystem_scope == "workspace":
             writable_roots = {root.resolve() for root in spec.writable_roots}
             readable_roots = {
                 root.resolve()
                 for root in (*spec.readable_roots, *spec.writable_roots)
-                if root.is_dir()
+                if root.exists()
             }
             for index, root in enumerate(sorted(readable_roots)):
                 parameter = f"ALLOWED_ROOT_{index}"
@@ -112,7 +114,14 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
                 operations = "file-read* file-map-executable"
                 if root in writable_roots:
                     operations += " file-write*"
-                profile += f'\n(allow {operations} (subpath (param "{parameter}")))\n'
+                path_filter = "subpath" if root.is_dir() else "literal"
+                profile += (
+                    f'\n(allow {operations} ({path_filter} (param "{parameter}")))\n'
+                )
+                if root.is_file() and os.access(root, os.X_OK):
+                    # A bounded search wrapper launches rg as a child. Allow its
+                    # loader dependencies without exposing its install directory.
+                    executable_read_paths.update(self._executable_read_paths(root))
             # Explicit denial also protects Python inside an otherwise writable root.
             profile += (
                 '\n(deny file-write* (subpath (param "PYTHON_PREFIX")) '
@@ -121,7 +130,7 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
 
         executable_definitions: list[str] = []
         executable_rules: list[str] = []
-        for index, read_path in enumerate(self._executable_read_paths(executable_path)):
+        for index, read_path in enumerate(sorted(executable_read_paths, key=str)):
             parameter = f"EXECUTABLE_{index}"
             executable_definitions.extend(("-D", f"{parameter}={read_path}"))
             executable_rules.append(f'(literal (param "{parameter}"))')
@@ -170,7 +179,10 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             resolved_executable.is_relative_to(root)
             for root in (
                 Path("/bin"),
-                Path("/usr"),
+                Path("/usr/bin"),
+                Path("/usr/lib"),
+                Path("/usr/libexec"),
+                Path("/System"),
                 Path(sys.prefix).resolve(),
                 Path(sys.base_prefix).resolve(),
             )
@@ -207,7 +219,7 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
                 resolved_dependency = dependency.resolve()
                 read_paths.update((dependency, resolved_dependency))
                 if not (
-                    resolved_dependency.is_relative_to("/usr")
+                    resolved_dependency.is_relative_to("/usr/lib")
                     or resolved_dependency.is_relative_to("/System")
                 ):
                     pending.append(resolved_dependency)

@@ -29,8 +29,26 @@ class FileSystemComponent(Protocol):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        *,
+        max_results: int | None = None,
+        max_output_bytes: int | None = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
-        """Search file contents"""
+        """Search file contents with optional execution and output bounds.
+
+        Args:
+            pattern: Regular expression to search for.
+            path: File or directory to search.
+            glob: Optional file glob filter.
+            after_context: Number of trailing context lines.
+            before_context: Number of leading context lines.
+            max_results: Maximum output groups, separated by ``--`` with context.
+            max_output_bytes: Maximum UTF-8 bytes in returned content.
+            timeout: Maximum search duration in seconds.
+
+        Returns:
+            Search status and content, with ``truncated`` when a bound is reached.
+        """
         ...
 
     async def edit_file(

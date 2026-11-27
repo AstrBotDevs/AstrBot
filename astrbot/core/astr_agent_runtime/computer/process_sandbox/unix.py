@@ -137,16 +137,25 @@ class UnixProcessSandbox(ProcessSandbox):
             tempfile.TemporaryFile() as stdout_file,
             tempfile.TemporaryFile() as stderr_file,
         ):
+            process = subprocess.Popen(
+                self.build_command(argv, spec, env=env),
+                cwd=spec.workspace.resolve(),
+                env={"PATH": os.defpath},
+                stdout=subprocess.DEVNULL if discard_stdout else stdout_file,
+                stderr=stderr_file,
+                start_new_session=True,
+            )
             try:
-                result = subprocess.run(
-                    self.build_command(argv, spec, env=env),
-                    cwd=spec.workspace.resolve(),
-                    env={"PATH": os.defpath},
-                    timeout=timeout,
-                    stdout=subprocess.DEVNULL if discard_stdout else stdout_file,
-                    stderr=stderr_file,
-                )
+                process.wait(timeout=timeout)
             except subprocess.TimeoutExpired as exc:
+                # The command may launch children (for example a grep reader).
+                # This session belongs to this invocation, so stop its entire
+                # process group before closing its capture files.
+                try:
+                    os.killpg(process.pid, signal_module.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
                 raise SandboxTimeoutError(
                     f"Sandbox command timed out after {timeout} seconds."
                 ) from exc
@@ -160,7 +169,7 @@ class UnixProcessSandbox(ProcessSandbox):
             stderr_file.seek(0)
             stderr = stderr_file.read(read_size)
         return SandboxRunResult(
-            returncode=result.returncode,
+            returncode=process.returncode,
             stdout=stdout[:output_limit] if output_limit is not None else stdout,
             stderr=stderr[:output_limit] if output_limit is not None else stderr,
             stdout_limited=output_limit is not None and len(stdout) > output_limit,

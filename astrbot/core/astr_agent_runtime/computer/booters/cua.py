@@ -498,6 +498,10 @@ class CuaFileSystemComponent(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        *,
+        max_results: int | None = None,
+        max_output_bytes: int | None = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
         return await self._fallback.search_files(
             pattern=pattern,
@@ -505,6 +509,9 @@ class CuaFileSystemComponent(FileSystemComponent):
             glob=glob,
             after_context=after_context,
             before_context=before_context,
+            max_results=max_results,
+            max_output_bytes=max_output_bytes,
+            timeout=timeout,
         )
 
     async def edit_file(
@@ -607,6 +614,10 @@ class _PosixShellFileSystem(FileSystemComponent):
         glob: str | None = None,
         after_context: int | None = None,
         before_context: int | None = None,
+        *,
+        max_results: int | None = None,
+        max_output_bytes: int | None = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
         search_path = path or "."
         if error := self._ensure_posix(search_path):
@@ -618,6 +629,9 @@ class _PosixShellFileSystem(FileSystemComponent):
             glob=glob,
             after_context=after_context,
             before_context=before_context,
+            max_results=max_results,
+            max_output_bytes=max_output_bytes,
+            timeout=timeout,
         )
 
 

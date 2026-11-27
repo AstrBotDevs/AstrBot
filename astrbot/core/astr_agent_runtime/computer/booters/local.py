@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import locale
 import os
 import shutil
@@ -17,10 +18,6 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO, cast
-
-if sys.version_info < (3, 14):
-    import python_ripgrep
-    from python_ripgrep import search
 
 from astrbot.api import logger
 from astrbot.core.astr_agent_runtime.computer.file_read_utils import (
@@ -41,8 +38,8 @@ from astrbot.core.utils.astrbot_path import (
 from astrbot.core.utils.runtime_env import resolve_windows_shell
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+from ._search_stream import run_search
 from .base import ComputerBooter
-from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -60,24 +57,6 @@ _BLOCKED_COMMAND_PATTERNS = [
     " killall ",
 ]
 _LOCAL_SANDBOX_MAX_OUTPUT_BYTES = 10 * 1024 * 1024
-_SANDBOXED_PYTHON_RIPGREP = """
-import sys
-
-sys.path.insert(0, sys.argv[1])
-from python_ripgrep import search
-
-after_context = int(sys.argv[5]) if sys.argv[5] else None
-before_context = int(sys.argv[6]) if sys.argv[6] else None
-results = search(
-    patterns=[sys.argv[2]],
-    paths=[sys.argv[3]] if sys.argv[3] else None,
-    globs=[sys.argv[4]] if sys.argv[4] else None,
-    after_context=after_context,
-    before_context=before_context,
-    line_number=True,
-)
-sys.stdout.write("".join(results))
-"""
 
 
 def _is_safe_command(command: str) -> bool:
@@ -1171,56 +1150,78 @@ class LocalFileSystemComponent(FileSystemComponent):
         before_context: int | None = None,
         sandboxed: bool = False,
         sandbox_root: str | None = None,
+        *,
+        max_results: int | None = None,
+        max_output_bytes: int | None = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
+        """Search with bounded output in a killable child process.
+
+        Args:
+            pattern: Regular expression to search for.
+            path: Search file or directory, defaulting to the working directory.
+            glob: Optional file filter.
+            after_context: Number of trailing context lines.
+            before_context: Number of leading context lines.
+            sandboxed: Whether to enforce read-only process isolation.
+            sandbox_root: Workspace exposed to the restricted process.
+            max_results: Maximum global result groups, or no group limit.
+            max_output_bytes: Output budget, capped at the Local sandbox ceiling.
+            timeout: Maximum wall-clock search time in seconds.
+
+        Returns:
+            Search content or an error, with truncation metadata when limited.
+        """
+
         def _run() -> dict[str, Any]:
-            if not sandboxed and sys.version_info < (3, 14):
-                results = search(
-                    patterns=[pattern],
-                    paths=[path] if path else None,
-                    globs=[glob] if glob else None,
-                    after_context=after_context,
-                    before_context=before_context,
-                    line_number=True,
-                )
+            byte_limit = min(
+                max_output_bytes if max_output_bytes is not None else 1024 * 1024,
+                _LOCAL_SANDBOX_MAX_OUTPUT_BYTES,
+            )
+            if (
+                byte_limit < 1
+                or timeout <= 0
+                or (max_results is not None and max_results < 1)
+                or (after_context or 0) < 0
+                or (before_context or 0) < 0
+            ):
                 return {
-                    "success": True,
-                    "content": _truncate_long_lines("".join(results)),
+                    "success": False,
+                    "content": "",
+                    "error": "Search limits must be positive and context must be nonnegative.",
                 }
-
-            if sandboxed and sys.version_info < (3, 14):
-                site_packages = str(
-                    Path(python_ripgrep.__file__).resolve().parent.parent
-                )
-                command = [
-                    sys.executable,
-                    "-I",
-                    "-S",
-                    "-c",
-                    _SANDBOXED_PYTHON_RIPGREP,
-                    site_packages,
-                    pattern,
-                    path or "",
-                    glob or "",
-                    "" if after_context is None else str(after_context),
-                    "" if before_context is None else str(before_context),
-                ]
-            else:
-                rg_path = shutil.which("rg")
-                if not rg_path:
-                    return {
-                        "success": False,
-                        "content": "",
-                        "error": (
-                            "The ripgrep (rg) executable is required for file search "
-                            "on Python 3.14 or later because python-ripgrep 0.0.8 is "
-                            "incompatible."
-                        ),
-                    }
-
+            if sandboxed and not sandbox_root:
+                return {
+                    "success": False,
+                    "content": "",
+                    "error": "A sandbox root is required for restricted Local search.",
+                }
+            rg_path = shutil.which("rg")
+            fallback = not rg_path
+            if fallback and sys.version_info >= (3, 14):
+                return {
+                    "success": False,
+                    "content": "",
+                    "error": (
+                        "The ripgrep (rg) executable is required for file search "
+                        "on Python 3.14 or later because python-ripgrep 0.0.8 is "
+                        "incompatible."
+                    ),
+                }
+            has_context = (after_context or 0) > 0 or (before_context or 0) > 0
+            options: dict[str, Any] = {
+                "max_results": max_results,
+                "max_output_bytes": byte_limit,
+                "timeout": timeout,
+            }
+            if rg_path:
                 command = [
                     str(Path(rg_path).resolve()) if sandboxed else rg_path,
                     "--color=never",
                     "-n",
+                    "--max-columns",
+                    "1000",
+                    "--max-columns-preview",
                     "-e",
                     pattern,
                 ]
@@ -1231,66 +1232,99 @@ class LocalFileSystemComponent(FileSystemComponent):
                 if before_context is not None:
                     command.extend(["-B", str(before_context)])
                 command.extend(["--", path or "."])
-            sandbox_workspace: Path | None = None
-            if sandboxed:
-                if not sandbox_root:
-                    return {
-                        "success": False,
-                        "content": "",
-                        "error": "A sandbox root is required for restricted Local search.",
-                    }
-                sandbox_workspace = Path(sandbox_root)
-
+                options.update(command=command, has_context=has_context)
+            else:
+                options.update(
+                    pattern=pattern,
+                    path=path,
+                    glob=glob,
+                    after_context=after_context,
+                    before_context=before_context,
+                )
             try:
+                if fallback or sandboxed:
+                    runner = (
+                        Path(__file__)
+                        .with_name(
+                            "_bounded_search.py" if fallback else "_search_stream.py"
+                        )
+                        .read_text(encoding="utf-8")
+                    )
+                    command = [
+                        sys.executable,
+                        "-I",
+                        "-S",
+                        "-c",
+                        runner,
+                        json.dumps(options),
+                    ]
                 if sandboxed:
-                    assert sandbox_workspace is not None
                     result = create_process_sandbox().run(
                         command,
                         SandboxSpec(
-                            workspace=sandbox_workspace,
+                            workspace=Path(cast(str, sandbox_root)),
                             workspace_writable=False,
+                            readable_roots=(Path(rg_path).resolve(),)
+                            if rg_path
+                            else (),
                         ),
-                        timeout=30,
+                        timeout=timeout,
+                        output_limit=byte_limit,
                     )
-                else:
-                    result = subprocess.run(
-                        command,
-                        capture_output=True,
-                        timeout=30,
-                    )
+                    response: dict[str, Any] = {
+                        "success": result.returncode in (0, 1, 3)
+                        or result.stdout_limited,
+                        "content": _decode_bytes_with_fallback(
+                            result.stdout, preferred_encoding="utf-8"
+                        ),
+                    }
+                    stderr = _decode_bytes_with_fallback(
+                        result.stderr, preferred_encoding="utf-8"
+                    ).strip()
+                    if result.stdout_limited or result.returncode == 3:
+                        response["truncated"] = True
+                        response["truncation_reason"] = "max_output_bytes"
+                        if not result.stdout_limited:
+                            with suppress(ValueError, TypeError):
+                                response["truncation_reason"] = json.loads(stderr)[
+                                    "truncation_reason"
+                                ]
+                        # The sandbox may cut in the middle of an encoded line.
+                        if result.stdout_limited:
+                            content = response["content"]
+                            response["content"] = content[: content.rfind("\n") + 1]
+                    elif not response["success"]:
+                        response["content"] = ""
+                        response["error"] = (
+                            stderr
+                            or f"File search exited with code {result.returncode}"
+                        )
+                        response["exit_code"] = result.returncode
+                    return response
+                response = run_search(
+                    command,
+                    max_results=max_results,
+                    max_output_bytes=byte_limit,
+                    timeout=timeout,
+                    has_context=has_context,
+                    decode=lambda value: _decode_bytes_with_fallback(
+                        value, preferred_encoding="utf-8"
+                    ),
+                    allow_truncated_exit=fallback,
+                )
+                return response
             except (SandboxTimeoutError, subprocess.TimeoutExpired):
                 return {
                     "success": False,
                     "content": "",
-                    "error": "File search timed out after 30 seconds.",
+                    "error": f"File search timed out after {timeout} seconds.",
                 }
             except OSError as exc:
                 return {
                     "success": False,
                     "content": "",
-                    "error": f"Unable to start ripgrep: {exc}",
+                    "error": f"Unable to start file search: {exc}",
                 }
-
-            stdout = _decode_bytes_with_fallback(
-                result.stdout, preferred_encoding="utf-8"
-            )
-            if result.returncode == 0:
-                return {
-                    "success": True,
-                    "content": _truncate_long_lines(stdout),
-                }
-            if result.returncode == 1:
-                return {"success": True, "content": ""}
-
-            stderr = _decode_bytes_with_fallback(
-                result.stderr, preferred_encoding="utf-8"
-            ).strip()
-            return {
-                "success": False,
-                "content": "",
-                "error": stderr or f"ripgrep exited with code {result.returncode}",
-                "exit_code": result.returncode,
-            }
 
         return await asyncio.to_thread(_run)
 
