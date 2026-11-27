@@ -85,7 +85,10 @@
             </div>
           </div>
           <div class="workbench-controls">
+            <!-- Hidden when no plugin offers a view to add; a failed load keeps
+                 it so the New workbench tab can retry. -->
             <button
+              v-if="viewsFailed || views.length"
               type="button"
               :title="tm('workbench.newTab')"
               :aria-label="tm('workbench.newTab')"
@@ -128,7 +131,11 @@
       >
         <WorkbenchLauncher
           v-if="tab.launcher"
+          :views="views"
+          :loading="viewsLoading"
+          :failed="viewsFailed"
           @open="emit('open-page', $event)"
+          @retry="loadViews"
         />
         <PluginViewFrame
           v-else-if="tab.page"
@@ -165,6 +172,7 @@ import {
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { resolvePluginViewText } from "@/utils/pluginI18n";
 import type { WorkbenchTab, WorkbenchView } from "@/utils/chatViews";
+import { fetchWithAuth } from "@/api/http";
 import WorkbenchLauncher from "./WorkbenchLauncher.vue";
 import PluginViewFrame from "@/components/plugins/PluginViewFrame.vue";
 import PluginViewCard from "./message_list_comps/PluginViewCard.vue";
@@ -249,6 +257,36 @@ function resizeByKeyboard(delta: number) {
 }
 const { smAndDown } = useDisplay();
 const { tm } = useModuleI18n("features/chat");
+
+// Views that New workbench offers. Reloaded each time the workbench opens, so
+// a plugin enabled meanwhile brings + back.
+const views = ref<WorkbenchView[]>([]);
+const viewsLoading = ref(true);
+const viewsFailed = ref(false);
+// Reopening starts a new request; only the latest one may update the list.
+let viewsRequest = 0;
+async function loadViews() {
+  const request = ++viewsRequest;
+  viewsLoading.value = true;
+  viewsFailed.value = false;
+  try {
+    const response = await fetchWithAuth("/api/v1/chat/workbench/views");
+    if (!response.ok) throw new Error("Workbench catalog unavailable");
+    const data = (await response.json()).data;
+    if (request === viewsRequest) views.value = data;
+  } catch {
+    if (request === viewsRequest) viewsFailed.value = true;
+  } finally {
+    if (request === viewsRequest) viewsLoading.value = false;
+  }
+}
+watch(
+  () => props.open,
+  (open) => {
+    if (open) loadViews();
+  },
+  { immediate: true },
+);
 watch(() => props.activeId, async (id) => {
   await nextTick();
   document.getElementById(`workbench-tab-${id}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });

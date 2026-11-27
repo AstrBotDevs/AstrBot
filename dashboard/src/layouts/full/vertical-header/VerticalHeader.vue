@@ -1144,6 +1144,7 @@ onMounted(async () => {
         rounded="sm"
         icon
         :title="tm('workspaceFiles.open')"
+        :aria-pressed="chatHeader.workspaceFilesOpen"
         @click="chatHeader.TOGGLE_WORKSPACE_FILES"
       >
         <v-icon size="20">
@@ -2203,7 +2204,9 @@ onMounted(async () => {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.workspace-files-trigger--active {
+/* Outranks `.top-header .header-actions .v-btn`, which clears every header
+   button's background, so an open panel's button stays highlighted. */
+.top-header .header-actions .v-btn.workspace-files-trigger--active {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 

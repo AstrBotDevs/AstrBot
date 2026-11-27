@@ -24,6 +24,11 @@
 - WebUI 排队的提示条现在会按时自动关闭：前一条提示显示期间到达的提示不再一直停留到手动关闭。
 - WebUI: a toast that is queued while another is shown now closes after its timeout instead of staying until closed by hand.
 
+### ChatUI right panels / ChatUI 右侧面板
+
+- ChatUI 右侧面板之间切换时只显示一个面板，不再出现离开和进入的两个面板并排；单独关闭面板仍有滑出动画。顶栏的面板按钮在面板打开时保持高亮。没有插件提供可选视图时，工作台不显示「＋」（视图列表加载失败时仍显示，以便重试）。
+- ChatUI shows one right panel at a time while switching between them, instead of the leaving and entering panels side by side; closing a panel on its own still slides it out. A top bar panel button stays highlighted while its panel is open. The workbench hides **+** while no plugin offers a view (it stays if the view list fails to load, so you can retry).
+
 ### ChatUI history / ChatUI 历史记录
 
 - 一轮回复只保存为一条历史记录：流式分段、工具调用和按钮卡片都更新同一条记录，刷新后不再拆成多个气泡（SSE 与 WebSocket 相同）。已拆开的旧记录不会合并。

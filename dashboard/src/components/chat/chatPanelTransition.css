@@ -25,6 +25,30 @@
   }
 }
 
+/* A panel leaving while another one is open (a switch, since only one panel
+   is open at a time) is taken out of the layout and hidden, so only the panel
+   that stays is seen. A panel closing on its own still slides out. The
+   transition keeps running unseen so Vue finishes the leave; display: none
+   here would cut it short and can leave the v-show workbench visible after
+   fast toggling. */
+.chat-main.has-side-panel ~ .chat-side-panel.chat-panel-leave-active {
+  position: absolute;
+  visibility: hidden;
+}
+
+/* The panel that replaces it takes its place at once instead of sliding in,
+   so the chat area does not widen for a moment and then narrow again. */
+.chat-ui:has(> .chat-side-panel.chat-panel-leave-active)
+  > .chat-side-panel.chat-panel-enter-active {
+  transition: none;
+}
+
+.chat-ui:has(> .chat-side-panel.chat-panel-leave-active)
+  > .chat-side-panel.chat-panel-enter-from {
+  margin-inline-end: 0;
+  transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-side-panel.chat-panel-enter-active,
   .chat-side-panel.chat-panel-leave-active {

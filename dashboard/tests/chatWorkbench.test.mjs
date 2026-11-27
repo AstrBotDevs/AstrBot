@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import { parse } from "vue/compiler-sfc";
 import { computed, reactive, ref, watch, nextTick, effectScope } from "vue";
 
 function setup(storage = new Map(), username = "alice") {
@@ -259,4 +260,38 @@ test("legacy global pages belong only to the new-chat workspace", async () => {
   assert.equal(app.state.value.activeId, "workbench:new");
   assert.equal(app.width.value, 600);
   app.stop();
+});
+
+test("only the latest view list request updates the workbench", async () => {
+  const { descriptor } = parse(
+    readFileSync(
+      new URL("../src/components/chat/ChatWorkbench.vue", import.meta.url),
+      "utf8",
+    ),
+  );
+  const block = descriptor.scriptSetup.content.match(
+    /const views = ref[\s\S]*?\r?\n}\r?\n/,
+  )[0];
+  const responses = [];
+  const context = vm.createContext({
+    ref,
+    fetchWithAuth: () => new Promise((resolve) => responses.push(resolve)),
+  });
+  vm.runInContext(
+    ts.transpile(`${block}\nthis.state = { views, viewsLoading, viewsFailed, loadViews };`, {
+      target: ts.ScriptTarget.ES2022,
+    }),
+    context,
+  );
+  const { views, viewsLoading, loadViews } = context.state;
+  const reply = (data) => ({ ok: true, json: async () => ({ data }) });
+  // Open, close and reopen the workbench: the first request answers last.
+  const first = loadViews();
+  const second = loadViews();
+  responses[1](reply([{ name: "context" }]));
+  await second;
+  responses[0](reply([]));
+  await first;
+  assert.equal(views.value.length, 1, "an older empty list does not hide +");
+  assert.equal(viewsLoading.value, false);
 });

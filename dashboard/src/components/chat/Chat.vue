@@ -2252,6 +2252,8 @@ async function stopCurrentSession() {
   --chat-section-label: rgba(var(--v-theme-on-surface), 0.48);
   --chat-content-width: 76%;
   --chat-content-max-width: 760px;
+  /* Containing block for right panels positioned inside the chat area. */
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
