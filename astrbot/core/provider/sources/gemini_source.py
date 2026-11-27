@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import random
+import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal, cast
@@ -444,7 +445,7 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("Text content is empty, added a space as placeholder.")
             return types.Part.from_text(text=content_a)
 
-        async def process_image_url(image_url_dict: dict) -> types.Part:
+        async def resolve_image_url(image_url_dict: dict) -> tuple[bytes, str]:
             url = image_url_dict["url"]
             image_data = await resolve_media_ref_to_base64_data(
                 url,
@@ -455,10 +456,7 @@ class ProviderGoogleGenAI(Provider):
                 raise ValueError(
                     f"Failed to resolve Gemini history image: {describe_media_ref(url)}"
                 )
-            return types.Part.from_bytes(
-                data=base64.b64decode(image_data.base64_data),
-                mime_type=image_data.mime_type,
-            )
+            return base64.b64decode(image_data.base64_data), image_data.mime_type
 
         async def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
@@ -487,6 +485,12 @@ class ProviderGoogleGenAI(Provider):
             else:
                 contents.append(content_cls(parts=part))
 
+        model = payloads.get("model", "").rsplit("/", 1)[-1].lower()
+        version = re.match(r"gemini-(\d+)(?:[.-]|$)", model)
+        native_tool_images = version is not None and int(version[1]) >= 3
+        # Parallel calls to the same tool may lack distinct call IDs. The runner
+        # records the producing response's position when it reads each image.
+        tool_responses: dict[int, types.FunctionResponse] = {}
         gemini_contents: list[types.Content] = []
         # Map tool call IDs to function names for later tool result matching.
         tool_id_to_name: dict[str, str] = {}
@@ -500,7 +504,29 @@ class ProviderGoogleGenAI(Provider):
                         if item["type"] == "text":
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
-                            parts.append(await process_image_url(item["image_url"]))
+                            image_url = item["image_url"]
+                            data, mime_type = await resolve_image_url(image_url)
+                            response = tool_responses.get(
+                                image_url.get("tool_result_index")
+                            )
+                            if response is not None and mime_type in {
+                                "image/png",
+                                "image/jpeg",
+                                "image/webp",
+                            }:
+                                if response.parts is None:
+                                    response.parts = []
+                                response.parts.append(
+                                    types.FunctionResponsePart.from_bytes(
+                                        data=data, mime_type=mime_type
+                                    )
+                                )
+                            else:
+                                parts.append(
+                                    types.Part.from_bytes(
+                                        data=data, mime_type=mime_type
+                                    )
+                                )
                         elif item["type"] == "audio_url":
                             parts.append(await process_audio_url(item["audio_url"]))
                 else:
@@ -595,7 +621,7 @@ class ProviderGoogleGenAI(Provider):
                 func_name = message.get("name") or tool_id_to_name.get(
                     tool_call_id, tool_call_id
                 )
-                part = types.Part.from_function_response(
+                response = types.FunctionResponse(
                     name=func_name,
                     response={
                         "name": func_name,
@@ -603,8 +629,16 @@ class ProviderGoogleGenAI(Provider):
                     },
                 )
 
-                parts = [part]
-                append_or_extend(gemini_contents, parts, types.UserContent)
+                if native_tool_images:
+                    tool_responses[len(tool_responses)] = response
+                append_or_extend(
+                    gemini_contents,
+                    [types.Part(function_response=response)],
+                    types.UserContent,
+                )
+
+            if role != "tool":
+                tool_responses.clear()
 
         if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
             gemini_contents.pop(0)

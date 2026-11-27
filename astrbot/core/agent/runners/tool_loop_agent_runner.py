@@ -93,9 +93,9 @@ else:
 
 @dataclass(slots=True)
 class _HandleFunctionToolsResult:
-    kind: T.Literal["tool_call_result_blocks", "cached_image"]
+    kind: T.Literal["tool_call_result_blocks", "image_parts"]
     tool_call_result_blocks: list[ToolCallMessageSegment] | None = None
-    cached_image: T.Any = None
+    image_parts: list[ContentPart] | None = None
 
     @classmethod
     def from_tool_call_result_blocks(
@@ -104,8 +104,10 @@ class _HandleFunctionToolsResult:
         return cls(kind="tool_call_result_blocks", tool_call_result_blocks=blocks)
 
     @classmethod
-    def from_cached_image(cls, image: T.Any) -> "_HandleFunctionToolsResult":
-        return cls(kind="cached_image", cached_image=image)
+    def from_image_parts(
+        cls, image_parts: list[ContentPart]
+    ) -> "_HandleFunctionToolsResult":
+        return cls(kind="image_parts", image_parts=image_parts)
 
 
 @dataclass(slots=True)
@@ -1376,16 +1378,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
 
             tool_call_result_blocks = []
-            cached_images = []  # Collect cached images for LLM visibility
+            image_parts: list[ContentPart] = []
             try:
                 async for result in self._handle_function_tools(self.req, llm_resp):
                     if result.kind == "tool_call_result_blocks":
                         if result.tool_call_result_blocks is not None:
                             tool_call_result_blocks = result.tool_call_result_blocks
-                    elif result.kind == "cached_image":
-                        if result.cached_image is not None:
-                            # Collect cached image info
-                            cached_images.append(result.cached_image)
+                    elif result.image_parts:
+                        image_parts.extend(result.image_parts)
             except _ToolExecutionInterrupted:
                 await self._finalize_aborted_step()
                 return
@@ -1445,7 +1445,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             await self._append_context_messages(tool_call_result_blocks)
 
-            await self.append_tool_result_images(cached_images)
+            if image_parts:
+                image_message = Message(role="user", content=image_parts)
+                image_message._turn_continuation = True
+                await self._append_context_messages([image_message])
 
             self.req.append_tool_calls_result(tool_calls_result)
 
@@ -1590,12 +1593,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         cached_images: list[CachedImage],
         *,
         content: list[ContentPart] | None = None,
+        tool_result_index: int | None = None,
     ) -> None:
         """Append cached tool images when the current model supports vision.
 
         Args:
             cached_images: Images produced by the shared tool result preparation.
             content: Prepared input to extend before persistence; otherwise append a message.
+            tool_result_index: Position of the owning response in this tool batch.
         """
         # If there are cached images and the model supports image input,
         # append a user message with images so LLM can see them
@@ -1623,6 +1628,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 image_url=ImageURLPart.ImageURL(
                                     url=f"data:{mime_type};base64,{base64_data}",
                                     id=cached_img.file_path,
+                                    tool_result_index=tool_result_index,
                                 )
                             )
                         )
@@ -1770,9 +1776,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             tool_call_id=func_tool_id,
                             tool_name=func_tool_name,
                         )
-                        for cached_image in cached_images:
-                            yield _HandleFunctionToolsResult.from_cached_image(
-                                cached_image
+                        if cached_images:
+                            image_parts: list[ContentPart] = []
+                            await self.append_tool_result_images(
+                                cached_images,
+                                content=image_parts,
+                                tool_result_index=len(tool_call_result_blocks),
+                            )
+                            yield _HandleFunctionToolsResult.from_image_parts(
+                                image_parts
                             )
                         if inline_result:
                             _append_tool_call_result(

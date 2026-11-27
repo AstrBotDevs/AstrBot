@@ -907,6 +907,85 @@ async def test_hooks_called_with_max_step(
 
 
 @pytest.mark.asyncio
+async def test_gemini_parallel_tool_responses_own_their_images(
+    runner, provider_request, mock_hooks, monkeypatch, tmp_path
+):
+    import base64
+    from io import BytesIO
+
+    from google.genai import types
+    from mcp.types import CallToolResult, ImageContent
+    from PIL import Image
+
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
+
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(tmp_path))
+    images = {}
+    for color in ("red", "blue"):
+        buffer = BytesIO()
+        Image.new("RGB", (1, 1), color).save(buffer, format="PNG")
+        images[color] = buffer.getvalue()
+
+    class ImageToolExecutor:
+        async def execute(self, tool, run_context, query):
+            yield CallToolResult(
+                content=[
+                    ImageContent(
+                        type="image",
+                        mimeType="image/png",
+                        data=base64.b64encode(images[query]).decode(),
+                    )
+                ]
+            )
+
+    provider = ProviderGoogleGenAI(
+        {
+            "type": "googlegenai_chat_completion",
+            "key": ["test"],
+            "model": "gemini-3-flash-preview",
+            "api_base": "https://gemini.invalid",
+        },
+        {},
+    )
+    # Gemini can return parallel calls to the same function without IDs.
+    calls = [
+        types.Part.from_function_call(name="test_tool", args={"query": color})
+        for color in images
+    ]
+    generate = AsyncMock(
+        side_effect=[
+            types.GenerateContentResponse(
+                candidates=[types.Candidate(content=types.ModelContent(parts=parts))]
+            )
+            for parts in (calls, [types.Part.from_text(text="done")])
+        ]
+    )
+    monkeypatch.setattr(provider.client.models, "generate_content", generate)
+    try:
+        await runner.reset(
+            provider=provider,
+            request=provider_request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=ImageToolExecutor(),
+            agent_hooks=mock_hooks,
+        )
+        await collect_events(runner.step_until_done(3))
+        parts = generate.call_args_list[1].kwargs["contents"][-1].parts
+        responses = [part.function_response for part in parts if part.function_response]
+        assert [
+            [
+                (part.inline_data.mime_type, part.inline_data.data)
+                for part in response.parts
+            ]
+            for response in responses
+        ] == [[("image/png", data)] for data in images.values()]
+        assert all(part.inline_data is None for part in parts)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_tool_result_includes_all_calltoolresult_content(
     runner, mock_provider, provider_request, mock_hooks, monkeypatch
 ):
