@@ -156,3 +156,146 @@ async def test_session_waiter_pipeline(monkeypatch, private, state):
     elif state != "ordinary":
         preprocess.assert_not_awaited()
         assert event.is_stopped()
+
+
+@pytest.mark.asyncio
+async def test_reentrant_register_wait_supersedes_without_clobbering_new_waiter(
+    monkeypatch,
+):
+    """Replacing an active waiter stops the old one without removing the new one."""
+    from astrbot.core.utils import session_waiter as sw
+
+    monkeypatch.setattr(sw, "USER_SESSIONS", {})
+    monkeypatch.setattr(sw, "FILTERS", [])
+
+    shared_filter = DefaultSessionFilter()
+    waiter_1 = SessionWaiter(shared_filter, "s1", False)
+    waiter_2 = SessionWaiter(shared_filter, "s1", False)
+
+    async def noop_handler(controller, _event):
+        controller.stop()
+
+    sw.FILTERS.append(shared_filter)
+    task_1 = asyncio.create_task(waiter_1.register_wait(noop_handler, timeout=30))
+    await asyncio.sleep(0)
+    assert sw.USER_SESSIONS["s1"] is waiter_1
+    assert len(waiter_1.session_controller._holding_tasks) == 1
+
+    sw.FILTERS.append(shared_filter)
+    task_2 = asyncio.create_task(waiter_2.register_wait(noop_handler, timeout=30))
+    await asyncio.sleep(0)
+
+    # First waiter must fail with SessionWaiterSupersededError without clobbering waiter_2.
+    with pytest.raises(sw.SessionWaiterSupersededError):
+        await asyncio.wait_for(task_1, timeout=1.0)
+    assert sw.USER_SESSIONS.get("s1") is waiter_2
+    assert sw.FILTERS == [shared_filter]
+    assert waiter_1.session_controller._holding_tasks == set()
+
+    waiter_2._cleanup()
+    await asyncio.wait_for(task_2, timeout=1.0)
+    assert sw.USER_SESSIONS == {}
+    assert sw.FILTERS == []
+    assert waiter_2.session_controller._holding_tasks == set()
+
+
+@pytest.mark.asyncio
+async def test_superseding_waiter_cancels_suspended_trigger_handler(monkeypatch):
+    """Superseding a waiter cancels an in-flight trigger handler instead of resuming."""
+    from astrbot.core.utils import session_waiter as sw
+
+    monkeypatch.setattr(sw, "USER_SESSIONS", {})
+    monkeypatch.setattr(sw, "FILTERS", [])
+
+    handler_started = asyncio.Event()
+    handler_cancelled = asyncio.Event()
+    side_effects: list[str] = []
+
+    async def suspended_handler(_controller, _event):
+        handler_started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            handler_cancelled.set()
+            raise
+        side_effects.append("stale_side_effect")
+
+    shared_filter = DefaultSessionFilter()
+    waiter_1 = SessionWaiter(shared_filter, "s_cancel", False)
+    waiter_2 = SessionWaiter(shared_filter, "s_cancel", False)
+
+    sw.FILTERS.append(shared_filter)
+    reg_1 = asyncio.create_task(waiter_1.register_wait(suspended_handler, timeout=30))
+    await asyncio.sleep(0)
+
+    dummy_event = SimpleNamespace(get_messages=lambda: [])
+    trigger_task = asyncio.create_task(SessionWaiter.trigger("s_cancel", dummy_event))  # type: ignore[arg-type]
+    await asyncio.wait_for(handler_started.wait(), timeout=1.0)
+
+    async def noop_handler(controller, _event):
+        controller.stop()
+
+    sw.FILTERS.append(shared_filter)
+    reg_2 = asyncio.create_task(waiter_2.register_wait(noop_handler, timeout=30))
+    await asyncio.wait_for(handler_cancelled.wait(), timeout=1.0)
+    await asyncio.wait_for(trigger_task, timeout=1.0)
+    with pytest.raises(sw.SessionWaiterSupersededError):
+        await asyncio.wait_for(reg_1, timeout=1.0)
+    assert side_effects == []
+
+    waiter_2._cleanup()
+    await asyncio.wait_for(reg_2, timeout=1.0)
+    assert sw.USER_SESSIONS == {}
+    assert sw.FILTERS == []
+
+
+@pytest.mark.asyncio
+async def test_reusing_completed_waiter_instance_cleans_up_registry(monkeypatch):
+    """Re-registering an already-completed SessionWaiter instance cleans up USER_SESSIONS."""
+    from astrbot.core.utils import session_waiter as sw
+
+    monkeypatch.setattr(sw, "USER_SESSIONS", {})
+    monkeypatch.setattr(sw, "FILTERS", [])
+
+    shared_filter = DefaultSessionFilter()
+    waiter = SessionWaiter(shared_filter, "s_reuse", False)
+
+    async def noop_handler(controller, _event):
+        controller.stop()
+
+    sw.FILTERS.append(shared_filter)
+    task_1 = asyncio.create_task(waiter.register_wait(noop_handler, timeout=30))
+    await asyncio.sleep(0)
+    waiter._cleanup()
+    await asyncio.wait_for(task_1, timeout=1.0)
+    assert sw.USER_SESSIONS == {}
+
+    sw.FILTERS.append(shared_filter)
+    task_2 = asyncio.create_task(waiter.register_wait(noop_handler, timeout=30))
+    await asyncio.sleep(0)
+    assert sw.USER_SESSIONS.get("s_reuse") is waiter
+    waiter._cleanup()
+    await asyncio.wait_for(task_2, timeout=1.0)
+    assert sw.USER_SESSIONS == {}
+    assert sw.FILTERS == []
+
+
+@pytest.mark.asyncio
+async def test_cleanup_is_idempotent_with_shared_filters(monkeypatch):
+    """Calling _cleanup repeatedly removes only the waiter's single filter entry."""
+    from astrbot.core.utils import session_waiter as sw
+
+    monkeypatch.setattr(sw, "USER_SESSIONS", {})
+    monkeypatch.setattr(sw, "FILTERS", [])
+
+    shared_filter = DefaultSessionFilter()
+    other_waiter = SessionWaiter(shared_filter, "s2", False)
+    sw.FILTERS.extend([shared_filter, shared_filter])
+    sw.USER_SESSIONS["s2"] = other_waiter
+
+    superseded = SessionWaiter(shared_filter, "s2", False)
+    superseded._cleanup()
+    superseded._cleanup()
+
+    assert sw.USER_SESSIONS.get("s2") is other_waiter
+    assert sw.FILTERS == [shared_filter]
