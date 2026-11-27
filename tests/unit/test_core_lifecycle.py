@@ -873,6 +873,227 @@ class TestAstrBotCoreLifecycleRestart:
             mock_threading.Thread.assert_called_once()
             mock_threading.Thread.return_value.start.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_restart_performs_full_cleanup_like_stop(
+        self, mock_log_broker, mock_db
+    ):
+        """Test that restart cleans up tasks, cron, temp cleaner, plugins, and DB engine."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        mock_db.engine = MagicMock()
+        mock_db.engine.dispose = AsyncMock()
+
+        lifecycle.temp_dir_cleaner = MagicMock()
+        lifecycle.temp_dir_cleaner.stop = AsyncMock()
+
+        lifecycle.event_bus = MagicMock()
+        lifecycle.event_bus.close = AsyncMock()
+
+        lifecycle.cron_manager = MagicMock()
+        lifecycle.cron_manager.shutdown = AsyncMock()
+
+        lifecycle.subagents = MagicMock()
+        lifecycle.subagents.close = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "test_plugin"
+        lifecycle.plugin_manager = MagicMock()
+        lifecycle.plugin_manager.context = MagicMock()
+        lifecycle.plugin_manager.context.get_all_stars = MagicMock(
+            return_value=[mock_plugin]
+        )
+        lifecycle.plugin_manager._terminate_plugin = AsyncMock()
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+
+        cancelled_event = asyncio.Event()
+        allow_finish = asyncio.Event()
+
+        async def running_task():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled_event.set()
+                await allow_finish.wait()
+                raise
+
+        bg_task = asyncio.create_task(running_task(), name="bg_task")
+        await asyncio.sleep(0)
+        lifecycle.curr_tasks = [bg_task]
+
+        with (
+            patch("astrbot.core.core_lifecycle.threading") as mock_threading,
+            patch(
+                "astrbot.core.utils.trace_store.close_trace_store"
+            ) as mock_close_trace_store,
+        ):
+            restart_task = asyncio.create_task(lifecycle.restart())
+            try:
+                await asyncio.wait_for(cancelled_event.wait(), timeout=2)
+                await asyncio.sleep(0.05)
+                assert not restart_task.done()
+                mock_threading.Thread.assert_not_called()
+
+                allow_finish.set()
+                await asyncio.wait_for(restart_task, timeout=5)
+            finally:
+                allow_finish.set()
+                if not restart_task.done():
+                    restart_task.cancel()
+                    await asyncio.gather(restart_task, return_exceptions=True)
+
+            lifecycle.temp_dir_cleaner.stop.assert_awaited_once()
+            lifecycle.event_bus.close.assert_awaited_once()
+            lifecycle.cron_manager.shutdown.assert_awaited_once()
+            lifecycle.subagents.close.assert_awaited_once()
+            lifecycle.plugin_manager._terminate_plugin.assert_awaited_once_with(
+                mock_plugin
+            )
+            lifecycle.provider_manager.terminate.assert_awaited_once()
+            lifecycle.platform_manager.terminate.assert_awaited_once()
+            lifecycle.kb_manager.terminate.assert_awaited_once()
+            assert lifecycle.dashboard_shutdown_event.is_set()
+            assert cancelled_event.is_set()
+            assert bg_task.cancelled()
+            mock_close_trace_store.assert_called_once()
+            mock_db.chat_usage_writer.close.assert_awaited_once()
+            mock_db.engine.dispose.assert_awaited_once()
+            mock_threading.Thread.assert_called_once()
+            mock_threading.Thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_continues_when_plugin_termination_raises(
+        self, mock_log_broker, mock_db
+    ):
+        """Test that restart logs a warning and completes cleanup if a plugin fails to stop."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        mock_db.engine = MagicMock()
+        mock_db.engine.dispose = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "failing_plugin"
+        lifecycle.plugin_manager = MagicMock()
+        lifecycle.plugin_manager.context = MagicMock()
+        lifecycle.plugin_manager.context.get_all_stars = MagicMock(
+            return_value=[mock_plugin]
+        )
+        lifecycle.plugin_manager._terminate_plugin = AsyncMock(
+            side_effect=RuntimeError("plugin stop failed")
+        )
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.curr_tasks = []
+
+        with (
+            patch("astrbot.core.core_lifecycle.threading") as mock_threading,
+            patch("astrbot.core.core_lifecycle.logger") as mock_logger,
+        ):
+            await asyncio.wait_for(lifecycle.restart(), timeout=5)
+
+            mock_logger.warning.assert_called()
+            lifecycle.provider_manager.terminate.assert_awaited_once()
+            lifecycle.platform_manager.terminate.assert_awaited_once()
+            lifecycle.kb_manager.terminate.assert_awaited_once()
+            mock_db.engine.dispose.assert_awaited_once()
+            mock_threading.Thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_continues_when_task_ignores_cancellation(
+        self, mock_log_broker, mock_db
+    ):
+        """Test that restart bounds task waiting and continues if a task stalls."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle._RESTART_TASK_CANCEL_TIMEOUT_S = 0.05
+
+        mock_db.engine = MagicMock()
+        mock_db.engine.dispose = AsyncMock()
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+
+        release = asyncio.Event()
+
+        async def stubborn_task():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await release.wait()
+
+        task = asyncio.create_task(stubborn_task(), name="stubborn_task")
+        await asyncio.sleep(0)
+        lifecycle.curr_tasks = [task]
+
+        try:
+            with (
+                patch("astrbot.core.core_lifecycle.threading") as mock_threading,
+                patch("astrbot.core.core_lifecycle.logger") as mock_logger,
+            ):
+                await asyncio.wait_for(lifecycle.restart(), timeout=2)
+
+                assert any(
+                    "did not finish" in str(call)
+                    for call in mock_logger.warning.call_args_list
+                )
+                mock_threading.Thread.return_value.start.assert_called_once()
+        finally:
+            release.set()
+            await asyncio.gather(task, return_exceptions=True)
+
+    @pytest.mark.asyncio
+    async def test_restart_continues_when_subagents_close_raises(
+        self, mock_log_broker, mock_db
+    ):
+        """Test that subagent DB errors during restart do not block restart_process."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        mock_db.engine = MagicMock()
+        mock_db.engine.dispose = AsyncMock()
+        lifecycle.subagents = MagicMock()
+        lifecycle.subagents.close = AsyncMock(
+            side_effect=RuntimeError("db unavailable")
+        )
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.curr_tasks = []
+
+        with (
+            patch("astrbot.core.core_lifecycle.threading") as mock_threading,
+            patch("astrbot.core.core_lifecycle.logger") as mock_logger,
+        ):
+            await asyncio.wait_for(lifecycle.restart(), timeout=5)
+
+            assert any(
+                "subagents" in str(call) for call in mock_logger.warning.call_args_list
+            )
+            lifecycle.provider_manager.terminate.assert_awaited_once()
+            mock_db.engine.dispose.assert_awaited_once()
+            mock_threading.Thread.return_value.start.assert_called_once()
+
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:
     """Tests for AstrBotCoreLifecycle.load_pipeline_scheduler method."""
