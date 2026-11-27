@@ -8,6 +8,7 @@ import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { authApi, publicApi, type PublicVersionData } from '@/api/v1';
+import { getPluginInstallReturnUrl } from '@/utils/pluginInstallLink.mjs';
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -146,7 +147,8 @@ onMounted(async () => {
       setupStatus.data?.data?.setup_required &&
       setupStatus.data?.data?.skip_default_password_auth
     ) {
-      router.push('/auth/setup');
+      const redirect = getPluginInstallReturnUrl(router, router.currentRoute.value.query.redirect);
+      router.replace({ path: '/auth/setup', query: { redirect } });
       return;
     }
   } catch {

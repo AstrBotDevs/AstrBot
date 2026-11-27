@@ -11,6 +11,7 @@
     "tabs": {
       "all": "全部",
       "chatCompletion": "对话",
+      "decision": "判断",
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
       "embedding": "嵌入",
@@ -25,6 +26,25 @@
       "kimi_code": "Kimi 的 CodingPlan / Kimi Code 专用接入，使用特殊的 Anthropic API 兼容适配。",
       "vllm_rerank": "也支持 Jina AI, Cohere, PPIO 等提供商。",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One 接口地址。填写基础地址时自动补全 /systemone；以 / 结尾则按完整地址请求。",
+      "model": "System One 模型 ID，如 jev-latest、jev-preview，或服务商指定的模型名。",
+      "customHeaders": "附加到 AstrBot 判断请求的 HTTP 请求头。"
+    },
+    "openaiDecisionHints": {
+      "apiBase": "OpenAI API 基础地址，默认 https://api.openai.com/v1；自动补全 /decisions，已以 /decisions 结尾则按原样请求。",
+      "model": "OpenAI Decisions 当前支持 gpt-6-luna。"
+    },
+    "deepseekTtsHints": {
+      "apiBase": "DeepSeek TTS API 基础地址，默认 https://api.deepseek.com/v1；自动补全 /tools/tts，请勿重复添加 /v1。"
+    },
+    "deepseekSttHints": {
+      "apiBase": "DeepSeek STT API 基础地址，默认 https://api.deepseek.com/v1；自动补全 /tools/asr，请勿重复添加 /v1。"
+    },
+    "stepfunTtsHints": {
+      "model": "阶跃星辰TTS模型ID，默认为stepaudio-3-tts。",
+      "apiBase": "中国站默认使用 https://api.stepfun.com/v1 ，海外用户请使用 https://api.stepfun.ai/v1 。Step Plan的中国站地址为https://api.stepfun.com/step_plan/v1 ，海外站地址为 https://api.stepfun.ai/step_plan/v1 。AstrBot会自动补全 /audio/speech。"
     }
   },
   "availability": {
@@ -48,6 +68,7 @@
       "title": "模型提供商",
       "tabs": {
         "basic": "对话",
+        "decision": "判断",
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
         "embedding": "嵌入",

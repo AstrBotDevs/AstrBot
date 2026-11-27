@@ -9,7 +9,7 @@ from .tool import FunctionTool
 
 class BaseFunctionToolExecutor(Generic[TContext]):
     @classmethod
-    async def execute(
+    def execute(
         cls,
         tool: FunctionTool,
         run_context: ContextWrapper[TContext],

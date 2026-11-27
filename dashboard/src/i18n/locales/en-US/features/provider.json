@@ -11,6 +11,7 @@
     "tabs": {
       "all": "All",
       "chatCompletion": "Chat Completion",
+      "decision": "Decision",
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
       "embedding": "Embedding",
@@ -25,6 +26,25 @@
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
       "vllm_rerank": "Also supports Jina AI, Cohere, PPIO and other providers.",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One endpoint. /systemone is appended to base URLs; end the URL with / to use it as-is.",
+      "model": "System One model ID, such as jev-latest, jev-preview, or the provider's model name.",
+      "customHeaders": "HTTP headers added by AstrBot to decision requests."
+    },
+    "openaiDecisionHints": {
+      "apiBase": "OpenAI API base URL, https://api.openai.com/v1 by default. /decisions is appended unless the URL already ends with it.",
+      "model": "OpenAI Decisions currently supports gpt-6-luna."
+    },
+    "deepseekTtsHints": {
+      "apiBase": "DeepSeek TTS API base URL, https://api.deepseek.com/v1 by default. /tools/tts is appended automatically; do not add another /v1."
+    },
+    "deepseekSttHints": {
+      "apiBase": "DeepSeek STT API base URL, https://api.deepseek.com/v1 by default. /tools/asr is appended automatically; do not add another /v1."
+    },
+    "stepfunTtsHints": {
+      "model": "StepFun TTS model ID. Defaults to stepaudio-3-tts.",
+      "apiBase": "Use https://api.stepfun.com/v1 for the China API (default) or https://api.stepfun.ai/v1 for the international API. For Step Plan, use https://api.stepfun.com/step_plan/v1 in China or https://api.stepfun.ai/step_plan/v1 internationally. AstrBot appends /audio/speech."
     }
   },
   "availability": {
@@ -48,6 +68,7 @@
       "title": "Service Provider",
       "tabs": {
         "basic": "Basic",
+        "decision": "Decision",
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
         "embedding": "Embedding",

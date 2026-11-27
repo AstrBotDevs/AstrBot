@@ -1,14 +1,14 @@
 """Tests for send_message_to_user session handling."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.config import default as config_defaults
+from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 def _make_context(
@@ -33,12 +33,16 @@ def _make_context(
         role=role,
         _has_send_oper=False,
         get_sender_id=lambda: "user-1",
+        trace=MagicMock(),
     )
     event.set_extra = lambda key, value: extras.__setitem__(key, value)
     event.get_extra = lambda key, default=None: extras.get(key, default)
+    event._outline_chain = lambda chain: AstrMessageEvent._outline_chain(event, chain)
     return SimpleNamespace(
         context=SimpleNamespace(
             event=event,
+            send_to_user=True,
+            _output_turn=None,
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 send_message=AsyncMock(),
@@ -54,6 +58,7 @@ class _DummyRespondEvent:
         }
         self._result = MessageEventResult().message(result_text)
         self.send = AsyncMock()
+        self.trace = MagicMock()
         self.plugins_name = []
 
     def get_result(self):
@@ -139,19 +144,31 @@ async def test_send_message_with_partial_session_id_fallback():
 
 
 @pytest.mark.asyncio
-async def test_send_message_defaults_to_current_session():
+@pytest.mark.parametrize("send_to_user", [False, True])
+async def test_send_message_defaults_to_current_session(send_to_user):
     """LLM does not pass session — uses current_session directly."""
     tool = SendMessageToUserTool()
     ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    ctx.context.send_to_user = send_to_user
+    ctx.context._output_turn = SimpleNamespace(done=False, emit=MagicMock())
     result = await tool.call(
         ctx,
         messages=[{"type": "plain", "text": "hello"}],
     )
+    output = ctx.context._output_turn.emit.call_args.args[0]
+    assert output.target_umo == "feishu:GroupMessage:oc_xxx"
+    assert output.content[0].text == "hello"
+    if not send_to_user:
+        assert "It has not been sent" in result
+        ctx.context.context.send_message.assert_not_awaited()
+        assert ctx.context.event._has_send_oper is False
+        return
     assert "Message sent to session" in result
     call_args = ctx.context.context.send_message.call_args
     target_session = call_args[0][0]
     assert str(target_session) == "feishu:GroupMessage:oc_xxx"
     assert ctx.context.event._has_send_oper is True
+    ctx.context.event.trace.record.assert_not_called()
     assert ctx.context.event.get_extra(
         "_send_message_to_user_current_session_plain_texts",
     ) == ["hello"]
@@ -176,6 +193,20 @@ async def test_send_message_returns_platform_error_to_tool_result():
         "qq_official:GroupMessage:group-1: 413 Request Entity Too Large"
     )
     assert ctx.context.event._has_send_oper is False
+    ctx.context.event.trace.record.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_message_missing_platform_does_not_record_delivery():
+    """Keep missing-platform failures out of delivered-response traces."""
+    ctx = _make_context()
+    ctx.context.context.send_message.return_value = False
+    result = await SendMessageToUserTool().call(
+        ctx, messages=[{"type": "plain", "text": "hello"}]
+    )
+    assert result.startswith("error: failed to find platform")
+    ctx.context.event.trace.record.assert_not_called()
+    assert ctx.context.event._has_send_oper is False
 
 
 @pytest.mark.asyncio
@@ -190,6 +221,7 @@ async def test_send_message_other_session_does_not_record_current_text():
     )
     assert "Message sent to session" in result
     assert ctx.context.event._has_send_oper is False
+    ctx.context.event.trace.record.assert_not_called()
     assert (
         ctx.context.event.get_extra(
             "_send_message_to_user_current_session_plain_texts",
@@ -226,6 +258,7 @@ async def test_respond_stage_sends_different_text_after_send_message_to_user():
 
     assert result is None
     event.send.assert_awaited_once()
+    event.trace.record.assert_not_called()
     assert event.get_result() is None
 
 
@@ -249,12 +282,10 @@ async def test_send_message_partial_session_falls_back_to_current():
 
 @pytest.mark.asyncio
 async def test_cron_context_current_session_is_target_session():
-    """在 cron 场景中，current_session 就是 cron 任务的目标 session。
+    """Resolve delivery against the cron job's target session.
 
-    cron 是主动唤醒，没有用户消息触发，因此没有"正在聊天的 session"。
-    event.unified_msg_origin 来自 CronMessageEvent.session，
-    而 CronMessageEvent.session 来自 cron job payload.session，
-    即用户在 cron 配置中填写的目标会话。
+    AgentWakeupEvent.session comes from the cron payload's target session,
+    independently of the absence of an incoming user message.
     """
     tool = SendMessageToUserTool()
     # cron 任务的目标 session（用户配置的完整三段式）
@@ -301,7 +332,7 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
         raise RuntimeError("sandbox unavailable")
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 
@@ -318,7 +349,6 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
 @pytest.mark.parametrize("component_type", ["file", "image", "record", "video"])
 @pytest.mark.parametrize(
     ("role", "scope"),
@@ -331,16 +361,15 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
     ],
 )
 async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
-    tmp_path, monkeypatch, system, component_type, role, scope
+    tmp_path, component_type, role, scope
 ):
     """Only explicit host access permits sending files outside trusted roots."""
-    monkeypatch.setattr(
-        config_defaults, "platform", SimpleNamespace(system=lambda: system)
-    )
     tool = SendMessageToUserTool()
     ctx = _make_context(
         role=role,
-        local_permissions={role: {"filesystem_scope": scope}} if scope else None,
+        local_permissions={role: {"filesystem_scope": scope, "allow_execution": False}}
+        if scope
+        else None,
     )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")
@@ -367,16 +396,41 @@ async def test_member_with_host_scope_can_send_local_absolute_file(tmp_path):
     }
     tool = SendMessageToUserTool()
     ctx = _make_context(role="member", local_permissions=permissions)
-    file_path = tmp_path / "result.txt"
+    file_path = tmp_path / "report.html"
     file_path.write_text("result", encoding="utf-8")
 
     result = await tool.call(
         ctx,
-        messages=[{"type": "file", "path": str(file_path)}],
+        messages=[
+            {"type": "file", "path": str(file_path), "text": "Open in a browser."}
+        ],
     )
 
     assert "Message sent to session" in result
-    ctx.context.context.send_message.assert_called_once()
+    caption, sent_file = ctx.context.context.send_message.await_args.args[1].chain
+    assert caption.text == "Open in a browser."
+    assert (await sent_file.to_dict())["data"]["name"] == file_path.name
+
+
+@pytest.mark.asyncio
+async def test_send_file_url_with_separate_caption():
+    ctx = _make_context()
+    url = "https://example.com/files/test%20report.html?download=1#preview"
+
+    await SendMessageToUserTool().call(
+        ctx,
+        messages=[
+            {"type": "plain", "text": "Open in a browser."},
+            {"type": "file", "url": url},
+        ],
+    )
+
+    caption, sent_file = ctx.context.context.send_message.await_args.args[1].chain
+    assert caption.text == "Open in a browser."
+    assert (await sent_file.to_dict())["data"] == {
+        "file": url,
+        "name": "test report.html",
+    }
 
 
 @pytest.mark.asyncio
@@ -395,7 +449,7 @@ async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch, scope):
     workspace_file.parent.mkdir(parents=True)
     workspace_file.write_text("result", encoding="utf-8")
     monkeypatch.setattr(
-        "astrbot.core.tools.computer_tools.util.get_astrbot_workspaces_path",
+        "astrbot.core.astr_agent_runtime.tools.computer_tools.util.get_astrbot_workspaces_path",
         lambda: str(workspace_root),
     )
 
@@ -421,7 +475,7 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
     output_path = temp_root / "output.txt"
     output_path.write_text("output", encoding="utf-8")
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -444,7 +498,7 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -468,7 +522,7 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
         return booter
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 
@@ -492,7 +546,7 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -514,7 +568,7 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
         return booter
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 
@@ -553,11 +607,11 @@ async def test_send_message_local_runtime_skips_sandbox_file_probe(
         raise AssertionError("local runtime must not query a sandbox booter")
 
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.workspace_root_for_context",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.workspace_root_for_context",
         mock_workspace_root_for_context,
     )
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_booter",
+        "astrbot.core.astr_agent_runtime.tools.message_tools.get_booter",
         mock_get_booter,
     )
 

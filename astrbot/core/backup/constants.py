@@ -6,18 +6,29 @@
 from sqlmodel import SQLModel
 
 from astrbot.core.db.po import (
+    AgentConfigRecord,
+    ApiKey,
     Attachment,
+    ChatRequestStat,
     ChatUIProject,
     CommandConfig,
     CommandConflict,
-    ConversationV2,
+    ConversationEvent,
+    ConversationV3,
+    CronJob,
+    DashboardTrustedDevice,
+    InteractiveViewActionRecord,
+    InteractiveViewRecord,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
+    UmoAlias,
+    UmoSender,
     WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
@@ -42,11 +53,18 @@ from astrbot.core.utils.astrbot_path import (
 # 主数据库模型类映射
 MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
-    "conversations": ConversationV2,
+    "conversations_v3": ConversationV3,
+    "conversation_events": ConversationEvent,
+    "provider_stats": ProviderStat,
+    "chat_request_stats": ChatRequestStat,
+    "agent_configs": AgentConfigRecord,
+    "cron_jobs": CronJob,
     "personas": Persona,
     "persona_folders": PersonaFolder,
     "preferences": Preference,
     "platform_message_history": PlatformMessageHistory,
+    "interactive_views": InteractiveViewRecord,
+    "interactive_view_actions": InteractiveViewActionRecord,
     "platform_sessions": PlatformSession,
     "webchat_threads": WebChatThread,
     "chatui_projects": ChatUIProject,
@@ -54,6 +72,14 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "attachments": Attachment,
     "command_configs": CommandConfig,
     "command_conflicts": CommandConflict,
+    "umo_aliases": UmoAlias,
+    "umo_senders": UmoSender,
+    "api_keys": ApiKey,
+}
+
+# Device trust must be re-established after restore, never copied from a backup.
+EXCLUDED_MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
+    "dashboard_trusted_devices": DashboardTrustedDevice,
 }
 
 # 知识库元数据模型类映射

@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
+from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
     get_astrbot_data_path,
@@ -37,6 +38,24 @@ _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
 def _normalize_skill_name(name: str | None) -> str:
     raw = str(name or "")
     return re.sub(r"\s+", "_", raw.strip())
+
+
+def _is_valid_skill_name(name: object) -> bool:
+    """Return whether a skill name is a safe single-segment directory name.
+
+    Args:
+        name: Candidate skill name supplied by a caller.
+
+    Returns:
+        True if the name cannot traverse outside the skills root.
+    """
+    return (
+        isinstance(name, str)
+        and bool(name.strip())
+        and name.rstrip(" .") not in {"", ".", ".."}
+        and not any(ch in name for ch in ("/", "\\", "\x00"))
+        and Path(name).parts == (name,)
+    )
 
 
 def _default_sandbox_skill_path(name: str) -> str:
@@ -267,9 +286,10 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         "*Never silently skip a matching skill* — either use it or briefly "
         "explain why you chose not to.\n"
         "3. **Mandatory grounding** — Before executing any skill you MUST "
-        "first read its `SKILL.md` by running a shell command compatible "
-        "with the current runtime shell and using the **absolute path** "
-        f"shown above (e.g. `{example_command}`). "
+        "first read its `SKILL.md` in full using the **absolute path** "
+        "shown above. Use an available, permitted file-reading tool first, "
+        "or an available, permitted shell command compatible with the "
+        f"current runtime shell (e.g. `{example_command}`). "
         "Never rely on memory or assumptions about a skill's content.\n"
         "4. **Progressive disclosure** — Load only what is directly "
         "referenced from `SKILL.md`:\n"
@@ -305,12 +325,18 @@ class SkillManager:
         """Return plugin-provided skill directories and preset status."""
         plugin_dirs: list[tuple[Path, bool]] = []
         plugins_root = Path(self.plugins_root)
-        if plugins_root.is_dir():
-            plugin_dirs.extend(
-                (plugin_dir, False)
-                for plugin_dir in plugins_root.iterdir()
-                if plugin_dir.is_dir()
-            )
+        try:
+            if plugins_root.is_dir():
+                for plugin_dir in plugins_root.iterdir():
+                    try:
+                        if plugin_dir.is_dir():
+                            plugin_dirs.append((plugin_dir, False))
+                    except OSError as exc:
+                        logger.warning(
+                            f"Skip unreadable plugin directory {plugin_dir}: {exc}"
+                        )
+        except OSError as exc:
+            logger.warning(f"Cannot list plugin directory {plugins_root}: {exc}")
 
         from astrbot.core.star.star import star_registry
 
@@ -320,11 +346,13 @@ class SkillManager:
             for metadata in star_registry
             if metadata.reserved and metadata.root_dir_name
         }
-        plugin_dirs.extend(
-            (builtin_plugins_root / plugin_name, True)
-            for plugin_name in builtin_plugin_names
-            if (builtin_plugins_root / plugin_name).is_dir()
-        )
+        for plugin_name in builtin_plugin_names:
+            plugin_dir = builtin_plugins_root / plugin_name
+            try:
+                if plugin_dir.is_dir():
+                    plugin_dirs.append((plugin_dir, True))
+            except OSError as exc:
+                logger.warning(f"Skip unreadable plugin directory {plugin_dir}: {exc}")
 
         result: list[tuple[str, str, Path, bool]] = []
         for plugin_dir, preset in sorted(
@@ -333,28 +361,41 @@ class SkillManager:
         ):
             plugin_name = plugin_dir.name
             skills_dir = plugin_dir / "skills"
-            if not skills_dir.is_dir():
-                continue
-
-            direct_skill_md = _normalize_skill_markdown_path(
-                skills_dir,
-                rename_legacy=False,
-            )
-            if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
-                result.append((plugin_name, plugin_name, skills_dir, preset))
-
-            for skill_dir in sorted(skills_dir.iterdir(), key=lambda item: item.name):
-                if not skill_dir.is_dir():
+            try:
+                if not skills_dir.is_dir():
                     continue
-                skill_name = skill_dir.name
-                if not _SKILL_NAME_RE.match(skill_name):
-                    continue
-                if (
-                    _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
-                    is None
+                direct_skill_md = _normalize_skill_markdown_path(
+                    skills_dir,
+                    rename_legacy=False,
+                )
+                if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
+                    result.append((plugin_name, plugin_name, skills_dir, preset))
+
+                for skill_dir in sorted(
+                    skills_dir.iterdir(), key=lambda item: item.name
                 ):
-                    continue
-                result.append((skill_name, plugin_name, skill_dir, preset))
+                    try:
+                        if not skill_dir.is_dir():
+                            continue
+                        skill_name = skill_dir.name
+                        if not _SKILL_NAME_RE.match(skill_name):
+                            continue
+                        if (
+                            _normalize_skill_markdown_path(
+                                skill_dir, rename_legacy=False
+                            )
+                            is None
+                        ):
+                            continue
+                        result.append((skill_name, plugin_name, skill_dir, preset))
+                    except OSError as exc:
+                        logger.warning(
+                            f"Skip unreadable plugin skill directory {skill_dir}: {exc}"
+                        )
+            except OSError as exc:
+                logger.warning(
+                    f"Skip unreadable plugin skills directory {skills_dir}: {exc}"
+                )
         return result
 
     def _get_plugin_skill_dir(self, name: str) -> Path | None:
@@ -552,12 +593,26 @@ class SkillManager:
             sandbox_cached_descriptions[name] = str(item.get("description", "") or "")
             sandbox_cached_paths[name] = path
 
-        for entry in sorted(Path(self.skills_root).iterdir()):
-            if not entry.is_dir():
-                continue
-            skill_name = entry.name
-            skill_md = _normalize_skill_markdown_path(entry)
-            if skill_md is None:
+        try:
+            local_skill_dirs = sorted(Path(self.skills_root).iterdir())
+        except OSError as exc:
+            # An unreadable skills root must not kill the whole agent request;
+            # mirror list_workspace_skills and continue with the other sources.
+            logger.warning(
+                f"Skill root {self.skills_root} is not readable, skipping local skills: {exc}"
+            )
+            local_skill_dirs = []
+
+        for entry in local_skill_dirs:
+            try:
+                if not entry.is_dir():
+                    continue
+                skill_name = entry.name
+                skill_md = _normalize_skill_markdown_path(entry)
+                if skill_md is None:
+                    continue
+            except OSError as exc:
+                logger.warning(f"Skip unreadable skill directory {entry}: {exc}")
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
             if skill_name not in skill_configs:
@@ -602,7 +657,15 @@ class SkillManager:
         ) in self._iter_plugin_skill_dirs():
             if skill_name in skills_by_name:
                 continue
-            skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+            try:
+                skill_md = _normalize_skill_markdown_path(
+                    skill_dir, rename_legacy=False
+                )
+            except OSError as exc:
+                logger.warning(
+                    f"Skip unreadable plugin skill directory {skill_dir}: {exc}"
+                )
+                continue
             if skill_md is None:
                 continue
             active = skill_configs.get(skill_name, {}).get("active", True)
@@ -683,8 +746,19 @@ class SkillManager:
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def is_sandbox_only_skill(self, name: str) -> bool:
-        skill_dir = Path(self.skills_root) / name
-        skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
+        if not _is_valid_skill_name(name):
+            return False
+        skills_root = Path(self.skills_root)
+        skill_dir = (
+            next((e for e in skills_root.iterdir() if e.name == name), None)
+            if skills_root.is_dir()
+            else None
+        )
+        skill_md_exists = (
+            skill_dir is not None
+            and _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+            is not None
+        )
         if skill_md_exists:
             return False
         cache = self._load_sandbox_skills_cache()
@@ -702,6 +776,8 @@ class SkillManager:
         return self._get_plugin_skill_dir(name) is not None
 
     def set_skill_active(self, name: str, active: bool) -> None:
+        if not _is_valid_skill_name(name):
+            raise ValueError(f"Invalid skill name: {name!r}")
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
                 "Sandbox preset skill cannot be enabled/disabled from local skill management."
@@ -730,6 +806,9 @@ class SkillManager:
             self._save_sandbox_skills_cache(cache)
 
     def delete_skill(self, name: str) -> None:
+        if not _is_valid_skill_name(name):
+            raise ValueError(f"Invalid skill name: {name!r}")
+
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
                 "Sandbox preset skill cannot be deleted from local skill management."
@@ -739,8 +818,13 @@ class SkillManager:
                 "Plugin-provided skill cannot be deleted from local skill management."
             )
 
-        skill_dir = Path(self.skills_root) / name
-        if skill_dir.exists():
+        skills_root = Path(self.skills_root).resolve(strict=False)
+        skill_dir = (
+            next((e for e in skills_root.iterdir() if e.name == name), None)
+            if skills_root.is_dir()
+            else None
+        )
+        if skill_dir is not None:
             shutil.rmtree(skill_dir)
 
         # Ensure UI consistency even when there is no active sandbox session
@@ -787,8 +871,9 @@ class SkillManager:
             archive_skill_name = None
             if skill_name_hint is not None:
                 archive_skill_name = _normalize_skill_name(skill_name_hint)
-                if archive_skill_name and not _SKILL_NAME_RE.fullmatch(
-                    archive_skill_name
+                if archive_skill_name and (
+                    archive_skill_name in {".", ".."}
+                    or not _SKILL_NAME_RE.fullmatch(archive_skill_name)
                 ):
                     raise ValueError("Invalid skill name.")
 
@@ -812,8 +897,10 @@ class SkillManager:
                         continue
 
                     candidate_name = _normalize_skill_name(src_dir_name)
-                    if not candidate_name or not _SKILL_NAME_RE.fullmatch(
-                        candidate_name
+                    if (
+                        not candidate_name
+                        or candidate_name in {".", ".."}
+                        or not _SKILL_NAME_RE.fullmatch(candidate_name)
                     ):
                         continue
 
@@ -844,7 +931,11 @@ class SkillManager:
                     archive_hint = _normalize_skill_name(
                         archive_skill_name or zip_path_obj.stem
                     )
-                    if not archive_hint or not _SKILL_NAME_RE.fullmatch(archive_hint):
+                    if (
+                        not archive_hint
+                        or archive_hint in {".", ".."}
+                        or not _SKILL_NAME_RE.fullmatch(archive_hint)
+                    ):
                         raise ValueError("Invalid skill name.")
                     skill_name = archive_hint
 
@@ -881,15 +972,17 @@ class SkillManager:
                         ):
                             continue
 
-                        if archive_root_name in {".", "..", ""} or not (
-                            _SKILL_NAME_RE.fullmatch(archive_root_name_normalized)
-                        ):
-                            continue
-
                         if archive_skill_name and len(top_dirs) == 1:
                             skill_name = archive_skill_name
                         else:
                             skill_name = archive_root_name_normalized
+
+                        if skill_name in {
+                            ".",
+                            "..",
+                            "",
+                        } or not _SKILL_NAME_RE.fullmatch(skill_name):
+                            continue
 
                         src_dir = Path(tmp_dir) / archive_root_name
                         normalized_path = _normalize_skill_markdown_path(src_dir)

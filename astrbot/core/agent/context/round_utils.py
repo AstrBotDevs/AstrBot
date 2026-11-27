@@ -20,13 +20,25 @@ def split_into_rounds(
 ) -> list[list[RoundSegment]]:
     """Split a flat contexts list into logical rounds.
 
-    A round begins at a ``user`` segment and includes all subsequent
-    ``assistant`` / ``tool`` segments until the next ``user`` segment.
+    A round begins at a user input and includes subsequent assistant, tool,
+    and generated user-role segments until the next user input. Generated
+    messages marked ``_turn_continuation`` do not start a new round.
+
+    Args:
+        contexts: Flat messages, optionally including a pre-user fragment.
+
+    Returns:
+        Logical rounds, with any pre-user fragment in a separate first group.
     """
     rounds: list[list[RoundSegment]] = []
     current: list[RoundSegment] = []
     for seg in contexts:
-        if _segment_role(seg) == "user" and current:
+        starts_turn = _segment_role(seg) == "user" and not (
+            seg._turn_continuation
+            if isinstance(seg, Message)
+            else seg.get("_turn_continuation", False)
+        )
+        if starts_turn and current:
             rounds.append(current)
             current = []
         current.append(seg)

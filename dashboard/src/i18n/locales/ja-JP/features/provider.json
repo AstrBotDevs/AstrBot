@@ -11,6 +11,7 @@
     "tabs": {
       "all": "すべて",
       "chatCompletion": "チャット",
+      "decision": "判定",
       "speechToText": "音声認識",
       "textToSpeech": "音声合成",
       "embedding": "埋め込み",
@@ -25,6 +26,25 @@
       "kimi_code": "Kimi Code の会話モデルを設定します。",
       "vllm_rerank": "Jina AI、Cohere、PPIO などのプロバイダーにも対応しています。",
       "default": ""
+    },
+    "decisionHints": {
+      "apiBase": "System One のエンドポイントです。ベース URL には /systemone が自動追加されます。末尾を / にするとそのまま使用します。",
+      "model": "System One のモデル ID（例: jev-latest、jev-preview、またはサービス指定のモデル名）。",
+      "customHeaders": "AstrBot の判定リクエストに追加する HTTP ヘッダーです。"
+    },
+    "openaiDecisionHints": {
+      "apiBase": "OpenAI API のベース URL（既定は https://api.openai.com/v1）。/decisions で終わらない場合は自動で追加されます。",
+      "model": "OpenAI Decisions は現在 gpt-6-luna に対応しています。"
+    },
+    "deepseekTtsHints": {
+      "apiBase": "DeepSeek TTS API のベース URL（既定は https://api.deepseek.com/v1）。/tools/tts は自動で追加されるため、/v1 を重複して追加しないでください。"
+    },
+    "deepseekSttHints": {
+      "apiBase": "DeepSeek STT API のベース URL（既定は https://api.deepseek.com/v1）。/tools/asr は自動で追加されるため、/v1 を重複して追加しないでください。"
+    },
+    "stepfunTtsHints": {
+      "model": "StepFun TTS のモデル ID。既定値は stepaudio-3-tts です。",
+      "apiBase": "中国向け API の既定値は https://api.stepfun.com/v1 です。中国国外では https://api.stepfun.ai/v1 を使用してください。Step Plan の場合は、中国向けは https://api.stepfun.com/step_plan/v1、中国国外向けは https://api.stepfun.ai/step_plan/v1 を使用してください。/audio/speech は自動で追加されます。"
     }
   },
   "availability": {
@@ -48,6 +68,7 @@
       "title": "モデルプロバイダー",
       "tabs": {
         "basic": "チャット",
+        "decision": "判定",
         "speechToText": "音声認識",
         "textToSpeech": "音声合成",
         "embedding": "埋め込み",

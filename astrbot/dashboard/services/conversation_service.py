@@ -48,6 +48,7 @@ class ConversationService:
         sort_by: str = "created_at",
         sort_order: str = "desc",
         group_by_session: bool = False,
+        group_webchat: bool = False,
         include_history: bool = True,
     ) -> dict:
         platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
@@ -80,6 +81,7 @@ class ConversationService:
                 sort_by=sort_by,
                 sort_order=sort_order,
                 group_by_session=group_by_session,
+                group_webchat=group_webchat,
                 include_history=include_history,
             )
         except Exception as exc:
@@ -178,7 +180,7 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        persona_id = payload.get("persona_id", conversation.persona_id)
+        persona_id = payload.get("persona_id")
 
         if title is not None or persona_id is not None:
             await self.conv_mgr.update_conversation(
@@ -218,11 +220,12 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        await self.conv_mgr.update_conversation(
+        writer = await self.conv_mgr.create_event_writer(
             unified_msg_origin=user_id,
             conversation_id=cid,
-            history=history,
+            expected_revision=conversation.revision,
         )
+        await writer.save_history(history, origin="user")
 
         return {"message": "对话历史更新成功"}
 

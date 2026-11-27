@@ -5,6 +5,7 @@ import typing
 from typing import Any
 
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from ..star_handler import StarHandlerMetadata
@@ -94,8 +95,21 @@ class CommandFilter(HandlerFilter):
         self,
         params: list[Any],
         param_type: dict[str, type],
+        locale: str = "zh-CN",
     ) -> dict[str, Any]:
-        """将参数列表 params 根据 param_type 转换为参数字典。"""
+        """Convert command arguments and localize validation errors.
+
+        Args:
+            params: Raw command arguments.
+            param_type: Parameter types or default values.
+            locale: Bot reply language for validation errors.
+
+        Returns:
+            Converted arguments keyed by parameter name.
+
+        Raises:
+            ValueError: An argument is missing, invalid, or incorrectly declared.
+        """
         result = {}
         param_items = list(param_type.items())
         for i, (param_name, param_type_or_default_val) in enumerate(param_items):
@@ -105,7 +119,7 @@ class CommandFilter(HandlerFilter):
                 # GreedyStr 必须是最后一个参数
                 if i != len(param_items) - 1:
                     raise ValueError(
-                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。",
+                        translate("greedy_param_not_last", locale, name=param_name),
                     )
 
                 # 将剩余的所有部分合并成一个字符串
@@ -121,7 +135,9 @@ class CommandFilter(HandlerFilter):
                 ):
                     # 是类型
                     raise ValueError(
-                        f"必要参数缺失。该指令完整参数: {self.print_types()}",
+                        translate(
+                            "missing_required_param", locale, params=self.print_types()
+                        ),
                     )
                 # 是默认值
                 result[param_name] = param_type_or_default_val
@@ -145,7 +161,9 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = False
                         else:
                             raise ValueError(
-                                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。",
+                                translate(
+                                    "invalid_boolean_param", locale, name=param_name
+                                ),
                             )
                     elif isinstance(param_type_or_default_val, int):
                         result[param_name] = int(params[i])
@@ -168,7 +186,12 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(
-                        f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
+                        translate(
+                            "invalid_param_type",
+                            locale,
+                            name=param_name,
+                            params=self.print_types(),
+                        ),
                     )
         return result
 
@@ -211,7 +234,9 @@ class CommandFilter(HandlerFilter):
         ls = [param for param in ls if param]
         params = {}
         try:
-            params = self.validate_and_convert_params(ls, self.handler_params)
+            params = self.validate_and_convert_params(
+                ls, self.handler_params, locale=get_config_locale(cfg)
+            )
         except ValueError as e:
             raise e
 

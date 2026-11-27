@@ -8,9 +8,11 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 from astrbot.core.message.components import (
+    ActionRow,
     At,
     AtAll,
     BaseMessageComponent,
+    Button,
     File,
     Image,
     Json,
@@ -20,9 +22,12 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.platform import MessageType
+from astrbot.core.platform.button_interaction import encode_button_callback
 
 from .kook_client import KookClient
 from .kook_types import (
+    ActionGroupModule,
+    ButtonElement,
     FileModule,
     KookCardMessage,
     KookCardMessageContainer,
@@ -132,6 +137,8 @@ class KookEvent(AstrMessageEvent):
                 return handle_plain(index, "(met)all(met)")
             case Reply():
                 return handle_plain(index, "", reply_id=message_component.id)
+            case ActionRow() | Button():
+                return asyncio.to_thread(self._wrap_buttons, index, message_component)
             case Json():
                 json_data = message_component.data
                 # kook卡片json外层得是一个列表
@@ -150,6 +157,77 @@ class KookEvent(AstrMessageEvent):
                     f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持'
                 )
 
+    def _wrap_buttons(self, index: int, component: ActionRow | Button) -> OrderMessage:
+        """Build a KOOK card with persisted callback tokens.
+
+        Args:
+            index: Component position within the original message.
+            component: Button or action row to render.
+
+        Returns:
+            The card, or its fallback text when the row is empty.
+
+        Raises:
+            ValueError: If the action or number of buttons is unsupported.
+        """
+        buttons = component.buttons if isinstance(component, ActionRow) else [component]
+        if not buttons:
+            fallback_text = (
+                component.fallback_text if isinstance(component, ActionRow) else ""
+            )
+            return OrderMessage(
+                index=index, text=fallback_text or "", type=KookMessageType.KMARKDOWN
+            )
+
+        theme_map = {
+            Button.Style.DEFAULT: "secondary",
+            Button.Style.PRIMARY: "primary",
+            Button.Style.SUCCESS: "success",
+            Button.Style.DANGER: "danger",
+        }
+        elements = []
+        for button in buttons:
+            if isinstance(button.action, Button.CallbackAction):
+                click = "return-val"
+                value = encode_button_callback(
+                    button.id,
+                    button.action.data,
+                    expires_at=component.action_expires_at
+                    if isinstance(component, ActionRow)
+                    else None,
+                )
+            elif isinstance(button.action, Button.UrlAction):
+                click = "link"
+                value = button.action.url
+            else:
+                raise ValueError(
+                    f"Unsupported KOOK button action: {button.action.type}"
+                )
+            elements.append(
+                ButtonElement(
+                    text=button.label,
+                    theme=theme_map[button.style],
+                    value=value,
+                    click=click,
+                )
+            )
+
+        modules = [
+            ActionGroupModule(elements=elements[offset : offset + 4])
+            for offset in range(0, len(elements), 4)
+        ]
+        cards = [
+            KookCardMessage(modules=modules[offset : offset + 50])
+            for offset in range(0, len(modules), 50)
+        ]
+        if len(cards) > 5:
+            raise ValueError("KOOK supports at most 1,000 buttons in one card message.")
+        return OrderMessage(
+            index=index,
+            text=KookCardMessageContainer(cards).to_json(),
+            type=KookMessageType.CARD,
+        )
+
     async def send(self, message: MessageChain):
         file_upload_tasks: list[Coroutine[Any, Any, OrderMessage]] = []
         for index, item in enumerate(message.chain):
@@ -163,6 +241,8 @@ class KookEvent(AstrMessageEvent):
 
         for index, result in enumerate(tasks_result):
             if isinstance(result, BaseException):
+                if isinstance(message.chain[index], (ActionRow, Button)):
+                    raise result
                 logger.error(f"[Kook] {result}")
                 # 构造一个虚假的 OrderMessage，让用户知道这里本来有张图但坏了
                 # 这样后面的 for 循环就能把它当成普通文本发出去

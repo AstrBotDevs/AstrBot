@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia';
+import { useCustomizerStore } from '@/stores/customizer';
+import { chatPreferences } from '@/utils/chatPreferences';
 import { router } from '@/router';
+import { getPluginInstallReturnUrl } from '@/utils/pluginInstallLink.mjs';
 import {
   authApi,
   providerApi,
@@ -10,6 +13,7 @@ import {
   type VersionData,
 } from '@/api/v1';
 import { httpClient } from '@/api/http';
+import { useProviderModelSelection } from '@/composables/useProviderModelSelection';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -22,6 +26,8 @@ export const useAuthStore = defineStore("auth", {
       this.username = data.username;
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
+      useProviderModelSelection();
+      useCustomizerStore().chatNavigationInSidebar = chatPreferences().global.navigationInSidebar === true;
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
       const md5PwdHint = !!data?.md5_pwd_hint;
       const passwordWarning =
@@ -44,13 +50,18 @@ export const useAuthStore = defineStore("auth", {
         localStorage.removeItem('password_upgrade_required');
       }
 
-      const onboardingCompleted = await this.checkOnboardingCompleted();
+      const installReturnUrl = getPluginInstallReturnUrl(
+        router,
+        router.currentRoute.value.query.redirect || this.returnUrl,
+      );
       this.returnUrl = null;
       if (passwordWarning) {
-        router.push('/auth/setup');
+        router.replace({ path: '/auth/setup', query: { redirect: installReturnUrl } });
         return;
       }
-      if (onboardingCompleted) {
+      if (installReturnUrl) {
+        router.replace(installReturnUrl);
+      } else if (await this.checkOnboardingCompleted()) {
         router.push('/dashboard/default');
       } else {
         router.push('/welcome');
@@ -173,11 +184,17 @@ export const useAuthStore = defineStore("auth", {
     },
     logout() {
       this.username = '';
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      localStorage.removeItem('change_pwd_hint');
-      localStorage.removeItem('md5_pwd_hint');
-      localStorage.removeItem('password_upgrade_required');
+      useProviderModelSelection().resetSelection();
+      useCustomizerStore().chatNavigationInSidebar = false;
+      try {
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        localStorage.removeItem('change_pwd_hint');
+        localStorage.removeItem('md5_pwd_hint');
+        localStorage.removeItem('password_upgrade_required');
+      } catch {
+        // Storage availability must not prevent logout or the in-memory reset.
+      }
       void authApi.logout().catch(() => undefined);
       router.push('/auth/login');
     },

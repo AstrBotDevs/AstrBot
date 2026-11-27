@@ -1,21 +1,33 @@
+import asyncio
 import json
 import mimetypes
 import shutil
+import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core.db.po import Attachment
+from astrbot.core.message import interactive_ui
 from astrbot.core.message.components import (
+    ActionRow,
+    Button,
+    ButtonInteraction,
     File,
     Image,
+    InteractiveView,
     Json,
     Plain,
     Record,
     Reply,
     Video,
 )
+from astrbot.core.message.interactive_ui import ViewError, resolve_view_spec
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.button_interaction import (
+    decode_button_callback_async,
+    encode_button_callback_async,
+)
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import MediaResolver
 
@@ -25,6 +37,85 @@ ReplyHistoryGetter = Callable[
     [Any],
     Awaitable[tuple[list[dict], str | None, str | None] | None],
 ]
+
+
+def resolve_view(
+    module: str, name: str, version: int | None = None, *, target: str | None = None
+):
+    """Resolve the HTML entry for a view rendered by the dashboard.
+
+    Args:
+        module: Module that owns the view.
+        name: View name declared by the plugin.
+        version: Required version of a persisted view.
+        target: Dashboard host to validate, or None for interactive messages.
+
+    Returns:
+        The plugin, its declaration, and the resolved HTML path.
+
+    Raises:
+        ViewError: If the view or its HTML entry is unavailable.
+    """
+    plugin, spec = resolve_view_spec(module, name, version, target=target)
+    root = Path(plugin.module.__file__).resolve().parent
+    entry = (root / spec.entry).resolve()
+    if spec.target == "plugin_page" and not entry.is_file():
+        entry = (root / "pages" / spec.name / "index.html").resolve()
+    if not entry.is_relative_to(root) or not entry.is_file():
+        raise ViewError("VIEW_UNAVAILABLE", "The view or its version is unavailable.")
+    return plugin, spec, entry
+
+
+async def serialize_webchat_view(
+    view: InteractiveView, session_id: str, history_platform_id: str
+) -> dict:
+    """Translate an interactive component into the WebChat view payload.
+
+    Args:
+        view: View reference sent by the message pipeline.
+        session_id: Destination conversation identifier.
+        history_platform_id: Destination history namespace.
+
+    Returns:
+        A WebChat message part with the card or its fallback text.
+    """
+    fallback = {"type": "plain", "text": view.fallback_text}
+    try:
+        record = await asyncio.to_thread(interactive_ui.view_store.get, view.view_id)
+    except ViewError:
+        return fallback
+    if (
+        record["platform_id"] != "webchat"
+        or record["session_id"] != session_id
+        or record["history_platform_id"] != history_platform_id
+    ):
+        return fallback
+    plugin, spec = resolve_view_spec(
+        record["module"], record["name"], record["version"]
+    )
+    return {
+        "type": "view",
+        "id": view.view_id,
+        "name": spec.name,
+        "text": view.fallback_text,
+        "title": view.title,
+        "target": spec.target,
+        "view_metadata": {
+            "name": spec.name,
+            "title": spec.title,
+            "description": spec.description,
+            "i18n": {
+                locale: {
+                    prefix: {spec.name: translations[prefix][spec.name]}
+                    for prefix in ("views", "pages")
+                    if isinstance(translations.get(prefix), dict)
+                    and isinstance(translations[prefix].get(spec.name), dict)
+                }
+                for locale, translations in plugin.i18n.items()
+            },
+        },
+    }
+
 
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
 
@@ -52,8 +143,11 @@ def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
 
 def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
     return any(
-        part.get("type") in ("plain", "image", "record", "file", "video")
-        and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        (
+            part.get("type") in ("plain", "image", "record", "file", "video")
+            and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        )
+        or (part.get("type") == "button_interaction" and part.get("callback_data"))
         for part in message_parts
     )
 
@@ -145,6 +239,38 @@ async def parse_webchat_message_parts(
             )
             continue
 
+        if part_type == "button_interaction":
+            callback_payload = part.get("callback_data")
+            if not isinstance(callback_payload, str):
+                if strict:
+                    raise ValueError("button_interaction part missing callback_data")
+                continue
+            try:
+                action_id, data = await decode_button_callback_async(
+                    callback_payload, allow_expired=True
+                )
+            except ValueError:
+                if strict:
+                    raise
+                continue
+            source_message_id = part.get("source_message_id")
+            components.append(
+                ButtonInteraction(
+                    action_id=action_id,
+                    data=data,
+                    interaction_id=str(part.get("interaction_id") or uuid.uuid4().hex),
+                    source_message_id=(
+                        str(source_message_id)
+                        if source_message_id is not None
+                        else None
+                    ),
+                    callback_data=callback_payload,
+                )
+            )
+            text_parts.append(action_id)
+            has_content = True
+            continue
+
         if part_type not in MEDIA_PART_TYPES:
             if strict:
                 raise ValueError(f"unsupported message part type: {part_type}")
@@ -224,6 +350,28 @@ async def build_webchat_message_parts(
                     "type": "reply",
                     "message_id": message_id,
                     "selected_text": str(part.get("selected_text", "")),
+                }
+            )
+            continue
+
+        if part_type == "button_interaction":
+            callback_payload = part.get("callback_data")
+            if not isinstance(callback_payload, str):
+                if strict:
+                    raise ValueError("button_interaction part missing callback_data")
+                continue
+            try:
+                await decode_button_callback_async(callback_payload, allow_expired=True)
+            except ValueError:
+                if strict:
+                    raise
+                continue
+            message_parts.append(
+                {
+                    "type": "button_interaction",
+                    "callback_data": callback_payload,
+                    "source_message_id": part.get("source_message_id"),
+                    "interaction_id": uuid.uuid4().hex,
                 }
             )
             continue
@@ -395,6 +543,8 @@ async def create_attachment_part_from_existing_file(
 async def message_chain_to_storage_message_parts(
     message_chain: MessageChain,
     *,
+    session_id: str,
+    history_platform_id: str = "webchat",
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
 ) -> list[dict]:
@@ -408,10 +558,35 @@ async def message_chain_to_storage_message_parts(
                 parts.append({"type": "plain", "text": comp.text})
             continue
 
+        if isinstance(comp, InteractiveView):
+            parts.append(
+                await serialize_webchat_view(comp, session_id, history_platform_id)
+            )
+            continue
+
         if isinstance(comp, Json):
             parts.append(
                 {"type": "plain", "text": json.dumps(comp.data, ensure_ascii=False)}
             )
+            continue
+
+        if isinstance(comp, ActionRow):
+            row_data = comp.toDict()["data"]
+            for button, serialized_button in zip(
+                comp.buttons,
+                row_data["buttons"],
+                strict=True,
+            ):
+                if isinstance(button.action, Button.CallbackAction):
+                    serialized_button["action"][
+                        "callback_data"
+                    ] = await encode_button_callback_async(
+                        button.id,
+                        button.action.data,
+                        expires_at=comp.action_expires_at,
+                    )
+                    serialized_button["action"].pop("data", None)
+            parts.append({"type": "actionrow", **row_data})
             continue
 
         if isinstance(comp, Image):

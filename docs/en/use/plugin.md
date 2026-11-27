@@ -43,7 +43,7 @@ The same workspace has **Skills**, **MCP Servers**, and **Handlers** tabs for sk
 
 ### 2. Choose a suitable plugin
 
-Search by plugin name or a keyword describing the feature you want. You can also filter by categories such as AI enhancement, entertainment, productivity, integrations, utilities, and others. Open a plugin's details and check:
+Search by plugin name or a keyword describing the feature you want. The **Category** dropdown has moved to a row of category filters above the plugin list. Select a category to filter the list. Each category shows its plugin count. If the current market source has no usable categories, the row shows only **All** and the total plugin count. If the row overflows, scroll horizontally or select the arrow to expand it. Open a plugin's details and check:
 
 - **Features and usage**: whether it meets your needs and whether you use it through commands, natural language, or another trigger.
 - **Supported platforms**: whether it works with your messaging platform. Some features depend on platform-specific APIs.
@@ -80,7 +80,7 @@ Examples here use the default `/` prefix. If you changed the wake prefix to `!`,
 
 The market is a place to discover and install community plugins. Installed plugins are managed on the **Installed** page; they run in your AstrBot environment, rather than in the market.
 
-The market provides search, categories, and sorting. Beginners can usually use the **default plugin source**. If needed, use plugin source management to add or switch custom sources. A source determines the plugin list you browse; adding a source does not install all its plugins.
+The market provides search and sorting. Category options come from the selected market source. Beginners can usually use the **default plugin source**. If needed, use plugin source management to add or switch custom sources. A source determines the plugin list you browse; adding a source does not install all its plugins.
 
 ::: warning Understand the source before installing
 Plugins run in AstrBot's Python environment. Install plugins from sources you trust. Inclusion in the market does not guarantee stability or security. Agent local isolation settings restrict agent execution; they do not automatically isolate arbitrary plugin code.
@@ -120,6 +120,8 @@ The following settings control different things:
 | Config → select a profile → Plugin | Which plugins that profile can use. By default, it uses all plugins that have not been closed; you can select a subset. Save the profile after changes. |
 | The persona's capabilities settings | Which tools and skills the current persona can use. For plugins with AI tools, check that the relevant tool is allowed here. |
 | Extensions → Handlers | Registered commands, function tools, and other handlers. Commands can have their own enabled state, name, and permission settings. |
+
+**Extensions → Handlers → Function Tools** lists tools provided by plugins. The profile's AI capability settings control Agent runtime tools such as web search. View MCP servers and their tools under **Extensions → MCP Servers**.
 
 **First check that the plugin is open, then check the profile and persona used by the current conversation.** Selecting a closed plugin in a profile does not open it. If you route platforms or conversations to different profiles, edit the one that actually applies.
 
@@ -188,7 +190,7 @@ If existing plugins do not meet your needs, you can build one in Python. Basic P
 1. **Create a project**: follow the [Plugin Development Guide](/en/dev/star/plugin-new.html) and create a repository from the [helloworld template](https://github.com/Soulter/helloworld). An `astrbot_plugin_` name prefix is recommended.
 2. **Set up development**: place the repository in AstrBot's `data/plugins/<plugin-directory>/` and fill in `metadata.yaml` so AstrBot can identify its name, version, author, and other metadata.
 3. **Build a minimal feature**: start with a command that receives a message and replies. See [Message Event Listening](/en/dev/star/guides/listen-message-event.html) and [Sending Messages](/en/dev/star/guides/send-message.html), then test with your bot.
-4. **Add capabilities gradually**: introduce [AI tools and model interaction](/en/dev/star/guides/ai.html), [plugin configuration](/en/dev/star/guides/plugin-config.html), [data storage](/en/dev/star/guides/storage.html), or [plugin pages](/en/dev/star/guides/plugin-pages.html) as needed. Reload through the WebUI after code changes.
+4. **Add capabilities gradually**: introduce [AI tools and model interaction](/en/dev/star/guides/ai.html), [plugin configuration](/en/dev/star/guides/plugin-config.html), [data storage](/en/dev/star/guides/storage.html), or [plugin pages](/en/dev/star/guides/plugin-views/plugin-page.html) as needed. Reload through the WebUI after code changes.
 5. **Document usage**: describe features, installation, commands or tools, configuration, dependencies, supported platforms, and version requirements in the README. Declare required Python dependencies and complete the plugin metadata.
 6. **Publish**: push the code to GitHub and follow the [publishing guide](/en/dev/star/plugin-publish.html) to submit through [AstrBot Cloud](https://cloud.astrbot.app/publish). Publishing requires an AstrBot Cloud account.
 

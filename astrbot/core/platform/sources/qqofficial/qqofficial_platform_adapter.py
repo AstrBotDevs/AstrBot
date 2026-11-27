@@ -14,11 +14,22 @@ import botpy.message
 from botpy import Client
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
+from botpy.interaction import Interaction
 from botpy.types.message import MarkdownPayload
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    At,
+    ButtonInteraction,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -29,9 +40,11 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
+from .qqofficial_group_info import get_qq_group
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 # remove logger handler
@@ -95,6 +108,12 @@ class PatchedC2CMessage(botpy.message.C2CMessage):
         super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
+    class _User(botpy.message.C2CMessage._User):
+        def __init__(self, data: dict[str, Any]) -> None:
+            super().__init__(data)
+            self.username = data.get("username")
+            self.avatar = data.get("avatar")
+
 
 class PatchedGroupMessage(botpy.message.GroupMessage):
     __slots__ = ("raw_data", "message_type", "msg_elements")
@@ -112,6 +131,7 @@ class PatchedGroupMessage(botpy.message.GroupMessage):
         def __init__(self, data: dict[str, Any]) -> None:
             self.id = data.get("id", None)
             self.username = data.get("username", None)
+            self.member_nickname = data.get("member_nickname")
             self.bot = data.get("bot", None)
             self.avatar = data.get("avatar", None)
             self.member_openid = data.get("member_openid", None)
@@ -162,6 +182,29 @@ def _ensure_group_message_create_parser() -> None:
         )
 
 
+async def _handle_interaction_create(client: Any, interaction: Interaction) -> None:
+    """Acknowledge and dispatch a QQ inline-keyboard click.
+
+    Args:
+        client: QQ websocket or webhook bot client.
+        interaction: QQ interaction payload parsed by qq-botpy.
+    """
+    if interaction.type != 11:
+        return
+    try:
+        abm = await asyncio.to_thread(
+            QQOfficialPlatformAdapter._parse_interaction_from_qqofficial, interaction
+        )
+    except ValueError as exc:
+        logger.warning("[QQOfficial] Ignore invalid button interaction: %s", exc)
+        await client.api.on_interaction_result(interaction.id, 1)
+        return
+
+    await client.api.on_interaction_result(interaction.id, 0)
+    client.platform.remember_session_scene(abm.session_id, interaction.scene)
+    client.platform.commit_event(client.platform.create_event(abm))
+
+
 class ManagedBotWebSocket(BotWebSocket):
     def __init__(self, session, connection: Any, client: botClient):
         super().__init__(session, connection)
@@ -197,15 +240,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message,
-            MessageType.GROUP_MESSAGE,
-            force_group_mention=True,
-        )
-        abm.group_id = cast(str, message.group_openid)
-        abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
-        self._commit(abm)
+        await self.on_group_message_create(message)
 
     async def on_group_message_create(
         self, message: botpy.message.GroupMessage
@@ -213,6 +248,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            bot=self,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -251,6 +287,14 @@ class botClient(Client):
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
+
+    async def on_interaction_create(self, interaction: Interaction) -> None:
+        """Handle a QQ inline-keyboard click.
+
+        Args:
+            interaction: QQ interaction payload parsed by qq-botpy.
+        """
+        await _handle_interaction_create(self, interaction)
 
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
@@ -295,19 +339,18 @@ class QQOfficialPlatformAdapter(Platform):
         self.secret = platform_config["secret"]
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
-        # 旧存档配置没有该键，缺省视为启用 Markdown，与历史行为一致
-        self.use_markdown_default = platform_config.get("use_markdown", True)
-
         if qq_group:
             self.intents = botpy.Intents(
                 public_messages=True,
                 public_guild_messages=True,
                 direct_message=guild_dm,
+                interaction=True,
             )
         else:
             self.intents = botpy.Intents(
                 public_guild_messages=True,
                 direct_message=guild_dm,
+                interaction=True,
             )
         self.client = botClient(
             intents=self.intents,
@@ -370,6 +413,25 @@ class QQOfficialPlatformAdapter(Platform):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
+        keyboard = None
+        if any(isinstance(part, ActionRow) for part in message_chain.chain):
+            keyboard = await asyncio.to_thread(
+                QQOfficialMessageEvent._parse_keyboard, message_chain
+            )
+        if keyboard and not plain_text:
+            plain_text = next(
+                (
+                    row.fallback_text
+                    for row in message_chain.chain
+                    if isinstance(row, ActionRow) and row.fallback_text
+                ),
+                "",
+            ) or " / ".join(
+                button.label
+                for row in message_chain.chain
+                if isinstance(row, ActionRow)
+                for button in row.buttons
+            )
         if (
             not plain_text
             and not image_path
@@ -377,6 +439,7 @@ class QQOfficialPlatformAdapter(Platform):
             and not record_file_path
             and not video_file_source
             and not file_source
+            and not keyboard
         ):
             return
 
@@ -400,13 +463,15 @@ class QQOfficialPlatformAdapter(Platform):
             return
 
         use_md = getattr(message_chain, "use_markdown_", None)
-        if use_md is False or (use_md is None and not self.use_markdown_default):
+        if use_md is False:
             payload: dict[str, Any] = {"content": plain_text}
         else:
             payload = {
                 "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
                 "msg_type": 2,
             }
+        if keyboard:
+            payload["keyboard"] = keyboard
         if msg_id and not allow_group_proactive_send:
             payload["msg_id"] = msg_id
         ret: Any = None
@@ -607,6 +672,70 @@ class QQOfficialPlatformAdapter(Platform):
         )
 
     @staticmethod
+    def _parse_interaction_from_qqofficial(
+        interaction: Interaction,
+    ) -> AstrBotMessage:
+        """Convert a QQ button interaction into an AstrBot message.
+
+        Args:
+            interaction: QQ inline-keyboard interaction.
+
+        Returns:
+            Normalized AstrBot message carrying a ButtonInteraction component.
+
+        Raises:
+            ValueError: The interaction lacks a routable button or session target.
+        """
+        resolved = interaction.data.resolved
+        button_id = str(resolved.button_id or "")
+        button_data = str(resolved.button_data or "")
+        try:
+            action_id, data = decode_button_callback(button_data, allow_expired=True)
+        except ValueError:
+            if button_data.startswith("astrbot:"):
+                raise
+            action_id = button_id or button_data
+            data = button_data or None
+        if not action_id:
+            raise ValueError("QQ button interaction has no button identifier.")
+
+        abm = AstrBotMessage()
+        abm.timestamp = int(time.time())
+        abm.raw_message = interaction
+        abm.message_id = str(interaction.id)
+        abm.self_id = str(interaction.application_id or "qq_official")
+        if interaction.scene == "group":
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.session_id = str(interaction.group_openid or "")
+            abm.group_id = abm.session_id
+            sender_id = str(interaction.group_member_openid or "")
+        elif interaction.scene == "guild":
+            abm.type = MessageType.GROUP_MESSAGE
+            abm.session_id = str(interaction.channel_id or "")
+            abm.group_id = abm.session_id
+            sender_id = str(resolved.user_id or "")
+        else:
+            abm.type = MessageType.FRIEND_MESSAGE
+            abm.session_id = str(interaction.user_openid or "")
+            sender_id = abm.session_id
+        if not abm.session_id or not sender_id:
+            raise ValueError("QQ button interaction has no session or sender target.")
+
+        component = ButtonInteraction(
+            action_id=action_id,
+            data=data,
+            interaction_id=str(interaction.id),
+            source_message_id=(
+                str(resolved.message_id) if resolved.message_id else None
+            ),
+            callback_data=button_data if button_data.startswith("astrbot:") else None,
+        )
+        abm.sender = MessageMember(sender_id)
+        abm.message = [component]
+        abm.message_str = ""
+        return abm
+
+    @staticmethod
     def _normalize_attachment_url(url: str | None) -> str:
         if not url:
             return ""
@@ -774,14 +903,77 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(rf"(?:[ \t]*{markup_pattern}[ \t]*)+", " ", content or "")
 
     @staticmethod
+    def _parse_ordered_mentions(
+        content: str | None,
+        mention_names: dict[str, str],
+    ) -> list[BaseMessageComponent]:
+        """Split group text into ordered Plain/At components at mention tags.
+
+        Args:
+            content: Raw QQ message content containing mention markup.
+            mention_names: Known mention identifiers mapped to usernames.
+
+        Returns:
+            Ordered components with each confirmed mention kept at its original position.
+        """
+        import re
+
+        content = content or ""
+        if not mention_names:
+            components: list[BaseMessageComponent] = []
+            parsed = QQOfficialPlatformAdapter._parse_face_message(content)
+            if parsed:
+                components.append(Plain(parsed))
+            return components
+        tag_pattern = re.compile(
+            "|".join(
+                rf'(?:<qqbot-at-user\s+id="{re.escape(mention_id)}"\s*/>|'
+                rf"<@!?{re.escape(mention_id)}>)"
+                for mention_id in sorted(mention_names, key=len, reverse=True)
+            )
+        )
+        components = []
+        cursor = 0
+        for match in tag_pattern.finditer(content):
+            text = content[cursor : match.start()]
+            if text:
+                components.append(
+                    Plain(QQOfficialPlatformAdapter._parse_face_message(text))
+                )
+            tag = match.group(0)
+            if tag.startswith("<qqbot-at-user"):
+                mention_id = re.search(r'id="([^"]*)"', tag).group(1)
+            else:
+                mention_id = tag[2:].lstrip("!")[:-1]
+            components.append(At(qq=mention_id, name=mention_names.get(mention_id, "")))
+            cursor = match.end()
+        tail = content[cursor:]
+        if tail:
+            components.append(
+                Plain(QQOfficialPlatformAdapter._parse_face_message(tail))
+            )
+        return components
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
         | botpy.message.DirectMessage
         | botpy.message.C2CMessage,
         message_type: MessageType,
-        force_group_mention: bool = False,
+        *,
+        bot: Client | None = None,
     ) -> AstrBotMessage:
+        """Parse a QQ message and optionally enrich its group before event creation.
+
+        Args:
+            message: Incoming QQ message with preserved raw payload fields.
+            message_type: AstrBot message type for this event.
+            bot: Authenticated client used for cached QQ group metadata lookups.
+
+        Returns:
+            Parsed message with available sender, group and message components.
+        """
         abm = AstrBotMessage()
         abm.type = message_type
         abm.timestamp = int(time.time())
@@ -844,7 +1036,9 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(
                     message.author.member_openid,
-                    getattr(message.author, "username", "") or "",
+                    getattr(message.author, "member_nickname", "")
+                    or getattr(message.author, "username", "")
+                    or "",
                 )
                 raw_data = getattr(message, "raw_data", {})
                 group_name = getattr(message, "group_name", None)
@@ -854,14 +1048,16 @@ class QQOfficialPlatformAdapter(Platform):
                     group_id=message.group_openid,
                     group_name=str(group_name) if group_name else None,
                 )
+                if bot is not None:
+                    await get_qq_group(bot, abm.group)
+                mentions = getattr(message, "mentions", None) or []
                 bot_mentions = [
                     mention
-                    for mention in (getattr(message, "mentions", None) or [])
+                    for mention in mentions
                     if getattr(mention, "is_you", False) is True
                     and getattr(mention, "id", None) is not None
                 ]
                 bot_mention_ids = [str(mention.id) for mention in bot_mentions]
-                group_mentioned = bool(bot_mention_ids) or force_group_mention
                 plain_content_raw = message.content or ""
                 for mention_id in bot_mention_ids:
                     plain_content_raw = (
@@ -874,11 +1070,18 @@ class QQOfficialPlatformAdapter(Platform):
                     plain_content_raw.strip()
                 )
                 abm.self_id = bot_mention_ids[0] if bot_mention_ids else "qq_official"
-                if group_mentioned:
-                    mention_name = (
-                        getattr(bot_mentions[0], "username", "") if bot_mentions else ""
+                mention_names = {
+                    str(mention.id): str(getattr(mention, "username", "") or "")
+                    for mention in mentions
+                    if getattr(mention, "id", None) is not None
+                }
+                msg.extend(
+                    QQOfficialPlatformAdapter._parse_ordered_mentions(
+                        message.content, mention_names
                     )
-                    msg.append(At(qq=abm.self_id, name=mention_name))
+                )
+                if not msg:
+                    msg.append(Plain(""))
             else:
                 abm.sender = MessageMember(
                     message.author.user_openid,
@@ -889,7 +1092,7 @@ class QQOfficialPlatformAdapter(Platform):
                 )
                 abm.self_id = "unknown_selfid"
                 msg.append(At(qq="qq_official"))
-            msg.append(Plain(abm.message_str))
+                msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
                 msg, message.attachments
             )
@@ -920,7 +1123,8 @@ class QQOfficialPlatformAdapter(Platform):
                 str(message.author.id),
                 str(message.author.username),
             )
-            msg.append(At(qq="qq_official"))
+            if isinstance(message, botpy.message.DirectMessage):
+                msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
 
             if isinstance(message, botpy.message.Message):

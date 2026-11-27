@@ -1,8 +1,10 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, provide, reactive, ref, type Ref } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
+
+import { streamViewAction, viewActionKey } from "@/utils/chatViews";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -19,8 +21,16 @@ export function buildChatRequestFlags(
 }
 
 export interface MessagePart {
+  view_metadata?: {
+    name: string;
+    title: string;
+    description: string;
+    i18n?: Record<string, unknown>;
+  };
   type: string;
   text?: string;
+  code?: string;
+  message?: string;
   think?: string;
   message_id?: string | number;
   selected_text?: string;
@@ -40,6 +50,8 @@ export interface ToolCall {
   result?: unknown;
   ts?: number;
   finished_ts?: number;
+  // "unknown": the turn ended before this call returned.
+  phase?: "unknown";
   [key: string]: unknown;
 }
 
@@ -63,7 +75,14 @@ export interface ChatRecord {
   created_at?: string;
   sender_id?: string;
   sender_name?: string;
-  llm_checkpoint_id?: string | null;
+  turn_id?: string | null;
+  context_event_id?: string | null;
+  can_fork?: boolean;
+  can_edit?: boolean;
+  can_retry?: boolean;
+  fork_unavailable_reason?: string | null;
+  edit_unavailable_reason?: string | null;
+  retry_unavailable_reason?: string | null;
   threads?: ChatThread[];
 }
 
@@ -80,7 +99,7 @@ export interface ChatThread {
   thread_id: string;
   parent_session_id: string;
   parent_message_id: number;
-  base_checkpoint_id: string;
+  base_event_id: string;
   selected_text: string;
   created_at?: string;
   updated_at?: string;
@@ -95,7 +114,7 @@ export interface ChatSessionProject {
 interface ActiveChatRun {
   run_id: string;
   session_id: string;
-  llm_checkpoint_id?: string | null;
+  turn_id?: string | null;
   status?: string;
   revision?: number;
   content?: ChatContent;
@@ -130,7 +149,7 @@ interface SendMessageStreamOptions {
   userRecord?: ChatRecord;
   botRecord: ChatRecord;
   skipUserHistory?: boolean;
-  llmCheckpointId?: string | null;
+  turnId?: string | null;
 }
 
 interface ContinueEditedMessageOptions {
@@ -146,6 +165,12 @@ interface CreateLocalExchangeOptions {
   sessionId: string;
   messageId: string;
   parts: MessagePart[];
+}
+
+interface SendButtonInteractionOptions {
+  sessionId: string;
+  sourceMessageId?: string | number;
+  callbackData: string;
 }
 
 interface UseMessagesOptions {
@@ -165,6 +190,36 @@ export function useMessages(options: UseMessagesOptions) {
     {},
   );
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
+
+  provide(viewActionKey, (viewId, input) => {
+    const sessionId = options.currentSessionId.value;
+    const messageId = input.interaction_id;
+    const botRecord = reactive<ChatRecord>({
+      id: `local-view-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: { type: "bot", message: [], reasoning: "", isLoading: true },
+    });
+    const connection: ActiveConnection = {
+      sessionId, messageId, transport: "sse", botRecord, botVisible: false,
+    };
+    let messageSaved = false;
+    return streamViewAction(viewId, input, (payload) => {
+      if (payload.type === "run_started") {
+        connection.runId = payload.data?.run_id;
+        return;
+      }
+      if (payload.type === "message_saved") messageSaved = true;
+      processStreamPayload(botRecord, payload, undefined, connection);
+      if (connection.botVisible) {
+        activeConnections[messageId] = connection;
+        options.onStreamUpdate?.(sessionId);
+      }
+    }, () => {
+      delete activeConnections[messageId];
+      if (messageSaved) void options.onSessionsChanged?.();
+    });
+  });
+
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
   const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
@@ -314,6 +369,8 @@ export function useMessages(options: UseMessagesOptions) {
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
       if (sessionLoadEpochs[sessionId] !== epoch) return;
+      // A completion refresh must not replace a new turn started during the fetch.
+      if (preserveLoadedPages && isSessionRunning(sessionId)) return;
       const previousPagination = paginationBySession[sessionId];
       if (preserveLoadedPages && previousPagination?.page > 1) {
         const refreshedById = new Map(
@@ -439,18 +496,18 @@ export function useMessages(options: UseMessagesOptions) {
     const run = activeRuns[0];
     if (!run?.run_id || isSessionRunning(sessionId)) return;
 
-    const checkpointId = run.llm_checkpoint_id || null;
+    const turnId = run.turn_id || null;
     const records = (messagesBySession[sessionId] || []).filter((record) => {
       return !(
-        checkpointId &&
-        record.llm_checkpoint_id === checkpointId &&
+        turnId &&
+        record.turn_id === turnId &&
         messageContent(record).type === "bot"
       );
     });
     const botRecord = normalizeHistoryRecord({
       id: `active-run-${run.run_id}`,
       content: run.content || { type: "bot", message: [] },
-      llm_checkpoint_id: checkpointId,
+      turn_id: turnId,
       created_at: new Date().toISOString(),
     });
     botRecord.content.isLoading = botRecord.content.message.length === 0;
@@ -530,7 +587,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord,
     userRecord,
     skipUserHistory = false,
-    llmCheckpointId = null,
+    turnId = null,
   }: SendMessageStreamOptions) {
     if (transport === "websocket") {
       startWebSocketStream(
@@ -557,7 +614,45 @@ export function useMessages(options: UseMessagesOptions) {
       selectedProvider,
       selectedModel,
       skipUserHistory,
-      llmCheckpointId,
+      turnId,
+    );
+  }
+
+  function sendButtonInteraction({
+    sessionId,
+    sourceMessageId,
+    callbackData,
+  }: SendButtonInteractionOptions) {
+    if (!sessionId || !callbackData) return;
+    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const botRecord = reactive<ChatRecord>({
+      id: `local-button-bot-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: {
+        type: "bot",
+        message: [],
+        reasoning: "",
+        isLoading: true,
+      },
+    });
+
+    startSseStream(
+      sessionId,
+      messageId,
+      [
+        {
+          type: "button_interaction",
+          callback_data: callbackData,
+          source_message_id: sourceMessageId,
+        },
+      ],
+      botRecord,
+      undefined,
+      true,
+      true,
+      "",
+      "",
+      true,
     );
   }
 
@@ -640,7 +735,7 @@ export function useMessages(options: UseMessagesOptions) {
       selectedProvider,
       selectedModel,
       true,
-      sourceRecord.llm_checkpoint_id || null,
+      sourceRecord.turn_id || null,
     );
   }
 
@@ -654,6 +749,12 @@ export function useMessages(options: UseMessagesOptions) {
   ) {
     if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
+    const records = messagesBySession[sessionId] || [];
+    const targetIndex = records.indexOf(botRecord);
+    const userRecord = records.slice(0, targetIndex).reverse().find(
+      (record) => record.content.type === "user" && record.turn_id === botRecord.turn_id,
+    );
+    if (targetIndex >= 0) messagesBySession[sessionId] = records.slice(0, targetIndex + 1);
 
     botRecord.id = `local-regenerate-${Date.now()}`;
     botRecord.created_at = new Date().toISOString();
@@ -671,6 +772,7 @@ export function useMessages(options: UseMessagesOptions) {
       transport: "sse",
       abort,
       botRecord,
+      userRecord,
       botVisible: true,
     };
     activeConnections[connection.messageId] = connection;
@@ -706,15 +808,19 @@ export function useMessages(options: UseMessagesOptions) {
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(
-          botRecord,
-          `\n\n${String((error as Error)?.message || error)}`,
-        );
+        appendError(botRecord, error, "connection_error");
         console.error("Regenerate failed:", error);
       }
     } finally {
       if (activeConnections[connection.messageId]?.abort === abort) {
         delete activeConnections[connection.messageId];
+        if (
+          !abort.signal.aborted &&
+          !connection.completed &&
+          !isSessionRunning(sessionId)
+        ) {
+          await loadSessionMessages(sessionId, true, false, true);
+        }
       }
       await options.onSessionsChanged?.();
     }
@@ -786,7 +892,7 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider: string,
     selectedModel: string,
     skipUserHistory = false,
-    llmCheckpointId: string | null = null,
+    turnId: string | null = null,
   ) {
     const abort = new AbortController();
     const connection: ActiveConnection = {
@@ -814,7 +920,7 @@ export function useMessages(options: UseMessagesOptions) {
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
-        _llm_checkpoint_id: llmCheckpointId || undefined,
+        _turn_id: turnId || undefined,
       }),
       signal: abort.signal,
     })
@@ -830,12 +936,19 @@ export function useMessages(options: UseMessagesOptions) {
       .catch((error) => {
         if (abort.signal.aborted) return;
         ensureBotRecordVisible(connection);
-        appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        appendError(botRecord, error, "connection_error");
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
         if (activeConnections[messageId]?.abort === abort) {
           delete activeConnections[messageId];
+          if (
+            !abort.signal.aborted &&
+            !connection.completed &&
+            !isSessionRunning(sessionId)
+          ) {
+            await loadSessionMessages(sessionId, true, false, true);
+          }
           await options.onSessionsChanged?.();
         }
       });
@@ -999,7 +1112,7 @@ export function useMessages(options: UseMessagesOptions) {
         if (!connection.botRecord) continue;
         connection.errorShown = true;
         ensureBotRecordVisible(connection);
-        appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+        appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
       }
     };
     ws.onclose = async () => {
@@ -1016,7 +1129,7 @@ export function useMessages(options: UseMessagesOptions) {
           connection.botRecord
         ) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
+          appendError(connection.botRecord, "WebSocket connection closed.", "connection_error");
         }
         delete activeConnections[connection.messageId];
       }
@@ -1046,7 +1159,7 @@ export function useMessages(options: UseMessagesOptions) {
         connection.errorShown = true;
         if (connection.botRecord) {
           ensureBotRecordVisible(connection);
-          appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+          appendError(connection.botRecord, "WebSocket connection failed.", "connection_error");
         }
         console.error("Failed to send WebSocket payload:", error);
         void finishWebSocketStream(sessionId, messageId);
@@ -1069,14 +1182,14 @@ export function useMessages(options: UseMessagesOptions) {
       const payload = JSON.parse(event.data);
       const payloadMessageId =
         payload?.message_id == null ? "" : String(payload.message_id);
-      let connection = payloadMessageId
+      const connection = payloadMessageId
         ? activeConnections[payloadMessageId]
-        : undefined;
-      if (!connection) {
-        const candidates = getWebSocketConnections(sessionId);
-        connection = candidates[0];
-      }
-      if (connection?.transport !== "websocket" || !connection.botRecord) {
+        : getWebSocketConnections(sessionId)[0];
+      if (
+        connection?.transport !== "websocket" ||
+        connection.sessionId !== sessionId ||
+        !connection.botRecord
+      ) {
         return;
       }
       processStreamPayload(
@@ -1120,12 +1233,18 @@ export function useMessages(options: UseMessagesOptions) {
   function ensureBotRecordVisible(connection: ActiveConnection) {
     const { botRecord, userRecord } = connection;
     if (!botRecord) return;
-    const records = messagesBySession[connection.sessionId] || [];
+    const records =
+      messagesBySession[connection.sessionId] ||
+      (messagesBySession[connection.sessionId] = []);
     if (records.includes(botRecord)) {
       connection.botVisible = true;
       return;
     }
-    if (!userRecord) return;
+    if (!userRecord) {
+      records.push(botRecord);
+      connection.botVisible = true;
+      return;
+    }
 
     const userIndex = records.indexOf(userRecord);
     let insertionAnchor = connection.deferredBeforeBot;
@@ -1213,13 +1332,13 @@ export function useMessages(options: UseMessagesOptions) {
       const snapshotRecord = normalizeHistoryRecord({
         id: `active-run-${snapshot.run_id || "unknown"}`,
         content: snapshot.content || { type: "bot", message: [] },
-        llm_checkpoint_id: snapshot.llm_checkpoint_id || null,
+        turn_id: snapshot.turn_id || null,
       });
       snapshotRecord.content.isLoading =
         snapshot.status === "running" &&
         snapshotRecord.content.message.length === 0;
       botRecord.content = snapshotRecord.content;
-      botRecord.llm_checkpoint_id = snapshotRecord.llm_checkpoint_id;
+      botRecord.turn_id = snapshotRecord.turn_id;
       void resolveRecordMedia([botRecord]);
       return;
     }
@@ -1227,8 +1346,8 @@ export function useMessages(options: UseMessagesOptions) {
       if (userRecord) {
         userRecord.id = data?.id || userRecord.id;
         userRecord.created_at = data?.created_at || userRecord.created_at;
-        userRecord.llm_checkpoint_id =
-          data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+        userRecord.turn_id =
+          data?.turn_id || userRecord.turn_id;
       }
       return;
     }
@@ -1236,8 +1355,8 @@ export function useMessages(options: UseMessagesOptions) {
       markMessageStarted(botRecord);
       botRecord.id = data?.id || botRecord.id;
       botRecord.created_at = data?.created_at || botRecord.created_at;
-      botRecord.llm_checkpoint_id =
-        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+      botRecord.turn_id =
+        data?.turn_id || botRecord.turn_id;
       if (data?.refs) {
         messageContent(botRecord).refs = data.refs;
       }
@@ -1250,7 +1369,14 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "error") {
       markMessageStarted(botRecord);
-      appendPlain(botRecord, `\n\n${String(data)}`);
+      appendError(botRecord, data);
+      // A failed run may send no "end", so mark unreturned calls here too; a
+      // late result clears the mark.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1273,7 +1399,15 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     if (msgType === "end") {
+      if (connection) connection.completed = true;
       markMessageStarted(botRecord);
+      // Calls still without a result when the turn ends never returned; the
+      // backend stores them the same way.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
 
@@ -1292,6 +1426,16 @@ export function useMessages(options: UseMessagesOptions) {
         return;
       }
       appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
+      return;
+    }
+
+    if ((msgType === "actionrow" || msgType === "view") && data && typeof data === "object") {
+      markMessageStarted(botRecord);
+      messageContent(botRecord).message.push({
+        ...(data as Record<string, unknown>),
+        type: msgType,
+        ...(msgType === "view" ? { workbenchLive: true } : {}),
+      });
       return;
     }
 
@@ -1344,6 +1488,7 @@ export function useMessages(options: UseMessagesOptions) {
     loadEarlierMessages,
     createLocalExchange,
     sendMessageStream,
+    sendButtonInteraction,
     editMessage,
     continueEditedMessage,
     regenerateMessage,
@@ -1537,6 +1682,13 @@ function partToPayload(part: MessagePart) {
       selected_text: part.selected_text || "",
     };
   }
+  if (part.type === "button_interaction") {
+    return {
+      type: "button_interaction",
+      callback_data: part.callback_data,
+      source_message_id: part.source_message_id,
+    };
+  }
   return {
     type: part.type,
     attachment_id: part.attachment_id,
@@ -1607,15 +1759,31 @@ function firstNonEmptyPartIndex(parts: MessagePart[]) {
   return parts.findIndex((part) => !isEmptyPlainPart(part));
 }
 
-export function appendPlain(record: ChatRecord, text: string, append = true) {
+/** Preserve error identity across stream transports and thread messages. */
+export function appendError(record: ChatRecord, error: unknown, code = "agent_error") {
   markMessageStarted(record);
+  const data = error && typeof error === "object"
+    ? error as { code?: unknown; message?: unknown }
+    : undefined;
+  record.content.message.push({
+    type: "error",
+    code: typeof data?.code === "string" ? data.code : code,
+    message: typeof data?.message === "string" ? data.message : payloadText(error),
+  });
+}
+
+export function appendPlain(record: ChatRecord, text: string, streaming = true) {
+  markMessageStarted(record);
+  if (!text) return;
   const content = record.content;
-  let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain") {
-    last = { type: "plain", text: "" };
-    content.message.push(last);
+  const last = content.message[content.message.length - 1];
+  if (last?.type !== "plain") {
+    content.message.push({ type: "plain", text });
+    return;
   }
-  last.text = append ? `${last.text || ""}${text}` : text;
+  const previousText = last.text || "";
+  const separator = !streaming && previousText ? "\n\n" : "";
+  last.text = `${previousText}${separator}${text}`;
 }
 
 export function appendReasoningPart(record: ChatRecord, text: string) {
@@ -1660,6 +1828,8 @@ export function finishToolCall(record: ChatRecord, result: any) {
     if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
+      // A late result supersedes an earlier "unknown" mark.
+      delete tool.phase;
       tool.result = result.result;
       tool.finished_ts = result.ts || Date.now() / 1000;
       return;

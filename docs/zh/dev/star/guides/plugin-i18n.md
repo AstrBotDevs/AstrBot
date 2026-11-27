@@ -2,6 +2,18 @@
 
 插件可以在自己的目录下提供 `.astrbot-plugin/i18n/*.json`，让 WebUI 根据当前语言显示插件名称、描述和配置项文案。
 
+## 消息回复语言
+
+插件可通过 `await self.context.get_locale(event.unified_msg_origin)` 获取当前会话的系统语言，返回 `zh-CN` 或 `en-US`。原先的 `self.context.locale(...)` 改为异步调用。此接口读取会话实际生效的配置，包括配置文件路由、会话覆盖和当前消息的配置快照。省略 UMO 时使用当前消息的会话，没有当前消息时使用默认配置。
+
+用户在 **平台与消息 → 基本 → 系统语言** 中设置 `platform_settings.locale`。缺失或不支持的语言值回退到 `zh-CN`；此项独立于 WebUI 界面语言。运行时翻译资源和格式化逻辑由插件自己维护，Core 仅提供语言查询接口。内置插件的示例可参考各自目录下的 `i18n.py`。插件需要自行提供回复翻译，例如：
+
+```python
+locale = await self.context.get_locale(event.unified_msg_origin)
+text = "操作成功。" if locale == "zh-CN" else "Operation successful."
+yield event.plain_result(text)
+```
+
 ## 目录结构
 
 ```text
@@ -19,12 +31,14 @@ your_plugin/
 当当前语言没有对应翻译、某个字段缺失，或语言文件不存在时，AstrBot 会回退到默认文案：
 
 - 插件名称、卡片短描述和描述回退到 `metadata.yaml` 中的 `display_name`、`short_desc`、`desc`。
-- 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`。
+- 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`、`subtitles`。
 - Page 文案回退到 Page 目录名、Page 默认标题或页面代码中提供的 fallback。
 
 ## 元数据
 
 `metadata` 用于覆盖插件在插件页展示的名称、卡片短描述和描述。
+
+侧栏的插件分组标题、悬浮提示和使用插件名称的默认标题也会读取当前语言的 `metadata.display_name`，切换语言后立即更新。侧栏只接受非空字符串；翻译缺失、为空白或类型无效时，依次回退到原始 `display_name`、`name`。已有 `views.<视图名>.title` 优先于 `pages.<视图名>.title` 的解析规则不变；分组内没有有效标题的视图仍显示目录名。路由、置顶和展开状态使用稳定的插件 ID 或视图路径，不随名称翻译变化。
 
 ```json
 {
@@ -54,7 +68,8 @@ your_plugin/
     "description": "Mode",
     "type": "string",
     "options": ["fast", "safe"],
-    "labels": ["Fast", "Safe"]
+    "labels": ["Fast", "Safe"],
+    "subtitles": ["Faster responses", "More conservative processing"]
   }
 }
 ```
@@ -70,13 +85,14 @@ your_plugin/
     },
     "mode": {
       "description": "模式",
-      "labels": ["快速", "安全"]
+      "labels": ["快速", "安全"],
+      "subtitles": ["更快响应", "更保守的处理"]
     }
   }
 }
 ```
 
-`options` 是配置保存值，不建议翻译。下拉框的展示文本请使用 `labels`。
+`options` 是配置保存值，不建议翻译。下拉框的展示文本请使用 `labels`。 `subtitles` 用于选项下方的说明，并与 `options` 按索引对应。
 
 ## 插件可视化视图
 
@@ -105,7 +121,7 @@ views/
 }
 ```
 
-`title` 会用于 WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
+`title` 会用于侧边栏、WebUI 外壳标题和插件详情页中的视图组件名称，`description` 会用于插件详情页中的视图组件描述。其他字段由页面通过 bridge 自行读取：
 
 ```js
 const bridge = window.AstrBotPluginView;

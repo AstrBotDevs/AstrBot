@@ -5,6 +5,7 @@ import json
 import random
 import re
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, Literal
 
 import httpx
@@ -42,6 +43,7 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
+from .chat_request import chat_request
 from .request_retry import retry_provider_request
 
 
@@ -563,20 +565,27 @@ class ProviderOpenAIOfficial(Provider):
             extra_body.update(custom_extra_body)
         self._apply_provider_specific_request_overrides(payloads, extra_body)
 
-        model = payloads.get("model", "").lower()
-
         self._sanitize_assistant_messages(payloads)
 
-        completion = await retry_provider_request(
+        async with chat_request(
+            self,
             "OpenAI",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.chat.completions.create(
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
+            conversation_id=conversation_id,
             max_attempts=request_max_retries,
-        )
+        ) as (completion, request):
+            if isinstance(completion, ChatCompletion):
+                usage = completion.usage
+                if usage is None and completion.choices:
+                    usage = getattr(completion.choices[0], "usage", None)
+                if usage is not None:
+                    request.usage = self._extract_usage(usage)
 
         if not isinstance(completion, ChatCompletion):
             raise Exception(
@@ -627,8 +636,27 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        stream = await retry_provider_request(
+        llm_response = LLMResponse("assistant", is_chunk=True)
+
+        state = ChatCompletionStreamState()
+
+        # Some OpenAI-compatible gateways replay the full tool call `id` or
+        # `function.name` on every chunk of one call, send the two fields on separate
+        # frames, stream the name in fragments, or omit `index` on continuation
+        # frames. The SDK concatenates every string field it receives, so a replayed
+        # name accumulates to "readreadread" (AstrBotDevs/AstrBot#7694) and a sparse
+        # upstream index is used as a position in its own tool call list. Keep one
+        # slot per call, forward only what the SDK has not accumulated yet, and hand
+        # out dense positions in the order the calls arrive: renumbering by upstream
+        # index is impossible here because earlier frames have already been yielded.
+        tool_call_slots: list[dict] = []
+        slot_of_index: dict[int, dict] = {}
+        slot_of_id: dict[str, dict] = {}
+
+        async with chat_request(
+            self,
             "OpenAI",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.chat.completions.create(
                 **payloads,
                 stream=True,
@@ -636,62 +664,116 @@ class ProviderOpenAIOfficial(Provider):
                 extra_headers=build_conversation_headers(conversation_id),
                 stream_options={"include_usage": True},
             ),
+            streaming=True,
+            conversation_id=conversation_id,
             max_attempts=request_max_retries,
-        )
+        ) as (stream, request):
+            async for chunk in stream:
+                choice = chunk.choices[0] if chunk.choices else None
+                delta = choice.delta if choice else None
+                choice_usage = getattr(choice, "usage", None)
+                if reported_usage := chunk.usage or choice_usage:
+                    request.usage = self._extract_usage(reported_usage)
 
-        llm_response = LLMResponse("assistant", is_chunk=True)
-
-        state = ChatCompletionStreamState()
-
-        async for chunk in stream:
-            choice = chunk.choices[0] if chunk.choices else None
-            delta = choice.delta if choice else None
-
-            if delta and (dtcs := delta.tool_calls):
-                for idx, tc in enumerate(dtcs):
-                    # siliconflow workaround
-                    if tc.function and tc.function.arguments:
-                        tc.type = "function"
-                    # Fix for #6661: Add missing 'index' field to tool_call deltas
-                    # Gemini and some OpenAI-compatible proxies omit this field
-                    if not hasattr(tc, "index") or tc.index is None:
-                        tc.index = idx
-            # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
-            # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
-            # refs: AstrBot#6689 / openai-python#5069 / #5047
-            # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
-            # 需要传给 state，否则最终 completion 会丢失 usage 信息
-            if delta is not None or chunk.usage:
-                try:
-                    state.handle_chunk(chunk)
-                except Exception as e:
-                    logger.error("Saving chunk state error: " + str(e))
-            # logger.debug(f"chunk delta: {delta}")
-            # handle the content delta
-            reasoning = self._extract_reasoning_content(chunk)
-            _y = False
-            llm_response.id = chunk.id
-            llm_response.reasoning_content = None
-            llm_response.completion_text = ""
-            if reasoning is not None:
-                llm_response.reasoning_content = reasoning
-                _y = True
-            if delta and delta.content:
-                # Don't strip streaming chunks to preserve spaces between words
-                completion_text = self._normalize_content(delta.content, strip=False)
-                llm_response.result_chain = MessageChain(
-                    chain=[Comp.Plain(completion_text)],
-                )
-                _y = True
-            if chunk.usage:
-                llm_response.usage = self._extract_usage(chunk.usage)
-            elif choice and (choice_usage := getattr(choice, "usage", None)):
-                # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
-                # See https://github.com/AstrBotDevs/AstrBot/issues/6614
-                llm_response.usage = self._extract_usage(choice_usage)
-                state.current_completion_snapshot.usage = choice_usage
-            if _y:
-                yield llm_response
+                if delta and (dtcs := delta.tool_calls):
+                    for idx, tc in enumerate(dtcs):
+                        # siliconflow workaround
+                        if tc.function and tc.function.arguments:
+                            tc.type = "function"
+                        # Fix for #6661: Add missing 'index' field to tool_call deltas
+                        # Gemini and some OpenAI-compatible proxies omit this field
+                        if not hasattr(tc, "index") or tc.index is None:
+                            tc.index = idx
+                    # Normalize the replayed identity and the sparse upstream indices,
+                    # see the comment above `tool_call_slots`.
+                    for tc in dtcs:
+                        incoming_id = tc.id or ""
+                        incoming_name = (
+                            tc.function.name if tc.function and tc.function.name else ""
+                        )
+                        slot = slot_of_id.get(incoming_id) if incoming_id else None
+                        if slot is None and tc.index is not None:
+                            slot = slot_of_index.get(tc.index)
+                        if slot is None and not incoming_id and not incoming_name:
+                            # A continuation frame without identity belongs to the call
+                            # that is still streaming.
+                            slot = tool_call_slots[-1] if tool_call_slots else None
+                        if (
+                            slot is not None
+                            and incoming_id
+                            and slot["id"]
+                            and not incoming_id.startswith(slot["id"])
+                            and not slot["id"].startswith(incoming_id)
+                        ):
+                            # The same incoming index now carries a different call.
+                            slot = None
+                        if slot is None:
+                            slot = {
+                                "id": "",
+                                "name": "",
+                                "position": len(tool_call_slots),
+                            }
+                            tool_call_slots.append(slot)
+                        # Forward only the part the SDK has not accumulated yet: a replayed
+                        # value contributes nothing, a fragment is appended as it arrives.
+                        id_delta = (
+                            incoming_id[len(slot["id"]) :]
+                            if incoming_id.startswith(slot["id"])
+                            else incoming_id
+                        )
+                        name_delta = (
+                            incoming_name[len(slot["name"]) :]
+                            if incoming_name.startswith(slot["name"])
+                            else incoming_name
+                        )
+                        slot["id"] += id_delta
+                        slot["name"] += name_delta
+                        if tc.index is not None:
+                            slot_of_index[tc.index] = slot
+                        if slot["id"]:
+                            slot_of_id[slot["id"]] = slot
+                        tc.index = slot["position"]
+                        tc.id = id_delta
+                        if tc.function:
+                            tc.function.name = name_delta
+                # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
+                # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
+                # refs: AstrBot#6689 / openai-python#5069 / #5047
+                # 例外：流末尾的 usage chunk（choices=[]，delta=None 但有 usage 数据）
+                # 需要传给 state，否则最终 completion 会丢失 usage 信息
+                if delta is not None or chunk.usage:
+                    try:
+                        state.handle_chunk(chunk)
+                    except Exception as e:
+                        logger.error("Saving chunk state error: " + str(e))
+                # logger.debug(f"chunk delta: {delta}")
+                # handle the content delta
+                reasoning = self._extract_reasoning_content(chunk)
+                _y = False
+                llm_response.id = chunk.id
+                llm_response.reasoning_content = None
+                llm_response.completion_text = ""
+                if reasoning is not None:
+                    llm_response.reasoning_content = reasoning
+                    _y = True
+                if delta and delta.content:
+                    # Don't strip streaming chunks to preserve spaces between words
+                    completion_text = self._normalize_content(
+                        delta.content, strip=False
+                    )
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(completion_text)],
+                    )
+                    _y = True
+                if reported_usage is not None:
+                    llm_response.usage = request.usage
+                if not chunk.usage and choice_usage:
+                    # Some gateways only return usage on the choice (AstrBot #6614).
+                    state.current_completion_snapshot.usage = choice_usage
+                if _y or (delta and delta.tool_calls):
+                    request.mark_first_token()
+                if _y:
+                    yield llm_response
 
         try:
             final_completion = state.get_final_completion()
@@ -729,16 +811,16 @@ class ProviderOpenAIOfficial(Provider):
         return reasoning_attr
 
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
-        ptd = getattr(usage, "prompt_tokens_details", None)
-        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-        cached = (
-            cached if isinstance(cached, int) else 0
-        )  # ptd.cached_tokens 可能为None
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
+        if isinstance(usage, dict):
+            usage = CompletionUsage.model_construct(**usage)
+        details = usage.prompt_tokens_details
+        if isinstance(details, dict):
+            cached = details.get("cached_tokens") or 0
+        else:
+            cached = getattr(details, "cached_tokens", 0) or 0
+        cached = cached if isinstance(cached, int) else 0
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-        cached = cached or 0
-        prompt_tokens = prompt_tokens or 0
-        completion_tokens = completion_tokens or 0
         return TokenUsage(
             input_other=prompt_tokens - cached,
             input_cached=cached,
@@ -1265,7 +1347,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1 or llm_response is None:
+        if llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
@@ -1315,13 +1397,16 @@ class ProviderOpenAIOfficial(Provider):
                 query_kwargs = {}
                 if conversation_id:
                     query_kwargs["conversation_id"] = conversation_id
-                async for response in self._query_stream(
-                    payloads,
-                    func_tool,
-                    request_max_retries=request_max_retries,
-                    **query_kwargs,
-                ):
-                    yield response
+                async with aclosing(
+                    self._query_stream(
+                        payloads,
+                        func_tool,
+                        request_max_retries=request_max_retries,
+                        **query_kwargs,
+                    )
+                ) as responses:
+                    async for response in responses:
+                        yield response
                 break
             except Exception as e:
                 last_exception = e

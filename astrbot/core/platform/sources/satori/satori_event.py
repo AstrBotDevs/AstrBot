@@ -1,9 +1,12 @@
+import html
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    ActionRow,
     At,
+    Button,
     File,
     Forward,
     Image,
@@ -15,6 +18,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -378,9 +382,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"图片转换为base64失败: {e}")
 
             elif isinstance(component, File):
-                return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
-                )
+                src = html.escape(component.file, quote=True)
+                name = html.escape(component.name or "文件", quote=True)
+                return f'<file src="{src}" name="{name}"/>'
 
             elif isinstance(component, Record):
                 try:
@@ -403,6 +407,53 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
+
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, Button.CallbackAction):
+                        callback_id = html.escape(
+                            await encode_button_callback_async(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, Button.UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""
@@ -471,9 +522,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"图片转换为base64失败: {e}")
 
             elif isinstance(component, File):
-                return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
-                )
+                src = html.escape(component.file, quote=True)
+                name = html.escape(component.name or "文件", quote=True)
+                return f'<file src="{src}" name="{name}"/>'
 
             elif isinstance(component, Record):
                 try:
@@ -496,6 +547,53 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
+
+            elif isinstance(component, (ActionRow, Button)):
+                buttons = (
+                    component.buttons
+                    if isinstance(component, ActionRow)
+                    else [component]
+                )
+                if not buttons:
+                    fallback_text = (
+                        component.fallback_text
+                        if isinstance(component, ActionRow)
+                        else ""
+                    )
+                    return html.escape(fallback_text or "")
+
+                theme_map = {
+                    Button.Style.DEFAULT: "secondary",
+                    Button.Style.PRIMARY: "primary",
+                    Button.Style.SUCCESS: "success",
+                    Button.Style.DANGER: "danger",
+                }
+                button_elements = []
+                for button in buttons:
+                    label = html.escape(button.label)
+                    theme = theme_map[button.style]
+                    if isinstance(button.action, Button.CallbackAction):
+                        callback_id = html.escape(
+                            await encode_button_callback_async(
+                                button.id,
+                                button.action.data,
+                                expires_at=component.action_expires_at
+                                if isinstance(component, ActionRow)
+                                else None,
+                            ),
+                            quote=True,
+                        )
+                        button_elements.append(
+                            f'<button id="{callback_id}" type="action" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                    elif isinstance(button.action, Button.UrlAction):
+                        href = html.escape(button.action.url, quote=True)
+                        button_elements.append(
+                            f'<button type="link" href="{href}" '
+                            f'theme="{theme}">{label}</button>'
+                        )
+                return "".join(button_elements)
 
             # 对于其他未处理的组件类型，返回空字符串
             return ""

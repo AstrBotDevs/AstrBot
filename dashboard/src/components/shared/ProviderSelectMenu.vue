@@ -17,9 +17,6 @@
         >
           <span class="provider-trigger-copy">
             <span class="provider-trigger-title">{{ triggerTitle }}</span>
-            <span v-if="triggerMeta" class="provider-trigger-meta">
-              {{ triggerMeta }}
-            </span>
           </span>
           <v-icon class="provider-trigger-chevron" size="18">
             mdi-chevron-down
@@ -167,10 +164,18 @@
               @click="clearSelection"
             >
               <v-list-item-title class="provider-item-title">
-                {{ sharedTm("providerSelector.clearSelection") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelection")
+                    : sharedTm("providerSelector.defaultModel")
+                }}
               </v-list-item-title>
               <v-list-item-subtitle class="provider-subtitle">
-                {{ sharedTm("providerSelector.clearSelectionSubtitle") }}
+                {{
+                  variant === "config"
+                    ? sharedTm("providerSelector.clearSelectionSubtitle")
+                    : sharedTm("providerSelector.defaultModelSubtitle")
+                }}
               </v-list-item-subtitle>
               <template #append>
                 <v-icon
@@ -417,7 +422,7 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ providerEditDialogTitle }}
       </v-card-title>
-      <v-card-text class="py-4">
+      <v-card-text class="py-4 config-form">
         <AstrBotConfig
           v-if="providerEditData"
           :iterable="providerEditData"
@@ -575,13 +580,6 @@ const triggerTitle = computed(() => {
     return sharedTm("providerSelector.defaultModel");
   if (props.variant === "input") return sharedTm("providerSelector.model");
   return sharedTm("providerSelector.notSelected");
-});
-
-const triggerMeta = computed(() => {
-  if (props.variant !== "header") return "";
-  const model = selectedProvider.value?.model || props.fallbackModel;
-  if (!model || model === triggerTitle.value) return "";
-  return model;
 });
 
 const menuLocation = computed(() => {
@@ -942,8 +940,7 @@ defineExpose({ getCurrentSelection });
   gap: 10px;
 }
 
-.provider-trigger-title,
-.provider-trigger-meta {
+.provider-trigger-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -979,13 +976,6 @@ defineExpose({ getCurrentSelection });
   line-height: 24px;
 }
 
-.provider-trigger--header .provider-trigger-meta {
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-}
-
 .provider-trigger--input {
   height: 40px;
   max-width: min(280px, 42vw);
@@ -1004,13 +994,14 @@ defineExpose({ getCurrentSelection });
   font-weight: 500;
 }
 
-.provider-trigger--input .provider-trigger-meta {
-  display: none;
-}
-
 .provider-trigger-chevron {
   flex: 0 0 auto;
   opacity: 0.64;
+}
+
+.provider-menu-card,
+.provider-source-menu {
+  --astrbot-menu-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
 }
 
 .provider-menu-card {
@@ -1019,12 +1010,12 @@ defineExpose({ getCurrentSelection });
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
   border-radius: 14px !important;
   background: rgb(var(--v-theme-surface));
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 :global(.v-overlay.v-menu .v-overlay__content > .provider-menu-card) {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 .provider-menu-body {
@@ -1119,6 +1110,9 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item {
+  /* Keep the selected fill from accumulating a second state overlay. */
+  --v-hover-opacity: 0;
+  --v-activated-opacity: 0;
   height: 54px;
   min-height: 54px !important;
   margin: 0 0 2px !important;
@@ -1145,8 +1139,12 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item.v-list-item--active {
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.06);
   color: rgb(var(--v-theme-on-surface));
+}
+
+.provider-menu-item.v-list-item--active:hover {
+  background: rgba(var(--v-theme-on-surface), 0.09);
 }
 
 .provider-item-title {
@@ -1270,10 +1268,6 @@ defineExpose({ getCurrentSelection });
 }
 
 @media (max-width: 768px) {
-  .provider-trigger--header .provider-trigger-meta {
-    display: none;
-  }
-
   .provider-trigger--input {
     height: 38px;
     max-width: 48vw;
@@ -1308,3 +1302,5 @@ defineExpose({ getCurrentSelection });
   }
 }
 </style>
+
+<style scoped src="@/styles/config-form.css"></style>

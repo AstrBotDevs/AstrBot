@@ -2,6 +2,7 @@ import base64
 import builtins
 import json
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any, Literal
 
 import anthropic
@@ -29,7 +30,8 @@ from astrbot.core.utils.network_utils import (
 
 from ..headers import build_conversation_headers, build_provider_headers
 from ..register import register_provider_adapter
-from .request_retry import retry_provider_request, retry_provider_request_context
+from .chat_request import chat_request
+from .request_retry import retry_provider_request
 
 
 @register_provider_adapter(
@@ -112,11 +114,18 @@ class ProviderAnthropic(Provider):
         self.chosen_api_key: str = ""
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
+        # SDK 2.x uses Bearer auth; compatible endpoints may require X-Api-Key.
+        default_headers = {"X-Api-Key": self.chosen_api_key}
+        for name, value in (self.custom_headers or {}).items():
+            # Match older SDK casing to avoid duplicate API key headers.
+            name = "X-Api-Key" if name.lower() == "x-api-key" else name
+            default_headers[name] = value
         self.client = AsyncAnthropic(
             api_key=self.chosen_api_key,
             timeout=self.timeout,
+            max_retries=0,  # Retry each attempt through the AstrBot request wrapper.
             base_url=self.base_url,
-            default_headers=self.custom_headers,
+            default_headers=default_headers,
             http_client=self._create_http_client(provider_config),
         )
 
@@ -552,16 +561,21 @@ class ProviderAnthropic(Provider):
         self._sanitize_assistant_messages(payloads)
 
         try:
-            completion = await retry_provider_request(
+            async with chat_request(
+                self,
                 "Anthropic",
+                extra_body.get("model") or payloads.get("model") or self.get_model(),
                 lambda: self.client.messages.create(
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
                     extra_headers=build_conversation_headers(conversation_id),
                 ),
+                conversation_id=conversation_id,
                 max_attempts=request_max_retries,
-            )
+            ) as (completion, request):
+                if isinstance(completion, Message) and completion.usage is not None:
+                    request.usage = self._extract_usage(completion.usage)
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
             log_connection_failure("Anthropic", e, proxy)
@@ -582,10 +596,12 @@ class ProviderAnthropic(Provider):
 
         llm_response = LLMResponse(role="assistant")
 
+        text_parts: list[str] = []
         for content_block in completion.content:
             if content_block.type == "text":
-                completion_text = str(content_block.text).strip()
-                llm_response.completion_text = completion_text
+                # Responses with web search/citations carry several text blocks;
+                # concatenate them like the streaming path does.
+                text_parts.append(str(content_block.text))
 
             if content_block.type == "thinking":
                 reasoning_content = str(content_block.thinking).strip()
@@ -596,6 +612,9 @@ class ProviderAnthropic(Provider):
                 llm_response.tools_call_args.append(content_block.input)
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
+
+        if text_parts:
+            llm_response.completion_text = "".join(text_parts).strip()
 
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)
@@ -670,21 +689,27 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
-        async with retry_provider_request_context(
+        async with chat_request(
+            self,
             "Anthropic",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.messages.stream(
                 **payloads,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
+            conversation_id=conversation_id,
             max_attempts=request_max_retries,
-        ) as stream:
+            streaming=True,
+        ) as (stream, request):
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
                 if event.type == "message_start":
                     # the usage contains input token usage
                     id = event.message.id
                     usage = self._extract_usage(event.message.usage)
+                    if event.message.usage is not None:
+                        request.usage = usage
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
                         # 文本块开始
@@ -709,6 +734,7 @@ class ProviderAnthropic(Provider):
                         }
 
                 elif event.type == "content_block_delta":
+                    request.mark_first_token()
                     if event.delta.type == "text_delta":
                         # 文本增量
                         final_text += event.delta.text
@@ -783,6 +809,7 @@ class ProviderAnthropic(Provider):
                 elif event.type == "message_delta":
                     if event.usage:
                         self._update_usage(usage, event.usage)
+                        request.usage = usage
 
         # 返回最终的完整结果
         final_response = LLMResponse(
@@ -951,13 +978,16 @@ class ProviderAnthropic(Provider):
         query_kwargs = {}
         if conversation_id:
             query_kwargs["conversation_id"] = conversation_id
-        async for llm_response in self._query_stream(
-            payloads,
-            func_tool,
-            request_max_retries=request_max_retries,
-            **query_kwargs,
-        ):
-            yield llm_response
+        async with aclosing(
+            self._query_stream(
+                payloads,
+                func_tool,
+                request_max_retries=request_max_retries,
+                **query_kwargs,
+            )
+        ) as responses:
+            async for llm_response in responses:
+                yield llm_response
 
     def _detect_image_mime_type(self, data: bytes) -> str:
         """根据图片二进制数据的 magic bytes 检测 MIME 类型"""

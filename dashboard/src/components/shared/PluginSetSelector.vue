@@ -71,7 +71,7 @@
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
         <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
-          {{ tm('pluginSetSelector.notSelected') }}
+          {{ selectionOnly ? configTm('overrides.emptyValue') : tm('pluginSetSelector.notSelected') }}
         </span>
         <span v-else-if="isAllPlugins" style="color: rgb(var(--v-theme-primaryText));">
           {{ tm('pluginSetSelector.allPlugins') }}
@@ -98,7 +98,7 @@
         
         <div v-if="!loading">
           <!-- 预设选项 -->
-          <v-radio-group v-model="selectionMode" class="mb-4" hide-details>
+          <v-radio-group v-if="!selectionOnly" v-model="selectionMode" class="mb-4" hide-details>
             <v-radio 
               value="all" 
               :label="tm('pluginSetSelector.enableAll')" 
@@ -117,7 +117,7 @@
           </v-radio-group>
 
           <!-- 自定义选择时显示插件列表 -->
-          <div v-if="selectionMode === 'custom'" style="max-height: 300px; overflow-y: auto;">
+          <div v-if="selectionOnly || selectionMode === 'custom'" style="max-height: 300px; overflow-y: auto;">
             <v-list v-if="pluginList.length > 0" density="compact">
               <v-list-item
                 v-for="plugin in pluginList"
@@ -176,6 +176,7 @@ import { useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
 
 const props = defineProps({
+  selectionOnly: { type: Boolean, default: false },
   modelValue: {
     type: Array,
     default: () => []
@@ -200,6 +201,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 const { tm } = useModuleI18n('core.shared')
+const { tm: configTm } = useModuleI18n('features.config')
 const { pluginName, pluginDesc } = usePluginI18n()
 
 const dialog = ref(false)
@@ -339,7 +341,7 @@ onMounted(() => {
 function confirmSelection() {
   let newValue = []
   
-  switch (selectionMode.value) {
+  switch (props.selectionOnly ? 'custom' : selectionMode.value) {
     case 'all':
       newValue = ['*']
       break

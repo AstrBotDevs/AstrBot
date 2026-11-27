@@ -8,6 +8,7 @@ import { useCustomizerStore } from '@/stores/customizer';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { authApi } from '@/api/v1';
+import { getPluginInstallReturnUrl } from '@/utils/pluginInstallLink.mjs';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -34,6 +35,7 @@ const currentThemeIcon = computed(() => {
 
 onMounted(async () => {
   const hasToken = authStore.has_token();
+  const redirect = getPluginInstallReturnUrl(router, router.currentRoute.value.query.redirect);
 
   try {
     const setupStatus = await authApi.setupStatus();
@@ -43,10 +45,10 @@ onMounted(async () => {
       !setupRequired ||
       (!hasToken && !canSkipDefaultPassword)
     ) {
-      router.push('/auth/login');
+      router.replace({ path: '/auth/login', query: { redirect } });
     }
   } catch {
-    router.push('/auth/login');
+    router.replace({ path: '/auth/login', query: { redirect } });
   }
 });
 </script>

@@ -17,7 +17,16 @@ import qrcode as qrcode_lib
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    ActionRow,
+    Button,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -927,6 +936,19 @@ class WeixinOCAdapter(Platform):
                 self._format_api_error(payload),
             )
             return False
+        message_id = str(
+            payload.get("message_id") or payload.get("msg_id") or ""
+        ).strip()
+        if not message_id:
+            logger.warning(
+                "weixin_oc(%s): sendmessage returned success without message_id for %s; "
+                "treating it as a delivery failure because the message may have been "
+                "silently dropped. Check for a stale WeChat binding and try rebinding "
+                "this account.",
+                self.meta().id,
+                user_id,
+            )
+            return False
         resolved_cache_components = (
             list(cache_components)
             if cache_components is not None
@@ -936,7 +958,7 @@ class WeixinOCAdapter(Platform):
         sent_at_ms = time.time_ns() // 1_000_000
         self._cache_recent_message(
             user_id,
-            message_id=uuid.uuid4().hex,
+            message_id=message_id,
             sender_id=sender_id,
             sender_nickname=sender_id,
             timestamp=sent_at_ms // 1000,
@@ -1046,14 +1068,15 @@ class WeixinOCAdapter(Platform):
             )
             return False
 
+        text_sent = True
         if text:
-            await self._send_items_to_session(
+            text_sent = await self._send_items_to_session(
                 user_id,
                 [self._build_plain_text_item(text)],
                 cache_components=[Plain(text)],
                 cache_message_str=text,
             )
-        return await self._send_items_to_session(
+        media_sent = await self._send_items_to_session(
             user_id,
             [media_item],
             cache_components=[segment],
@@ -1062,6 +1085,7 @@ class WeixinOCAdapter(Platform):
                 include_ref_text=False,
             ),
         )
+        return text_sent and media_sent
 
     async def _start_login_session(self) -> OpenClawLoginSession:
         endpoint = "ilink/bot/get_bot_qrcode"
@@ -1661,6 +1685,31 @@ class WeixinOCAdapter(Platform):
                 pending_text += segment.text
                 continue
 
+            if isinstance(segment, ActionRow):
+                fallback_parts = [
+                    f"{button.label}: {button.action.url}"
+                    for button in segment.buttons
+                    if isinstance(button.action, Button.UrlAction)
+                ]
+                callback_labels = [
+                    button.label
+                    for button in segment.buttons
+                    if isinstance(button.action, Button.CallbackAction)
+                ]
+                if callback_labels:
+                    fallback_parts.append(
+                        segment.fallback_text
+                        or (
+                            f"可选操作：{' / '.join(callback_labels)}"
+                            "（当前平台不支持按钮，请发送选项名称）"
+                        )
+                    )
+                if fallback_parts:
+                    if pending_text and not pending_text.endswith("\n"):
+                        pending_text += "\n"
+                    pending_text += "\n".join(fallback_parts)
+                continue
+
             if isinstance(segment, (Image, Video, File)):
                 has_supported_segment = True
                 sent = await self._send_media_segment(
@@ -1789,6 +1838,9 @@ class WeixinOCAdapter(Platform):
         finally:
             await self._cleanup_typing_tasks()
             await self.client.close()
+
+    def get_client(self) -> WeixinOCClient:
+        return self.client
 
     async def terminate(self) -> None:
         self._shutdown_event.set()

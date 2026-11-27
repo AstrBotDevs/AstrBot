@@ -31,6 +31,8 @@ class SessionController:
 
     def stop(self, error: Exception | None = None) -> None:
         """立即结束这个会话"""
+        if self.current_event and not self.current_event.is_set():
+            self.current_event.set()
         if not self.future.done():
             if error:
                 self.future.set_exception(error)
@@ -46,6 +48,9 @@ class SessionController:
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
 
         """
+        if self.future.done():
+            return
+
         new_ts = time.time()
 
         if reset_timeout:
