@@ -1,9 +1,7 @@
-import httpx
-
-from astrbot import logger
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
+from .minimax_models import MINIMAX_SUBSCRIPTION_MODELS, is_minimax_api
 
 
 @register_provider_adapter(
@@ -11,11 +9,10 @@ from ..register import register_provider_adapter
     "MiniMax Token Plan Provider Adapter",
 )
 class ProviderMiniMaxTokenPlan(ProviderAnthropic):
-    """MiniMax Token Plan provider.
+    """MiniMax subscription provider with the documented M Plan text model.
 
-    The model list is fetched dynamically from the MiniMax API's /v1/models
-    endpoint, so newly released models are automatically discovered without
-    a code change. The default model is MiniMax-M3, the current flagship.
+    Subscription eligibility is separate from the general API model catalog.
+    Explicit saved and custom model IDs remain available for requests.
     """
 
     def __init__(
@@ -23,11 +20,13 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
         provider_config,
         provider_settings,
     ) -> None:
-        # Keep api_base fixed; Token Plan users do not need to configure it.
-        provider_config["api_base"] = "https://api.minimaxi.com/anthropic"
+        # Keep configured regional and custom endpoints; default to China.
+        provider_config["api_base"] = (
+            provider_config.get("api_base") or "https://api.minimax.cn/anthropic"
+        )
         # MiniMax Token Plan requires the Authorization: Bearer <token> header.
         key = provider_config.get("key", "")
-        actual_key = key[0] if isinstance(key, list) else key
+        actual_key = (key[0] if key else "") if isinstance(key, list) else key
         provider_config.setdefault("custom_headers", {})["Authorization"] = (
             f"Bearer {actual_key}"
         )
@@ -37,25 +36,11 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
             provider_settings,
         )
 
-        configured_model = provider_config.get("model", "MiniMax-M3")
+        configured_model = provider_config.get("model", MINIMAX_SUBSCRIPTION_MODELS[0])
         self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:
-        """Dynamically fetch available models from the MiniMax API."""
-        key = self.chosen_api_key
-        if not key:
-            logger.warning("No API key configured for MiniMax Token Plan.")
-            return []
-        try:
-            async with httpx.AsyncClient(headers=self.request_headers) as client:
-                resp = await client.get(
-                    "https://api.minimaxi.com/v1/models",
-                    headers={"Authorization": f"Bearer {key}"},
-                    timeout=10,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return [m["id"] for m in data.get("data", [])]
-        except Exception as e:
-            logger.error(f"Failed to fetch MiniMax model list: {e}")
-            return []
+        """Offer documented subscription choices without requiring an API key."""
+        if is_minimax_api(self.base_url):
+            return list(MINIMAX_SUBSCRIPTION_MODELS)
+        return await super().get_models()
