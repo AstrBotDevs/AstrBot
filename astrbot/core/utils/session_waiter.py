@@ -28,6 +28,7 @@ class SessionController:
         """上次保持(keep)开始时的超时时间"""
 
         self.history_chains: list[list[Comp.BaseMessageComponent]] = []
+        self._holding_tasks: set[asyncio.Task[None]] = set()
 
     def stop(self, error: Exception | None = None) -> None:
         """立即结束这个会话"""
@@ -51,7 +52,7 @@ class SessionController:
         if self.future.done():
             return
 
-        new_ts = time.time()
+        new_ts = time.monotonic()
 
         if reset_timeout:
             if timeout <= 0:
@@ -74,7 +75,9 @@ class SessionController:
         self.current_event = new_event
         self.timeout = timeout
 
-        asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
+        task = asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
+        self._holding_tasks.add(task)
+        task.add_done_callback(self._holding_tasks.discard)
 
     async def _holding(self, event: asyncio.Event, timeout: float) -> None:
         """等待事件结束或超时"""
@@ -125,6 +128,7 @@ class SessionWaiter:
 
         self._lock = asyncio.Lock()
         """需要保证一个 session 同时只有一个 trigger"""
+        self._cleaned_up = False
 
     async def register_wait(
         self,
@@ -132,6 +136,10 @@ class SessionWaiter:
         timeout: int = 30,
     ) -> Any:
         """等待外部输入并处理"""
+        previous = USER_SESSIONS.get(self.session_id)
+        if previous is not None and previous is not self:
+            previous._cleanup()
+
         self.handler = handler
         USER_SESSIONS[self.session_id] = self
 
@@ -147,7 +155,11 @@ class SessionWaiter:
 
     def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
-        USER_SESSIONS.pop(self.session_id, None)
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        if USER_SESSIONS.get(self.session_id) is self:
+            USER_SESSIONS.pop(self.session_id, None)
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:
@@ -198,9 +210,8 @@ def session_waiter(timeout: int = 30, record_history_chains: bool = False):
                 raise ValueError("session_filter 必须是 SessionFilter")
 
             session_id = session_filter.filter(event)
-            FILTERS.append(session_filter)
-
             waiter = SessionWaiter(session_filter, session_id, record_history_chains)
+            FILTERS.append(session_filter)
             return await waiter.register_wait(func, timeout)
 
         return wrapper

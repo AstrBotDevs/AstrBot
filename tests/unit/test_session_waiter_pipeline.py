@@ -156,3 +156,64 @@ async def test_session_waiter_pipeline(monkeypatch, private, state):
     elif state != "ordinary":
         preprocess.assert_not_awaited()
         assert event.is_stopped()
+
+
+@pytest.mark.asyncio
+async def test_reentrant_register_wait_supersedes_without_clobbering_new_waiter(
+    monkeypatch,
+):
+    """Replacing an active waiter stops the old one without removing the new one."""
+    from astrbot.core.utils import session_waiter as sw
+
+    monkeypatch.setattr(sw, "USER_SESSIONS", {})
+    monkeypatch.setattr(sw, "FILTERS", [])
+
+    shared_filter = DefaultSessionFilter()
+    waiter_1 = SessionWaiter(shared_filter, "s1", False)
+    waiter_2 = SessionWaiter(shared_filter, "s1", False)
+
+    async def noop_handler(controller, _event):
+        controller.stop()
+
+    sw.FILTERS.append(shared_filter)
+    task_1 = asyncio.create_task(waiter_1.register_wait(noop_handler, timeout=30))
+    await asyncio.sleep(0)
+    assert sw.USER_SESSIONS["s1"] is waiter_1
+    assert len(waiter_1.session_controller._holding_tasks) == 1
+
+    sw.FILTERS.append(shared_filter)
+    task_2 = asyncio.create_task(waiter_2.register_wait(noop_handler, timeout=30))
+    await asyncio.sleep(0)
+
+    # First waiter must finish without clobbering waiter_2 or its shared filter.
+    await asyncio.wait_for(task_1, timeout=1.0)
+    assert sw.USER_SESSIONS.get("s1") is waiter_2
+    assert sw.FILTERS == [shared_filter]
+    assert waiter_1.session_controller._holding_tasks == set()
+
+    waiter_2._cleanup()
+    await asyncio.wait_for(task_2, timeout=1.0)
+    assert sw.USER_SESSIONS == {}
+    assert sw.FILTERS == []
+    assert waiter_2.session_controller._holding_tasks == set()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_is_idempotent_with_shared_filters(monkeypatch):
+    """Calling _cleanup repeatedly removes only the waiter's single filter entry."""
+    from astrbot.core.utils import session_waiter as sw
+
+    monkeypatch.setattr(sw, "USER_SESSIONS", {})
+    monkeypatch.setattr(sw, "FILTERS", [])
+
+    shared_filter = DefaultSessionFilter()
+    other_waiter = SessionWaiter(shared_filter, "s2", False)
+    sw.FILTERS.extend([shared_filter, shared_filter])
+    sw.USER_SESSIONS["s2"] = other_waiter
+
+    superseded = SessionWaiter(shared_filter, "s2", False)
+    superseded._cleanup()
+    superseded._cleanup()
+
+    assert sw.USER_SESSIONS.get("s2") is other_waiter
+    assert sw.FILTERS == [shared_filter]
