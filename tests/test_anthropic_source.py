@@ -1,13 +1,19 @@
+import asyncio
+import base64
 import json
+from contextlib import asynccontextmanager
+from io import BytesIO
 from types import SimpleNamespace
 
+import aiohttp
 import pytest
 from anthropic import BadRequestError
 from anthropic import _base_client as anthropic_base_client
 from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
+from PIL import Image
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.provider.entities import TokenUsage
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 # The SDK bundles its own httpx (``httpx`` before 1.0.0, ``httpx2`` after).
@@ -18,6 +24,173 @@ sdk_httpx = getattr(
 
 def _provider() -> ProviderAnthropic:
     return ProviderAnthropic.__new__(ProviderAnthropic)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_follow_up_preserves_history_images(monkeypatch, tmp_path, streaming):
+    image = Image.new("RGB", (2, 2))
+    png, bmp = BytesIO(), BytesIO()
+    image.save(png, format="PNG")
+    image.save(bmp, format="BMP")
+    png_bytes = png.getvalue()
+    encoded = base64.b64encode(png_bytes).decode()
+    local = tmp_path / "image.png"
+    local.write_bytes(png_bytes)
+    image_url = "https://example.com/image.png"
+    failures = {
+        "https://example.com/image.bmp": (200, bmp.getvalue()),
+        "https://example.com/large.png": (200, png_bytes + b"x"),
+        "https://example.com/moved.png": (302, b""),
+    }
+    replies = {image_url: (200, png_bytes), **failures}
+
+    @asynccontextmanager
+    async def get(session, url, *, allow_redirects):
+        assert not allow_redirects and not session.trust_env
+        status, data = replies[str(url)]
+
+        async def chunks(size):
+            yield data
+
+        yield SimpleNamespace(
+            status=status, content=SimpleNamespace(iter_chunked=chunks)
+        )
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", get)
+    monkeypatch.setattr(ProviderAnthropic, "_HISTORY_IMAGE_MAX_BYTES", len(png_bytes))
+    provider = ProviderAnthropic({"model": "claude-test"}, {}, use_api_key=False)
+    captured = []
+
+    async def query(payloads, tools, **kwargs):
+        provider._sanitize_assistant_messages(payloads)
+        captured.append(payloads["messages"])
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    async def query_stream(payloads, tools, **kwargs):
+        yield await query(payloads, tools, **kwargs)
+
+    monkeypatch.setattr(provider, "_query", query)
+    monkeypatch.setattr(provider, "_query_stream", query_stream)
+    available = [
+        image_url,
+        "HtTpS://example.com/image.png",
+        "data:image/png;base64," + encoded,
+        "DaTa:image/png;BASE64," + encoded,
+        "BaSe64://" + encoded,
+        " \t\n\u2003".join(encoded.rstrip("=")),
+    ]
+    unavailable = [
+        *failures,
+        str(local),
+        "http://127.0.0.1/image.png",
+        "data:image/png;base64,!!!!",
+        "data:image/png;base64," + base64.b64encode(png_bytes[:33]).decode(),
+        *[
+            prefix + " \t".join(base64.b64encode(png_bytes + b"x" * extra).decode())
+            for prefix in ("data:image/png;base64,", "base64://", "")
+            for extra in (1, 4)
+        ],
+    ]
+    history = []
+    for refs in (available, unavailable):
+        history.extend(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": ref}} for ref in refs
+                    ],
+                },
+                {"role": "assistant", "content": "Previous answer"},
+            ]
+        )
+
+    image_block = {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": encoded},
+    }
+    placeholder = {"type": "text", "text": "[Image unavailable]"}
+    follow_up = {"prompt": "What is in the corner?", "contexts": history}
+    if streaming:
+        assert [reply async for reply in provider.text_chat_stream(**follow_up)]
+    else:
+        await provider.text_chat(**follow_up)
+
+    user_messages = [msg for msg in captured[0] if msg["role"] == "user"]
+    assert user_messages[:2] == [
+        {"role": "user", "content": [image_block] * len(available)},
+        {"role": "user", "content": [placeholder] * len(unavailable)},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_history_images_share_one_download_deadline(monkeypatch):
+    requested = []
+    loop = asyncio.get_running_loop()
+    now = loop.time()
+
+    @asynccontextmanager
+    async def slow_get(session, url, **kwargs):
+        nonlocal now
+        requested.append(str(url))
+        now += ProviderAnthropic._HISTORY_IMAGE_TIMEOUT
+        await asyncio.Event().wait()
+        yield
+
+    monkeypatch.setattr(aiohttp.ClientSession, "get", slow_get)
+    monkeypatch.setattr(loop, "time", lambda: now)
+    refs = ["https://example.com/slow.png", "https://example.com/next.png"]
+    _, messages = await _provider()._prepare_payload(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": ref}} for ref in refs
+                ],
+            }
+        ]
+    )
+    assert requested == refs[:1]
+    assert messages[0]["content"] == [
+        {"type": "text", "text": "[Image unavailable]"},
+        {"type": "text", "text": "[Image unavailable]"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_history_image_download_only_connects_to_public_destinations(monkeypatch):
+    async def resolve(self, host, port, family):
+        return [
+            {"hostname": host, "host": address, "port": port}
+            for address in (
+                "127.0.0.1",
+                "10.0.0.2",
+                "224.0.0.1",
+                "::1",
+                "::ffff:127.0.0.1",
+                "64:ff9b::7f00:1",
+                "64:ff9b:1::7f00:1",
+                "93.184.216.34",
+            )
+            if host == "example.com" or address != "93.184.216.34"
+        ]
+
+    destinations = []
+
+    async def connect(self, *args, addr_infos, **kwargs):
+        destinations.extend(info[4][0] for info in addr_infos)
+        raise aiohttp.ClientConnectionError("Connection stopped by test.")
+
+    monkeypatch.setattr(aiohttp.ThreadedResolver, "resolve", resolve)
+    monkeypatch.setattr(aiohttp.TCPConnector, "_wrap_create_connection", connect)
+    for host in ("example.com", "internal.example"):
+        destinations.clear()
+        with pytest.raises(aiohttp.ClientConnectionError):
+            await _provider()._download_history_image(
+                f"https://{host}/image.png", asyncio.get_running_loop().time() + 5
+            )
+        assert destinations == (["93.184.216.34"] if host == "example.com" else [])
 
 
 @pytest.mark.asyncio

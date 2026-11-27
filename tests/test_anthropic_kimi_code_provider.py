@@ -324,10 +324,11 @@ def _make_anthropic_provider_for_payload_tests() -> anthropic_source.ProviderAnt
     )
 
 
-def test_prepare_payload_merges_consecutive_tool_results_into_single_user_message():
+@pytest.mark.asyncio
+async def test_prepare_payload_merges_consecutive_tool_results_into_single_user_message():
     provider = _make_anthropic_provider_for_payload_tests()
 
-    _, new_messages = provider._prepare_payload(
+    _, new_messages = await provider._prepare_payload(
         [
             {
                 "role": "assistant",
@@ -372,10 +373,11 @@ def test_prepare_payload_merges_consecutive_tool_results_into_single_user_messag
     ]
 
 
-def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
+@pytest.mark.asyncio
+async def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
     provider = _make_anthropic_provider_for_payload_tests()
 
-    _, new_messages = provider._prepare_payload(
+    _, new_messages = await provider._prepare_payload(
         [
             {
                 "role": "assistant",
@@ -408,10 +410,11 @@ def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
     }
 
 
-def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
+@pytest.mark.asyncio
+async def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
     provider = _make_anthropic_provider_for_payload_tests()
 
-    _, new_messages = provider._prepare_payload(
+    _, new_messages = await provider._prepare_payload(
         [
             {
                 "role": "assistant",
