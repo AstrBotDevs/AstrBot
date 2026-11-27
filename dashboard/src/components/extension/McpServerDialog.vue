@@ -8,7 +8,8 @@
       <v-card-text class="px-6 pt-5">
         <v-form id="mcp-server-form" ref="form" @submit.prevent="submit('save')">
           <v-text-field v-model="name" :label="field('fields.name')" variant="outlined"
-            :rules="[required('nameRequired')]" />
+            :disabled="!!server" :hint="server ? undefined : field('tips.nameLockedAfterSave')"
+            :persistent-hint="!server" :class="{ 'mb-2': !server }" :rules="[required('nameRequired')]" />
           <v-select v-model="transport" :label="field('fields.transport')" :items="transports"
             variant="outlined" />
           <template v-if="transport === 'stdio'">
@@ -50,14 +51,16 @@
               variant="outlined" :rules="[timeoutRule]" />
             <v-text-field v-if="transport !== 'stdio'" v-model="readTimeout" name="mcp-read-timeout"
               :label="field('fields.readTimeout')" type="number" variant="outlined" :rules="[timeoutRule]" />
-            <v-btn v-if="!showImport" variant="text" size="small" class="px-0" :ripple="false"
-              @click="showImport = true">
-              {{ field('buttons.importJson') }}
-            </v-btn>
-            <template v-else>
-              <v-textarea v-model="importText" :label="field('fields.config')" variant="outlined"
-                rows="3" :error-messages="importError" />
-              <v-btn variant="tonal" :ripple="false" @click="importConfig">{{ field('buttons.importJson') }}</v-btn>
+            <template v-if="!server">
+              <v-btn v-if="!showImport" variant="text" size="small" class="px-0" :ripple="false"
+                @click="showImport = true">
+                {{ field('buttons.importJson') }}
+              </v-btn>
+              <template v-else>
+                <v-textarea v-model="importText" :label="field('fields.config')" variant="outlined"
+                  rows="3" :error-messages="importError" />
+                <v-btn variant="tonal" :ripple="false" @click="importConfig">{{ field('buttons.importJson') }}</v-btn>
+              </template>
             </template>
           </div>
         </v-form>
@@ -229,7 +232,7 @@ async function submit(action) {
     }
     if (readTimeout.value !== '') config.sse_read_timeout = Number(readTimeout.value);
   }
-  emit(action, name.value.trim(), config);
+  emit(action, props.server?.name ?? name.value.trim(), config);
 }
 </script>
 

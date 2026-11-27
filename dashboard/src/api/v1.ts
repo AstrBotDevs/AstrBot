@@ -1170,7 +1170,7 @@ export const mcpApi = {
   create(config: McpServerConfig) {
     return typed<OpenConfig>(openApiV1.createMcpServer({ body: config }));
   },
-  update(serverName: string, config: McpServerConfig) {
+  update(serverName: string, config: DynamicConfig) {
     return typed<OpenConfig>(
       openApiV1.updateMcpServerByName({
         body: { server_name: serverName, config },

@@ -53,7 +53,7 @@ If AstrBot cannot find a newly installed command, restart AstrBot to pick up env
 ## Add Your First MCP Server {#installing-mcp-servers}
 
 1. Open `Extensions → MCP Servers` and click the **+** button at the bottom right.
-2. Enter a recognizable **Server Name**, such as `arxiv`.
+2. Enter a recognizable **Server Name**, such as `arxiv`. Once saved, the name field is disabled in the edit dialog.
 3. Choose **stdio** or **HTTP / SSE**. For **stdio**, enter the executable, add each argument separately, and enter environment variables as one `KEY=value` pair per line. For **HTTP / SSE**, enter the server URL and choose **None** or **Bearer Token**. Enter just the token value. AstrBot detects the HTTP transport for new connections. Additional headers and timeouts are under **Advanced Settings**.
 4. Click **Test Connection** to check connectivity and discover tools.
 5. Click **Save**. When adding a server, AstrBot checks the connection again and connects it. The list should then show **Connected** and its available tools.
@@ -62,7 +62,7 @@ Connecting to external MCP servers may pose security risks. Only connect to MCP 
 
 ![The Add MCP Server configuration dialog](./images/mcp-config-en.png)
 
-Open **Advanced Settings → Import JSON** to fill the form from an existing configuration. It accepts a single server object or the first server in an `mcpServers` wrapper.
+When adding a server, open **Advanced Settings → Import JSON** to fill the form from an existing configuration. It accepts a single server object or the first server in an `mcpServers` wrapper.
 
 ### Remote Streamable HTTP Example
 
@@ -129,7 +129,7 @@ After connecting, make sure the tools are available to the current conversation:
 
 The default persona uses all available capabilities. Create or edit a custom persona to restrict the selection. Selecting a globally disabled tool in a persona does not enable it again.
 
-AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. After renaming a server, update any tool selections or permissions that refer to its old tool names. If an older persona selection matches tools from multiple servers, select the intended tool again in that persona.
+AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. If you rename a server directly in its configuration file, update any tool selections or permissions that refer to its old tool names. If an older persona selection matches tools from multiple servers, select the intended tool again in that persona.
 
 **Connected means the service is reachable; it does not guarantee the model will call a tool.** Tool use depends on the model, persona, task, and tool descriptions. External tools such as MCP searches do not require Computer Use. Configure an [execution environment and permissions](/en/use/astrbot-agent-sandbox) only when AstrBot itself needs to execute code or access files.
 

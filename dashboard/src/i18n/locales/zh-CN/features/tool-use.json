@@ -135,6 +135,7 @@
         "sync": "同步"
       },
       "tips": {
+        "nameLockedAfterSave": "保存后无法在此修改服务器名称。",
         "keyValue": "每行填写一组 key=value。",
         "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
         "connectionRisk": "连接到外部 MCP 服务器可能引入安全风险。请只连接你信任的 MCP 服务器。"

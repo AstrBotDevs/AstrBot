@@ -522,10 +522,10 @@ export default {
       this.serverTestMessage = null;
       try {
         const server = this.editingServer;
-        const data = { ...config, name, active: server?.active ?? true };
+        const data = { ...config, active: server?.active ?? true };
         const { data: response } = server
           ? await mcpApi.update(server.name, data)
-          : await mcpApi.create(data);
+          : await mcpApi.create({ ...data, name });
         if (response.status === 'error') {
           this.serverTestMessage = { type: 'error', text: response.message };
           return;
