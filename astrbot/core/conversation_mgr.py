@@ -16,6 +16,7 @@ from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
+    Message,
     UserMessageSegment,
     dump_messages,
 )
@@ -516,7 +517,9 @@ class ConversationManager:
         if snapshot is None:
             raise ValueError(f"Conversation with id {cid} not found")
         messages = [
-            m.model_dump() if hasattr(m, "model_dump") else m
+            dump_messages([m], include_temporary=True)[0]
+            if isinstance(m, Message)
+            else m
             for m in (user_message, assistant_message)
         ]
         await self.db.conversation_store.append(
