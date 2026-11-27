@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass, field
 
 from astrbot.core import logger
@@ -39,6 +40,11 @@ class MainAgentBuildConfig:
     kb_agentic_mode: bool = False
     """Whether to use agentic mode for knowledge base retrieval.
     This will inject the knowledge base query tool into the main agent's toolset to allow dynamic querying."""
+    kb_retrieval_mode: str = ""
+    """Knowledge-base retrieval mode: '', 'auto', 'agentic', or 'hybrid'.
+    Empty string defers to ``kb_agentic_mode`` for backward compatibility."""
+    kb_min_score: float = 0.0
+    """Minimum relevance score threshold for automatic KB injection (0.0 disables filtering)."""
     file_extract_enabled: bool = False
     """Whether to enable file content extraction for uploaded files."""
     file_extract_prov: str = "moonshotai"
@@ -81,6 +87,17 @@ class MainAgentBuildConfig:
     """Provide the delivery tool when a proactive trigger has a destination."""
     group_message_history_enabled: bool = False
 
+    @property
+    def effective_kb_mode(self) -> str:
+        """Resolve the effective knowledge-base retrieval mode.
+
+        Returns:
+            One of ``"auto"``, ``"agentic"``, or ``"hybrid"``.
+        """
+        if self.kb_retrieval_mode in ("auto", "agentic", "hybrid"):
+            return self.kb_retrieval_mode
+        return "agentic" if self.kb_agentic_mode else "auto"
+
     @classmethod
     def from_config(cls, config: dict) -> MainAgentBuildConfig:
         """Resolve shared build settings from an AstrBot session configuration.
@@ -107,6 +124,38 @@ class MainAgentBuildConfig:
                 tool_schema_mode,
             )
             tool_schema_mode = "full"
+        raw_kb_mode = config.get("kb_retrieval_mode", "")
+        kb_retrieval_mode = (
+            raw_kb_mode.strip().lower() if isinstance(raw_kb_mode, str) else ""
+        )
+        if kb_retrieval_mode not in ("", "auto", "agentic", "hybrid"):
+            logger.warning(
+                "Unsupported kb_retrieval_mode: %s, fallback to kb_agentic_mode",
+                raw_kb_mode,
+            )
+            kb_retrieval_mode = ""
+        raw_kb_min_score = config.get("kb_min_score", 0.0)
+        kb_min_score = 0.0
+        if not isinstance(raw_kb_min_score, bool) and raw_kb_min_score is not None:
+            try:
+                parsed_score = float(raw_kb_min_score)
+                if math.isfinite(parsed_score) and parsed_score >= 0.0:
+                    kb_min_score = parsed_score
+                else:
+                    logger.warning(
+                        "Invalid kb_min_score: %s, fallback to 0.0",
+                        raw_kb_min_score,
+                    )
+            except (TypeError, ValueError, OverflowError):
+                logger.warning(
+                    "Invalid kb_min_score: %s, fallback to 0.0",
+                    raw_kb_min_score,
+                )
+        elif isinstance(raw_kb_min_score, bool):
+            logger.warning(
+                "Invalid kb_min_score: %s, fallback to 0.0",
+                raw_kb_min_score,
+            )
         return cls(
             tool_call_timeout=misc.get("tool_call_timeout", 120),
             max_steps=coerce_int_config(
@@ -121,6 +170,8 @@ class MainAgentBuildConfig:
                 "sanitize_context_by_modalities", False
             ),
             kb_agentic_mode=config.get("kb_agentic_mode", False),
+            kb_retrieval_mode=kb_retrieval_mode,
+            kb_min_score=kb_min_score,
             file_extract_enabled=file_extract.get("enable", False),
             file_extract_prov=file_extract.get("provider", "moonshotai"),
             file_extract_msh_api_key=file_extract.get("moonshotai_api_key", ""),

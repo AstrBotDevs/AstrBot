@@ -216,6 +216,7 @@ class PreparedRequest:
     images: dict[str, dict] = field(default_factory=dict)
     captioned_refs: set[str] = field(default_factory=set)
     image_max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    default_retrieval_query: str = ""
 
 
 async def prepare_input_content(
@@ -303,6 +304,7 @@ async def prepare_input_content(
             logger.error("Error occurred while applying file extract: %s", exc)
 
     has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
+    raw_user_prompt = req.prompt
 
     if not req.prompt and not req.image_urls and not req.audio_urls:
         if has_reply or req.extra_user_content_parts:
@@ -337,6 +339,18 @@ async def prepare_input_content(
     if event.get_extra("_default_event_prompt"):
         event.set_extra("_default_event_prompt", False)
         supplement_mention_display(event, req, prompt_has_text=prompt_has_text)
+    default_retrieval_query = ""
+    if req.retrieval_query is None:
+        from astrbot.core.astr_agent_runtime.main_agent.knowledge_base import (
+            extract_retrieval_query,
+        )
+
+        default_retrieval_query = extract_retrieval_query(
+            raw_user_prompt,
+            req.extra_user_content_parts,
+        )
+        if default_retrieval_query:
+            req.retrieval_query = default_retrieval_query
     apply_prompt_prefix(req, cfg)
     if (
         req.conversation
@@ -357,7 +371,13 @@ async def prepare_input_content(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
     append_system_reminders(event, req, cfg, config.timezone)
-    return PreparedRequest(req, prepared_images, captioned_refs, max_size)
+    return PreparedRequest(
+        req,
+        prepared_images,
+        captioned_refs,
+        max_size,
+        default_retrieval_query=default_retrieval_query,
+    )
 
 
 def collect_plugin_capabilities(

@@ -1,3 +1,5 @@
+import math
+
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -36,8 +38,21 @@ async def retrieve_knowledge_base(
     query: str,
     umo: str,
     context: Context,
+    *,
+    min_score: float | None = None,
 ) -> str | None:
-    """Retrieve knowledge base context for the given query."""
+    """Retrieve knowledge base context for the given query.
+
+    Args:
+        query: Clean retrieval query string.
+        umo: Unified message origin identifying session KB configuration.
+        context: Host context providing the KB manager and session config.
+        min_score: Optional relevance score floor. Defaults to the session
+            ``kb_min_score`` setting (0.0 disables filtering).
+
+    Returns:
+        Formatted knowledge-base context string, or None when no results match.
+    """
     kb_mgr = context.kb_manager
     config = context.get_config(umo=umo)
 
@@ -48,12 +63,27 @@ async def retrieve_knowledge_base(
     if not kb_names:
         return None
 
+    threshold = 0.0
+    raw_threshold = config.get("kb_min_score", 0.0) if min_score is None else min_score
+    if not isinstance(raw_threshold, bool) and raw_threshold is not None:
+        try:
+            parsed = float(raw_threshold)
+            if math.isfinite(parsed) and parsed > 0.0:
+                threshold = parsed
+        except (TypeError, ValueError, OverflowError):
+            threshold = 0.0
+
     all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
     if check_all_kb(all_kbs):
-        logger.debug("所配置的所有知识库全为空，跳过检索过程")
+        logger.debug("All configured knowledge bases are empty; skipping retrieval.")
         return None
 
-    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
+    logger.debug(
+        "[KB] Starting retrieval across %d knowledge bases (top_k=%s, min_score=%s)",
+        len(kb_names),
+        top_k,
+        threshold,
+    )
     kb_context = await kb_mgr.retrieve(
         query=query,
         kb_names=kb_names,
@@ -63,10 +93,60 @@ async def retrieve_knowledge_base(
     if not kb_context:
         return None
 
+    results = kb_context.get("results", [])
+    if threshold > 0.0 and isinstance(results, list):
+        filtered: list[tuple[dict, float]] = []
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            # Prefer the absolute relevance_score (rerank relevance or raw dense
+            # cosine similarity) over RankFusion's batch-normalized score so
+            # lone or tied weak candidates do not bypass kb_min_score.
+            raw_score = (
+                item.get("relevance_score")
+                if "relevance_score" in item
+                else item.get("score")
+            )
+            if isinstance(raw_score, bool) or raw_score is None:
+                continue
+            try:
+                score = float(raw_score)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(score) and score >= threshold:
+                filtered.append((item, score))
+        if not filtered:
+            logger.debug(
+                "[KB] Filtered out all %d results below min_score=%.4f for session %s",
+                len(results),
+                threshold,
+                umo,
+            )
+            return None
+        if len(filtered) < len(results):
+            lines = ["以下是相关的知识库内容,请参考这些信息回答用户的问题:\n"]
+            for idx, (item, score) in enumerate(filtered, 1):
+                lines.append(f"【知识 {idx}】")
+                lines.append(
+                    f"来源: {item.get('kb_name', '')} / {item.get('doc_name', '')}"
+                )
+                lines.append(f"内容: {item.get('content', '')}")
+                lines.append(f"相关度: {score:.2f}")
+                lines.append("")
+            logger.debug(
+                "[KB] Injected %d/%d results passing min_score=%.4f for session %s",
+                len(filtered),
+                len(results),
+                threshold,
+                umo,
+            )
+            return "\n".join(lines)
+
     formatted = kb_context.get("context_text", "")
     if formatted:
-        results = kb_context.get("results", [])
-        logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
+        logger.debug(
+            "[KB] Injected %d knowledge chunks for session %s", len(results), umo
+        )
         return formatted
     return None
 
@@ -103,6 +183,7 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
             query=query,
             umo=context.context.event.unified_msg_origin,
             context=context.context.context,
+            min_score=0.0,
         )
         if not result:
             return "No relevant knowledge found."

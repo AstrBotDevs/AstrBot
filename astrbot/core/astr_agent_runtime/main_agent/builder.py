@@ -145,7 +145,13 @@ async def build_main_agent(
 
     # Add session context before capability instructions.
     await workspace.apply_workspace_instructions(event, req, plugin_context)
-    await knowledge_base.apply_knowledge_base(event, req, plugin_context, config)
+    kb_retrieved = await knowledge_base.apply_knowledge_base(
+        event,
+        req,
+        plugin_context,
+        config,
+        fallback_query=prepared.default_retrieval_query,
+    )
 
     # Session plugin filtering precedes builtins, which have their own settings.
     if req.func_tool is not None:
@@ -232,6 +238,7 @@ async def build_main_agent(
             link_display=event.get_platform_name() == "webchat",
         )
     if config.call_request_hook:
+        prompt_before_hook = req.prompt
         if await call_event_hook(
             event,
             EventType.OnLLMRequestEvent,
@@ -241,6 +248,41 @@ async def build_main_agent(
             else None,
         ):
             return None
+        # Trigger one-shot supplemental KB retrieval when pre-hook input had no
+        # substantive query and a hook populated retrieval_query or prompt.
+        # An explicit req.retrieval_query == "" strictly suppresses retrieval.
+        if not kb_retrieved and (
+            req.retrieval_query is not None or req.prompt != prompt_before_hook
+        ):
+            supplemental_query = None
+            if req.retrieval_query is None:
+                clean_prompt = req.prompt if isinstance(req.prompt, str) else ""
+                if (
+                    not prepared.default_retrieval_query
+                    and isinstance(prompt_before_hook, str)
+                    and (stripped_before := prompt_before_hook.strip())
+                ):
+                    if clean_prompt.startswith(prompt_before_hook):
+                        clean_prompt = clean_prompt.removeprefix(prompt_before_hook)
+                    elif clean_prompt.endswith(prompt_before_hook):
+                        clean_prompt = clean_prompt.removesuffix(prompt_before_hook)
+                    elif clean_prompt.startswith(stripped_before):
+                        clean_prompt = clean_prompt.removeprefix(stripped_before)
+                    elif clean_prompt.endswith(stripped_before):
+                        clean_prompt = clean_prompt.removesuffix(stripped_before)
+                supplemental_query = knowledge_base.extract_retrieval_query(
+                    clean_prompt,
+                    req.extra_user_content_parts,
+                    prompt_prefix=config.provider_settings.get("prompt_prefix"),
+                )
+            await knowledge_base.apply_knowledge_base(
+                event,
+                req,
+                plugin_context,
+                config,
+                add_tool=False,
+                fallback_query=supplemental_query,
+            )
         # Hooks may add images; preserve the cache from input preparation.
         await prepare_request_images(
             req,
