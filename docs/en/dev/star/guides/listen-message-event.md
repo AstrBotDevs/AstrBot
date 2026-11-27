@@ -386,7 +386,7 @@ async def on_llm_resp_intermediate(
 ```
 
 > [!NOTE]
-> This hook runs before the round text is emitted and before the round is written to the run context, so its text edits apply both to what the user receives (in non-streaming / `stream_to_general` modes) and to the history of the following requests. With streaming, the chunks of this round may already have been sent to the user: the hook can change the completed message and the history, but it cannot retract or modify those chunks.
+> This hook runs before the round is written to the run context, so its text edits apply both to what the user receives in non-streaming / `stream_to_general` modes and to the history of following requests. In live streaming mode, deltas are yielded immediately to preserve first-token latency and cannot be retracted or re-sent after completion (edits still update persisted history and the completed message payload; use `on_llm_request` or provider hooks if pre-stream interception is required).
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 

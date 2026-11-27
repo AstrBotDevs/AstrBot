@@ -1367,11 +1367,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not has_tool_calls:
             await self._complete_with_assistant_response(llm_resp)
         else:
-            # Intermediate round: its text is finalized into message content
-            # below, persisted, and its tools run afterwards. Snapshot the
-            # tool-call payload by value so a handler may rewrite the text but
-            # cannot change whether or which tools run, neither by rebinding
-            # these attributes nor by mutating them.
+            # Intermediate round: runs once the round finishes, before tools
+            # execute and before the round is persisted. In live streaming mode,
+            # deltas have already been yielded without buffering to preserve
+            # time-to-first-token, so edits here cannot retract streamed chunks
+            # and instead update persisted history, MessageCompleted, and
+            # non-streaming / stream_to_general output. Snapshot the tool-call
+            # payload by value so a handler may rewrite text but cannot alter
+            # whether or which tools run, neither by rebinding these attributes
+            # nor by mutating them.
             tool_calls_snapshot = copy.deepcopy(
                 (
                     llm_resp.tools_call_name,

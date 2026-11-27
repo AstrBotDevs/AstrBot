@@ -3324,7 +3324,7 @@ async def test_observer_only_intermediate_handler_keeps_streaming_latency(
     """A plugin registering only the new event does not buffer streamed chunks."""
     from astrbot.api.event import filter
     from astrbot.core.astr_agent_runtime.hooks import MainAgentHooks
-    from astrbot.core.star.star import star_map
+    from astrbot.core.star.star import StarMetadata, star_map
     from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
     observed: list[list[str]] = []
@@ -3347,7 +3347,7 @@ async def test_observer_only_intermediate_handler_keeps_streaming_latency(
         monkeypatch.setitem(
             star_map,
             handler_metadata.handler_module_path,
-            SimpleNamespace(
+            StarMetadata(
                 name="observer_only_plugin",
                 display_name="Observer Only",
                 activated=True,

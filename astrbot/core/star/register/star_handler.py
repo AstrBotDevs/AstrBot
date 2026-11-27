@@ -526,9 +526,12 @@ def register_on_llm_response_intermediate(**kwargs):
     """Register a handler for a completed LLM round that requests tool calls.
 
     The handler runs once per round that requests tool calls, after that round's
-    response completes and before its final message content is emitted and its
-    tools run. With streaming, that round's chunks may already have been sent to
-    the user. Use ``on_llm_response`` to observe a plain/final model reply.
+    response completes, before it is persisted to run history, and before its
+    tools run. In live streaming mode, deltas are yielded as they arrive to
+    preserve first-token latency, so handler edits cannot retract already-streamed
+    chunks and apply only to persisted history, completed message payloads, and
+    non-streaming or ``stream_to_general`` delivery. Use ``on_llm_response`` to
+    observe a plain/final model reply.
 
     Args:
         **kwargs: Handler metadata passed to the common registrar.
