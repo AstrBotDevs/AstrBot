@@ -2347,8 +2347,12 @@ export default {
 }
 
 .skill-editor-dialog {
-  max-height: min(88vh, 980px);
+  height: min(88vh, 980px);
   overflow: hidden;
+}
+
+.v-dialog--fullscreen .skill-editor-dialog {
+  height: 100%;
 }
 
 .skill-editor-dialog__header {
@@ -2359,7 +2363,10 @@ export default {
 }
 
 .skill-editor-dialog__body {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding: 16px 22px;
 }
 
@@ -2370,9 +2377,11 @@ export default {
 
 .skill-editor {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
-  min-height: 560px;
+  min-height: 0;
 }
 
 .skill-editor__files {
@@ -2437,6 +2446,7 @@ export default {
 .skill-editor__content {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -2457,9 +2467,9 @@ export default {
 .skill-editor__surface {
   border: 1px solid rgba(128, 128, 128, 0.28);
   border-radius: 10px;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   margin-top: 12px;
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }
@@ -2779,11 +2789,6 @@ export default {
 }
 
 @media (max-width: 860px) {
-  .skill-editor-dialog {
-    max-height: none;
-    overflow-y: auto;
-  }
-
   .skills-list {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2791,15 +2796,10 @@ export default {
   .skill-editor {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-    min-height: 0;
   }
 
   .skill-editor__files {
     max-height: 20vh;
-  }
-
-  .skill-editor__surface {
-    min-height: 40vh;
   }
 
   .skill-list-item :deep(.outlined-action-list-item__actions) {

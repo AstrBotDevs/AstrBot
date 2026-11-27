@@ -491,11 +491,8 @@ function getSelectItems(itemMeta) {
   width: 100%;
 }
 
-/* The surface has no intrinsic height: without this an empty or one-line value
-   collapses to a single row that is hard to click into. */
 .editor-surface {
-  flex-grow: 1;
-  min-height: 100px;
+  height: 100px;
 }
 
 .editor-json-error {

@@ -131,7 +131,7 @@
                 </v-btn>
               </div>
             </v-toolbar>
-            <div class="flex-grow-1" style="border-right: 1px solid rgba(0,0,0,0.1);">
+            <div class="template-source-pane">
               <StreamDiffsEditor
                 v-model="templateContent"
                 theme-type="light"
@@ -608,6 +608,12 @@ defineExpose({
   border-radius: 10px;
   font-size: 0.86rem;
   font-weight: 650;
+}
+
+.template-source-pane {
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .preview-container {

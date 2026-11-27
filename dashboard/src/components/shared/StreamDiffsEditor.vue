@@ -12,7 +12,7 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    modelValue: string;
+    modelValue: string | null;
     language?: string;
     themeType?: 'light' | 'dark';
     readonly?: boolean;
@@ -54,11 +54,9 @@ const hostStyle = computed(() => ({
 }));
 
 let controller: DiffSurfaceController | null = null;
-let editing = false;
 // Last text known to the editor, used to tell our own v-model echo apart from
 // an external replacement of the bound value.
-let knownText = props.modelValue;
-let mountToken = 0;
+let knownText = props.modelValue ?? '';
 
 function resolveLanguage(forcePlainText: boolean): string {
   const language = String(props.language || 'text').toLowerCase();
@@ -88,11 +86,41 @@ function buildOptions(readonly: boolean) {
   };
 }
 
-async function startEditing() {
-  if (!controller || editing || props.readonly) return;
-  editing = true;
+async function mountSurface(forcePlainText = false) {
+  const element = host.value;
+  if (!element) return;
+  controller?.dispose();
+  // Each mount owns its container because dispose() clears its children.
+  const container = document.createElement('div');
+  container.style.height = '100%';
+  element.replaceChildren(container);
+
+  const surface = createDiffSurface({
+    kind: 'file',
+    file: buildFile(knownText, forcePlainText),
+    options: buildOptions(props.readonly),
+  });
+  controller = surface;
+
   try {
-    await controller.startEditing(
+    await surface.mount(container);
+  } catch (error) {
+    if (controller !== surface) return;
+    surface.dispose();
+    controller = null;
+    container.remove();
+    if (!forcePlainText) {
+      // Scope the plain-text retry to this mount so later files keep their grammar.
+      await mountSurface(true);
+      return;
+    }
+    console.warn('[StreamDiffsEditor] Failed to mount the code surface.', error);
+    return;
+  }
+
+  if (controller !== surface || props.readonly) return;
+  try {
+    await surface.startEditing(
       {
         // Monaco never wrapped a selection when a bracket or quote was typed,
         // and upstream's default auto-surround turns a select-all into
@@ -100,7 +128,7 @@ async function startEditing() {
         autoSurround: 'never',
         onChange: (event) => {
           const text = event.file.contents;
-          if (text === knownText) return;
+          if (controller !== surface || text === knownText) return;
           knownText = text;
           emit('update:modelValue', text);
           emit('change', text);
@@ -109,54 +137,10 @@ async function startEditing() {
       props.editStateKey,
     );
   } catch (error) {
-    editing = false;
-    console.warn('[StreamDiffsEditor] Failed to start editing session.', error);
-  }
-}
-
-function stopEditing() {
-  if (!controller || !editing) return;
-  editing = false;
-  controller.stopEditing('complete');
-}
-
-async function mountSurface(forcePlainText = false) {
-  const element = host.value;
-  if (!element) return;
-  const token = ++mountToken;
-  controller?.dispose();
-  controller = null;
-  editing = false;
-  element.replaceChildren();
-
-  const surface = createDiffSurface({
-    kind: 'file',
-    file: buildFile(knownText, forcePlainText),
-    options: buildOptions(props.readonly),
-  });
-
-  try {
-    await surface.mount(element);
-  } catch (error) {
-    if (token !== mountToken) return;
-    if (!forcePlainText) {
-      // An unknown highlight grammar must not leave the editor blank. The
-      // plain-text retry applies to this mount only, so opening a supported
-      // file later still gets its grammar.
-      surface.dispose();
-      await mountSurface(true);
-      return;
+    if (controller === surface) {
+      console.warn('[StreamDiffsEditor] Failed to start editing session.', error);
     }
-    console.warn('[StreamDiffsEditor] Failed to mount the code surface.', error);
-    return;
   }
-
-  if (token !== mountToken) {
-    surface.dispose();
-    return;
-  }
-  controller = surface;
-  if (!props.readonly) await startEditing();
 }
 
 function replaceAllDocument(text: string) {
@@ -193,42 +177,19 @@ defineExpose({ replaceAll: replaceAllDocument });
 onMounted(mountSurface);
 
 onBeforeUnmount(() => {
-  mountToken += 1;
-  controller?.dispose();
+  const surface = controller;
   controller = null;
-  editing = false;
+  surface?.dispose();
 });
 
 watch(
-  () => props.modelValue,
-  (value) => {
-    if (value === knownText) return;
+  [() => props.modelValue ?? '', () => props.language, () => props.readonly],
+  ([value, language, readonly], [, previousLanguage, previousReadonly]) => {
+    if (value === knownText && language === previousLanguage && readonly === previousReadonly) return;
     knownText = value;
-    // `update()`/`updateFile()` end an active edit session, so an externally
-    // replaced document is re-mounted instead of patched in place.
+    // Rebuild for changes to the document, grammar, or editability, including
+    // changes that arrive while the previous surface is still mounting.
     void mountSurface();
-  },
-);
-
-// The grammar is fixed when the surface mounts, so switching to another file
-// whose text happens to be identical (an empty file, say) still needs a fresh
-// mount to pick up the new language.
-watch(
-  () => props.language,
-  () => {
-    // No mounted surface means a mount is already in flight (it cleared the
-    // controller before awaiting) or failed; either way there is nothing to
-    // re-grammar, and remounting again would only duplicate that work.
-    if (!controller) return;
-    void mountSurface();
-  },
-);
-
-watch(
-  () => props.readonly,
-  (readonly) => {
-    if (readonly) stopEditing();
-    else void startEditing();
   },
 );
 
