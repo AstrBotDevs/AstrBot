@@ -60,35 +60,15 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     :class="{ 'rail-group': rail }"
   >
     <template v-slot:activator="{ props: groupProps }">
-      <v-tooltip
-        v-if="rail"
-        location="right"
-        :text="itemTitle"
-        :open-delay="0"
-        content-class="sidebar-rail-tooltip"
-      >
-        <template v-slot:activator="{ props: tooltipProps }">
-          <v-list-item v-bind="{ ...groupProps, ...tooltipProps }" rounded class="dashboard-nav-item" color="secondary"
-            :style="{ '--indent-padding': '0px' }" :aria-label="itemTitle">
-            <template #prepend>
-              <v-icon v-if="isVuetifyIcon" :icon="item.icon" size="18" />
-              <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon" />
-            </template>
-            <v-list-item-title class="dashboard-nav-item__title">
-              {{ itemTitle }}
-            </v-list-item-title>
-          </v-list-item>
-        </template>
-      </v-tooltip>
-      <v-list-item v-else v-bind="groupProps" rounded class="dashboard-nav-item" color="secondary"
-        :style="{ '--indent-padding': '0px' }">
+      <v-list-item v-bind="groupProps" rounded class="dashboard-nav-item" color="secondary"
+        :style="{ '--indent-padding': '0px' }" :aria-label="itemTitle">
         <template #prepend>
           <v-icon v-if="isVuetifyIcon" :icon="item.icon" size="18" />
           <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon" />
         </template>
-        <v-list-item-title class="dashboard-nav-item__title">
-          {{ itemTitle }}
-        </v-list-item-title>
+        <v-list-item-title class="dashboard-nav-item__title">{{ itemTitle }}</v-list-item-title>
+        <v-tooltip :disabled="!rail" activator="parent" location="right" :text="itemTitle"
+          :open-delay="0" content-class="sidebar-rail-tooltip" />
       </v-list-item>
     </template>
 
@@ -109,46 +89,16 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
   </v-list-group>
 
   <v-tooltip
-    v-else-if="rail"
-    location="right"
-    :text="itemTitle"
-    :open-delay="0"
-    content-class="sidebar-rail-tooltip"
-  >
-    <template v-slot:activator="{ props: tooltipProps }">
-      <v-list-item v-bind="tooltipProps" :to="item.type === 'external' ? '' : item.to"
-        :href="item.type === 'external' ? item.to : ''" :active="isItemActive" rounded class="dashboard-nav-item"
-        color="secondary" :disabled="item.disabled" :target="item.type === 'external' ? '_blank' : ''"
-        :style="itemStyle" :aria-label="itemTitle">
-        <template v-slot:prepend>
-          <v-icon v-if="item.icon && isVuetifyIcon" size="18" class="hide-menu" :icon="item.icon" />
-          <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon hide-menu" />
-        </template>
-        <v-list-item-title class="dashboard-nav-item__title">{{ itemTitle }}</v-list-item-title>
-        <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
-          {{ item.subCaption }}
-        </v-list-item-subtitle>
-        <template v-slot:append v-if="item.chip">
-          <v-chip :color="item.chipColor" class="sidebarchip hide-menu" :size="item.chipIcon ? 'small' : 'default'"
-            :variant="item.chipVariant" :prepend-icon="item.chipIcon">
-            {{ item.chip }}
-          </v-chip>
-        </template>
-      </v-list-item>
-    </template>
-  </v-tooltip>
-
-  <v-tooltip
     v-else
-    :disabled="!item.pluginInfo || isMobile"
+    :disabled="!rail && (!item.pluginInfo || isMobile)"
     location="right"
     :open-delay="0"
-    content-class="plugin-page-hover-card"
+    :content-class="rail ? 'sidebar-rail-tooltip' : 'plugin-page-hover-card'"
   >
     <template v-slot:activator="{ props: tooltipProps }">
       <v-list-item v-bind="tooltipProps" :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''"
         :active="isItemActive" rounded class="dashboard-nav-item" color="secondary" :disabled="item.disabled"
-        :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
+        :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle" :aria-label="itemTitle">
         <template v-slot:prepend>
           <v-icon v-if="item.icon && isVuetifyIcon" size="18" class="hide-menu" :icon="item.icon" />
           <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon hide-menu" />
@@ -223,7 +173,8 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
         </template>
       </v-list-item>
     </template>
-    <div v-if="item.pluginInfo" class="plugin-hover-card">
+    <span v-if="rail">{{ itemTitle }}</span>
+    <div v-else-if="item.pluginInfo" class="plugin-hover-card">
       <div class="plugin-hover-card__title">{{ itemTitle }}</div>
       <div class="plugin-hover-card__row">
         <Puzzle :size="13" class="plugin-hover-card__icon" />

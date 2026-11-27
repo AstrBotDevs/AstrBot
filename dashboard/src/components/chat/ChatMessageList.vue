@@ -212,6 +212,13 @@
                         />
                       </div>
 
+                      <ChatErrorCard
+                        v-else-if="part.type === 'error'"
+                        :code="part.code"
+                        :message="part.message"
+                        @configure-models="emit('configureModels')"
+                      />
+
                       <MarkdownMessagePart
                         v-else-if="part.type === 'plain'"
                         :content="part.text || ''"
@@ -296,6 +303,11 @@
                         />
                       </div>
 
+                      <PluginViewMessage
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
                       <div
                         v-else-if="part.type === 'tool_call'"
                         class="tool-call-block"
@@ -522,6 +534,8 @@
 </template>
 
 <script setup lang="ts">
+import ChatErrorCard from "@/components/chat/message_list_comps/ChatErrorCard.vue";
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import { Copy, Info, SquarePen, CodeXml } from "@lucide/vue";
@@ -567,7 +581,7 @@ const props = withDefaults(
   defineProps<{
     messages: ChatRecord[];
     isDark?: boolean;
-    isStreaming?: boolean;
+    isMessageStreaming?: (message: ChatRecord, index: number) => boolean;
     variant?: "main" | "thread";
     enableEdit?: boolean;
     enableRegenerate?: boolean;
@@ -580,7 +594,6 @@ const props = withDefaults(
   }>(),
   {
     isDark: false,
-    isStreaming: false,
     variant: "main",
     enableEdit: false,
     enableRegenerate: false,
@@ -594,6 +607,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  configureModels: [];
   "update:editDraft": [value: string];
   openEdit: [message: ChatRecord];
   cancelEdit: [];
@@ -668,11 +682,7 @@ function shouldShowMessageBubble(message: ChatRecord) {
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
-  return (
-    props.isStreaming &&
-    !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1
-  );
+  return props.isMessageStreaming?.(message, messageIndex) ?? false;
 }
 
 function isEditingMessage(message: ChatRecord) {
@@ -869,6 +879,8 @@ function isIPythonToolCall(tool: Record<string, unknown>) {
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
+  // The turn ended before this call returned (see ToolCallCard).
+  if (tool.phase === "unknown") return tm("toolStatus.interrupted");
   if (tool.finished_ts) return tm("toolStatus.done");
   return tm("toolStatus.running");
 }

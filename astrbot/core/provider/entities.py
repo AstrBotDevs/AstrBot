@@ -58,9 +58,11 @@ class DecisionBooleanQuestion:
 
     Attributes:
         instructions: The statement or question evaluated by the model.
+        criteria: Optional descriptions for the "true" and/or "false" outcomes.
     """
 
     instructions: str
+    criteria: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +218,7 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    _plugin_id: str | None = field(default=None, init=False, repr=False)
 
     def __repr__(self) -> str:
         return (

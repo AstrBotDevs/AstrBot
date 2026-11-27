@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.astr_agent_runtime.computer.computer_client import (
     sync_skills_to_active_sandboxes,
 )
+from astrbot.core.config.default import PLUGIN_DEFAULT_REGISTRY_URL
 from astrbot.core.repository import (
     GitUnavailableError,
     normalize_repository_url,
@@ -55,7 +57,6 @@ PLUGIN_COMPONENT_TYPE_ORDER = {
 
 LogoTokenResolver = Callable[[str], Awaitable[str | None]]
 InstalledAtResolver = Callable[[StarMetadata], str | None]
-PluginPagesResolver = Callable[[StarMetadata], Awaitable[list]]
 PluginPagesSerializer = Callable[[StarMetadata], Awaitable[list[dict]]]
 
 
@@ -110,6 +111,7 @@ class PluginService:
             EventType.OnPluginErrorEvent: "插件报错时",
         }
         self._logo_cache: dict[str, str] = {}
+        self._create_source_lock = asyncio.Lock()
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -172,7 +174,7 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         plugins = [
             plugin
@@ -183,7 +185,7 @@ class PluginService:
 
         async def process_plugin(plugin: StarMetadata):
             logo_url = await self.resolve_plugin_logo_url(plugin, logo_token_resolver)
-            pages = await discover_pages(plugin)
+            pages = await serialize_pages(plugin)
             return plugin, logo_url, pages
 
         results = await asyncio.gather(*(process_plugin(plugin) for plugin in plugins))
@@ -202,7 +204,8 @@ class PluginService:
                             install_sources,
                         ),
                     ),
-                    "pages": [page.name for page in pages],
+                    "pages": [page["name"] for page in pages],
+                    "views": pages,
                 }
             )
         return payload, getattr(self.plugin_manager, "failed_plugin_info", None)
@@ -213,13 +216,13 @@ class PluginService:
         plugin_name: str | None,
         logo_token_resolver: LogoTokenResolver,
         installed_at_resolver: InstalledAtResolver,
-        discover_pages: PluginPagesResolver,
+        serialize_pages: PluginPagesSerializer,
     ) -> tuple[list[dict], str | None]:
         return await self.list_plugins(
             plugin_name=plugin_name,
             logo_token_resolver=logo_token_resolver,
             installed_at_resolver=installed_at_resolver,
-            discover_pages=discover_pages,
+            serialize_pages=serialize_pages,
         )
 
     async def get_plugin_detail(
@@ -525,6 +528,7 @@ class PluginService:
         repo_url: str,
         download_url: str,
         registry_name: str,
+        category: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build a persisted installation source record.
 
@@ -535,6 +539,7 @@ class PluginService:
             repo_url: Repository URL used for installation.
             download_url: Download URL used for installation.
             registry_name: Resolved registry display name.
+            category: Category definition resolved from the marketplace source.
 
         Returns:
             A serializable installation source record.
@@ -560,6 +565,8 @@ class PluginService:
         market_plugin_id = self.get_market_plugin_id(payload)
         if market_plugin_id:
             record["market_plugin_id"] = market_plugin_id
+        if install_method == "market" and category is not None:
+            record["category"] = category
 
         return record
 
@@ -571,6 +578,7 @@ class PluginService:
         fallback_method: str,
         repo_url: str,
         download_url: str,
+        category: dict[str, Any] | None = None,
     ) -> None:
         """Persist an installation source record for a newly installed plugin.
 
@@ -580,6 +588,7 @@ class PluginService:
             fallback_method: Method to use for non-market installs.
             repo_url: Repository URL used for installation.
             download_url: Download URL used for installation.
+            category: Category definition resolved from the marketplace source.
         """
         plugin_name = None
         if isinstance(plugin_info, dict):
@@ -601,6 +610,7 @@ class PluginService:
             repo_url=repo_url,
             download_url=download_url,
             registry_name=registry_name,
+            category=category,
         )
         await self.save_plugin_install_sources(records)
 
@@ -701,7 +711,7 @@ class PluginService:
                 "title": page["title"],
                 "page_name": page["name"],
                 "i18n_key": page["i18n_key"],
-                "description": "Plugin Page entry",
+                "description": page.get("description", ""),
                 "plugin_name": plugin.name,
                 "plugin_marketplace_name": (plugin.name or "").replace("_", "-"),
             }
@@ -1083,9 +1093,9 @@ class PluginService:
             urls = [custom_url]
         else:
             cache_file = os.path.join(data_dir, "plugins.json")
-            md5_url = "https://api.soulter.top/astrbot/plugins-md5"
+            md5_url = PLUGIN_DEFAULT_REGISTRY_URL.removesuffix(".json") + "-md5.json"
             urls = [
-                "https://api.soulter.top/astrbot/plugins",
+                PLUGIN_DEFAULT_REGISTRY_URL,
                 "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
             ]
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
@@ -1275,10 +1285,56 @@ class PluginService:
                 return plugin
         return None
 
+    @staticmethod
+    def resolve_market_category(
+        market_data: object, category_id: object
+    ) -> dict[str, Any] | None:
+        """Resolve a category snapshot from the selected marketplace source.
+
+        Args:
+            market_data: Raw marketplace data from the source.
+            category_id: Category ID referenced by the plugin entry.
+
+        Returns:
+            The category and its display labels, or None for an unresolved ID.
+        """
+        if not isinstance(category_id, str) or not re.fullmatch(
+            r"[a-z0-9][a-z0-9_]*", category_id
+        ):
+            return None
+        meta = market_data.get("$meta") if isinstance(market_data, dict) else None
+        categories = meta.get("categories") if isinstance(meta, dict) else None
+        if not isinstance(categories, list):
+            return None
+
+        for category in categories:
+            if not isinstance(category, dict) or category.get("id") != category_id:
+                continue
+            display_name = category.get("display_name")
+            if not isinstance(display_name, str) or not display_name.strip():
+                continue
+            snapshot: dict[str, Any] = {
+                "id": category_id,
+                "display_name": display_name.strip(),
+            }
+            i18n = category.get("i18n")
+            if isinstance(i18n, dict):
+                translations = {}
+                for locale, labels in i18n.items():
+                    label = (
+                        labels.get("display_name") if isinstance(labels, dict) else None
+                    )
+                    if isinstance(label, str) and label.strip():
+                        translations[locale] = {"display_name": label.strip()}
+                if translations:
+                    snapshot["i18n"] = translations
+            return snapshot
+        return None
+
     async def resolve_market_install_info(
         self,
         payload: dict[str, Any],
-    ) -> dict[str, str] | None:
+    ) -> dict[str, Any] | None:
         """Validate a marketplace install request and resolve install URLs.
 
         Args:
@@ -1328,6 +1384,9 @@ class PluginService:
             "market_plugin_id": market_plugin_id,
             "repo": repo_url,
             "download_url": str(market_plugin.get("download_url") or "").strip(),
+            "category": self.resolve_market_category(
+                market_data, market_plugin.get("category")
+            ),
         }
 
     async def resolve_market_update_info(self, plugin_name: str) -> dict[str, Any]:
@@ -1533,6 +1592,11 @@ class PluginService:
             "installed_at": installed_at,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        category = self.resolve_market_category(
+            market_data, market_plugin.get("category")
+        )
+        if category is not None:
+            record["category"] = category
 
         for key in (plugin.root_dir_name, plugin.name):
             if key:
@@ -1642,6 +1706,9 @@ class PluginService:
                 else "url",
                 repo_url=repo_url,
                 download_url=download_url,
+                category=market_install_info["category"]
+                if market_install_info
+                else None,
             )
             await self.sync_skills_after_plugin_change()
             logger.info(f"Installed plugin {repo_url} successfully.")
@@ -2030,13 +2097,30 @@ class PluginService:
             raise PluginServiceError("sources fields must be a list")
         return sources
 
-    @staticmethod
-    async def create_custom_source(data: object) -> list:
+    async def create_custom_source(self, data: object) -> list:
+        """Append a plugin source once, including when the request is retried.
+
+        Args:
+            data: Source fields from the add-source request.
+
+        Returns:
+            The saved list of custom sources.
+        """
         source = data if isinstance(data, dict) else {}
-        sources = await PluginService.get_custom_sources()
-        sources.append(source)
-        await sp.global_put("custom_plugin_sources", sources)
-        return sources
+        url = self.normalize_registry_url(source.get("url"))
+        async with self._create_source_lock:
+            sources = await self.get_custom_sources()
+            if url and any(
+                self.normalize_registry_url(
+                    item.get("url") if isinstance(item, dict) else item
+                )
+                == url
+                for item in sources
+            ):
+                return sources
+            sources.append(source)
+            await sp.global_put("custom_plugin_sources", sources)
+            return sources
 
     @staticmethod
     async def replace_custom_sources(data: object) -> list:

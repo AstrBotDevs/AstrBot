@@ -140,24 +140,19 @@
                   <span>{{ t('modelTotal.successRate') }}</span>
                   <strong>{{ rangeSuccessRateLabel }}</strong>
                 </div>
+                <div class="token-meta-item">
+                  <span>{{ t('modelTotal.avgCacheHitRate') }}</span>
+                  <strong>{{ rangeCacheHitRateLabel }}</strong>
+                </div>
               </div>
             </section>
 
             <section class="stat-card provider-list-card">
               <div class="card-head compact">
-                <div>
-                  <div class="section-title">{{ t('modelRanking.title') }}</div>
-                </div>
+                <div class="section-title">{{ t('modelRanking.title') }}</div>
               </div>
-              <div
-                v-if="rangeProviderRanking.length"
-                class="provider-list provider-list--scrollable"
-              >
-                <div
-                  v-for="provider in rangeProviderRanking"
-                  :key="provider.provider_id"
-                  class="provider-row"
-                >
+              <div v-if="rangeProviderRanking.length" class="provider-list provider-list--scrollable">
+                <div v-for="provider in rangeProviderRanking" :key="provider.provider_id" class="provider-row">
                   <span class="provider-name">{{ provider.provider_id }}</span>
                   <strong>{{ formatNumber(provider.tokens) }}</strong>
                 </div>
@@ -324,6 +319,7 @@ interface ProviderTokenStatsResponse {
   range_avg_duration_ms: number
   range_avg_tpm: number
   range_success_rate: number
+  range_cache_hit_rate: number | null
   range_by_provider: ProviderRankingItem[]
   range_by_umo: UmoRankingItem[]
   today_total_tokens: number
@@ -577,6 +573,11 @@ const rangeSuccessRateLabel = computed(() => {
   }
   const rate = providerStats.value?.range_success_rate ?? 0
   return `${(rate * 100).toFixed(1)}%`
+})
+
+const rangeCacheHitRateLabel = computed(() => {
+  const rate = providerStats.value?.range_cache_hit_rate
+  return rate == null ? '—' : `${(rate * 100).toFixed(1)}%`
 })
 
 const platformRanking = computed(() =>

@@ -19,16 +19,19 @@ desc: Detailed description of your plugin's features, usage, etc.  # Detailed pl
 version: 1.0.0                               # Plugin version (follow semantic versioning)
 author: Author Name                          # Author name
 repo: https://github.com/your-name/repo      # Plugin repository URL
+# category: utility                          # (Optional) Marketplace category ID
 # astrbot_version: ">=4.17.0"                # (Optional) AstrBot version range
 # support_platforms:                         # (Optional) Supported platform adapter list
 #   - aiocqhttp
 #   - qq_official
 # social_link: https://github.com/your-web   # (Optional) Your personal website, GitHub profile, etc.
-# tags:                                      # (Optional) Tag list for marketplace categorization and search
+# tags:                                      # (Optional) Tag list for marketplace search
   # - example
 ```
 
 [Supported platform adapters](plugin-new.md#declare-supported-platforms-optional)
+
+[Recommended marketplace categories](plugin-new.md#recommended-marketplace-categories)
 
 ::: warning Size Limit
 The plugin zip package submitted to the marketplace **must not exceed 16MB**.

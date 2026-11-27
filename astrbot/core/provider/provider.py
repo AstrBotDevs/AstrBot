@@ -206,6 +206,10 @@ class Provider(AbstractProvider):
         for message in messages:
             if isinstance(message, Message):
                 dicts.append(message.model_dump())
+            elif "_turn_continuation" in message:
+                dicts.append(
+                    {k: v for k, v in message.items() if k != "_turn_continuation"}
+                )
             else:
                 dicts.append(message)
 
@@ -476,7 +480,11 @@ class DecisionProvider(AbstractProvider):
 
     async def test(self) -> None:
         await self.ask(
-            {"test": DecisionBooleanQuestion("Is this provider available?")},
+            {
+                "test": DecisionBooleanQuestion(
+                    "Is this provider available?", criteria={"true": "", "false": ""}
+                )
+            },
             {},
             request_max_retries=0,
         )

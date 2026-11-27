@@ -1,6 +1,14 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 
+from astrbot.core.message.components import Json, UIInteraction
+from astrbot.core.message.interactive_ui import (
+    ViewResult,
+    resolve_view_spec,
+    view_store,
+)
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star_handler import StarHandlerMetadata
@@ -32,7 +40,11 @@ class ProcessStage(Stage):
     ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
         # Dispatch after access/safety checks and preprocessing, before plugins.
-        for session_filter in tuple(FILTERS):
+        for session_filter in (
+            ()
+            if isinstance(event.get_ui_interaction(), UIInteraction)
+            else tuple(FILTERS)
+        ):
             session_id = session_filter.filter(event)
             session = USER_SESSIONS.get(session_id)
             if session and not session.session_controller.future.done():
@@ -43,6 +55,70 @@ class ProcessStage(Stage):
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
         )
+        interaction = event.get_ui_interaction()
+        if isinstance(interaction, UIInteraction):
+            update = None
+            request = None
+            deadline = asyncio.get_running_loop().time() + 120
+            try:
+                resolve_view_spec(
+                    event.get_extra("ui_plugin_module"),
+                    interaction.view.name,
+                    interaction.view.version,
+                )
+                if not activated_handlers:
+                    raise ValueError("No UI action handler was activated.")
+                async with aclosing(
+                    self.star_request_sub_stage.process(event)
+                ) as results:
+                    while True:
+                        try:
+                            result = await asyncio.wait_for(
+                                anext(results),
+                                timeout=max(
+                                    0, deadline - asyncio.get_running_loop().time()
+                                ),
+                            )
+                        except StopAsyncIteration:
+                            break
+                        if isinstance(result, ViewResult):
+                            if update is not None:
+                                raise ValueError(
+                                    "Only one view update is permitted per action."
+                                )
+                            update = result.data
+                        elif isinstance(result, ProviderRequest):
+                            if request is not None or result.conversation is not None:
+                                raise ValueError(
+                                    "Only one request in the current conversation is permitted."
+                                )
+                            request = result
+                        else:
+                            yield
+                error = event.get_extra("ui_action_error")
+            except Exception:
+                error = {
+                    "code": "ACTION_FAILED",
+                    "message": "The plugin action failed or timed out.",
+                }
+            receipt = await asyncio.to_thread(
+                view_store.finish,
+                interaction.view.id,
+                interaction.interaction_id,
+                update,
+                error,
+            )
+            await event.send(
+                MessageChain(chain=[Json(receipt)], type="ui_action_result")
+            )
+            event.set_extra("ui_action_acknowledged", True)
+            if request is not None and not error:
+                await asyncio.to_thread(view_store.get, interaction.view.id)
+                event.set_extra("provider_request", request)
+                async with aclosing(self.agent_sub_stage.process(event)) as responses:
+                    async for _ in responses:
+                        yield
+            return
         # 有插件 Handler 被激活
         if activated_handlers:
             async for resp in self.star_request_sub_stage.process(event):

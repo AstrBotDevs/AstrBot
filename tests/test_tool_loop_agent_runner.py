@@ -1631,17 +1631,16 @@ async def test_steering_appends_user_messages_after_all_tool_results(
         tools_call_args=[{"query": "test"}] * tool_count,
         tools_call_ids=[f"call_{index}" for index in range(tool_count)],
     ))
-    ticket1 = runner.follow_up(
-        message_text="follow up 1",
-    )
-    ticket2 = runner.follow_up(
-        message_text="follow up 2",
-    )
+    tickets = []
+    async for event in runner.step():
+        if event.type == "tool.started" and not tickets:
+            tickets = [
+                runner.follow_up(message_text="follow up 1"),
+                runner.follow_up(message_text="follow up 2"),
+            ]
+    ticket1, ticket2 = tickets
     assert ticket1 is not None
     assert ticket2 is not None
-
-    async for _ in runner.step():
-        pass
 
     assert provider_request.tool_calls_result is not None
     assert isinstance(provider_request.tool_calls_result, list)
@@ -1652,7 +1651,11 @@ async def test_steering_appends_user_messages_after_all_tool_results(
     assert [message.role for message in tail] == [
         "assistant", *(["tool"] * tool_count), "user",
     ]
-    assert tail[-1].content == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
+    first, second, reminder = tail[-1].content
+    assert [first, second] == [TextPart(text="follow up 1"), TextPart(text="\nfollow up 2")]
+    assert reminder._no_save
+    assert "<system_reminder>" in reminder.text
+    assert "user-visible text" in reminder.text
     assert ticket1.resolved.is_set() is True
     assert ticket2.resolved.is_set() is True
     assert ticket1.consumed is True
@@ -1660,20 +1663,19 @@ async def test_steering_appends_user_messages_after_all_tool_results(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_ticket_consumed_when_no_next_tool_call(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_queued_steering_is_included_in_the_first_model_request(
+    runner, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
-    mock_provider.should_call_tools = False
-    mock_event = MockEvent("test:FriendMessage:follow_up_no_tool", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+    provider = CapturingProvider(["text"])
 
     await runner.reset(
-        provider=mock_provider,
+        provider=provider,
         request=provider_request,
-        run_context=run_context,
+        run_context=ContextWrapper(context=None),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
-        streaming=False,
+        streaming=streaming,
     )
 
     ticket = runner.follow_up(message_text="follow up without tool")
@@ -1684,6 +1686,11 @@ async def test_follow_up_ticket_consumed_when_no_next_tool_call(
 
     assert ticket.resolved.is_set() is True
     assert ticket.consumed is True
+    assert provider.call_count == 1
+    original, reminder = provider.received_contexts[0][-1]["content"]
+    assert original == {"type": "text", "text": "follow up without tool"}
+    assert reminder["type"] == "text"
+    assert "a steer for the current turn" in reminder["text"]
 
 
 @pytest.mark.asyncio
@@ -2235,6 +2242,168 @@ if __name__ == "__main__":
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
+async def test_turn_limit_preserves_long_tool_history_on_next_saved_reply(
+    tmp_path, runner, mock_provider, mock_tool_executor, mock_hooks, streaming
+):
+    """Keep a completed tool-heavy turn when the next reply is persisted."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import ToolCall, dump_messages
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    previous = [
+        Message(role="system", content="Earlier memory"),
+        Message(role="user", content="Inspect the files"),
+    ]
+    # Seventeen batches and twenty-two calls produce forty-one non-system messages.
+    for batch, width in enumerate([2, 1, 1, 2, 1, 2, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1]):
+        calls = [
+            ToolCall(
+                id=f"read-{batch}-{i}",
+                function=ToolCall.FunctionBody(name="read", arguments="{}"),
+            )
+            for i in range(width)
+        ]
+        previous.append(Message(role="assistant", tool_calls=calls))
+        previous.extend(
+            Message(role="tool", tool_call_id=call.id, content="File contents")
+            for call in calls
+        )
+    previous.append(Message(role="assistant", content="Inspection complete"))
+    initial_history = dump_messages(previous)
+    assert len(initial_history) == 42
+
+    db = SQLiteDatabase(str(tmp_path / "logical_turn_history.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
+        await writer.save_history(initial_history)
+        mock_provider.should_call_tools = False
+        await runner.reset(
+            provider=mock_provider,
+            request=ProviderRequest(prompt="Continue", contexts=writer.get_messages()),
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            enforce_max_turns=20,
+            conversation_event_sink=writer.consume,
+        )
+        await writer.start_turn({"kind": "agent"})
+
+        await collect_events(runner.step_until_done(3))
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+
+        history = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert history[:42] == initial_history
+        assert [message["role"] for message in history[42:]] == ["user", "assistant"]
+        assert len(history) == 44
+        assert mock_provider.call_count == 1
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("internal_message", ["budget", "image"])
+async def test_internal_user_messages_preserve_current_turn_and_reloaded_history(
+    tmp_path,
+    runner,
+    provider_request,
+    mock_hooks,
+    monkeypatch,
+    streaming,
+    internal_message,
+):
+    """A generated user-role message stays in its request across SQLite reloads."""
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import dump_messages
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    monkeypatch.setattr(
+        tool_image_cache,
+        "save_image",
+        lambda **kwargs: SimpleNamespace(
+            file_path="cached.png", mime_type="image/png", tool_name="test_tool"
+        ),
+    )
+    monkeypatch.setattr(
+        tool_image_cache,
+        "get_image_base64_by_path",
+        lambda *args: ("dGVzdA==", "image/png"),
+    )
+    db = SQLiteDatabase(str(tmp_path / "internal_turn_history.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(
+            db.conversation_store,
+            await db.conversation_store.read(conv.conversation_id),
+        )
+        provider = CapturingToolLoopProvider("test_tool")
+        await runner.reset(
+            provider=provider,
+            request=provider_request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=MockMixedContentToolExecutor
+            if internal_message == "image"
+            else MockToolExecutor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            enforce_max_turns=1,
+            conversation_event_sink=writer.consume,
+        )
+        original_request = runner.run_context.messages[0]
+        await writer.start_turn({"kind": "agent"})
+        await collect_events(
+            runner.step_until_done(1 if internal_message == "budget" else 3)
+        )
+
+        final_context = provider.received_contexts[-1]
+        assert final_context[0] == original_request
+        assert [message.role for message in final_context] == [
+            "user",
+            "assistant",
+            "tool",
+            "user",
+        ]
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+        snapshot = await db.conversation_store.read(conv.conversation_id)
+        history = snapshot.messages
+        assert history[3]["_turn_continuation"] is True
+        assert history[0] == original_request.model_dump()
+
+        writer = ConversationEventWriter(db.conversation_store, snapshot)
+        await runner.reset(
+            provider=provider,
+            request=ProviderRequest(prompt="Follow-up", contexts=writer.get_messages()),
+            run_context=ContextWrapper(context=None),
+            tool_executor=MockToolExecutor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            enforce_max_turns=2,
+            conversation_event_sink=writer.consume,
+        )
+        await writer.start_turn({"kind": "agent"})
+        await collect_events(runner.step_until_done(3))
+        await writer.save_history(dump_messages(runner.run_context.messages))
+        await writer.finish_turn("completed")
+
+        saved = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert saved[: len(history)] == history
+        assert len(saved) == len(history) + 2
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_event_journal_records_requests_tools_and_final_context(
     tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
@@ -2257,8 +2426,12 @@ async def test_event_journal_records_requests_tools_and_final_context(
             conversation_event_sink=sink,
         )
         await writer.start_turn({"kind": "agent"})
-        ticket = runner.follow_up(message_text="steering input")
-        runtime_events = await collect_events(runner.step_until_done(3))
+        runtime_events = []
+        ticket = None
+        async for event in runner.step_until_done(3):
+            runtime_events.append(event)
+            if event.type == "tool.started":
+                ticket = runner.follow_up(message_text="steering input")
         captured = [call.args[0] for call in sink.await_args_list]
         assert sum(event.type == "context.updated" for event in captured) == 1
         assert sum(event.type == "context.appended" for event in captured) == 4
@@ -2385,10 +2558,14 @@ async def test_step_notices_reach_model_once_per_threshold(
     event.get_platform_name.return_value = "test"
     event.get_platform_id.return_value = "test"
     event.send = AsyncMock()
+    context = MagicMock()
+    context.get_locale = AsyncMock(return_value="zh-CN")
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
-        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=context)
+        ),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=streaming,
@@ -2740,3 +2917,178 @@ async def test_unknown_tool_is_rejected_without_claiming_execution(
     assert rejected[0].error.code == "tool_not_found"
     assert not any(event.type in ("tool.started", "tool.finished") for event in events)
     assert not mock_hooks.tool_start_called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["non_streaming", "streaming", "tool_requery"])
+async def test_steering_restarts_model_generation_in_the_same_step(
+    runner, provider_request, mock_tool_executor, phase
+):
+    """Steering supersedes incomplete generation while retaining the original input."""
+    requests = []
+    started, closed = asyncio.Event(), asyncio.Event()
+    provider = MockProvider()
+    fallback = MockProvider()
+    fallback.provider_config["id"] = "fallback"
+    hooks = AsyncMock(spec=BaseAgentRunHooks)
+    sink = AsyncMock(return_value=True)
+    requery = phase == "tool_requery"
+
+    async def chat(**kwargs):
+        requests.append(list(kwargs["contexts"]))
+        if len(requests) == 1 and requery:
+            return LLMResponse(
+                role="assistant",
+                tools_call_name=["test_tool"],
+                tools_call_args=[{}],
+                tools_call_ids=["obsolete"],
+            )
+        if len(requests) == (2 if requery else 1):
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                closed.set()
+        return LLMResponse(role="assistant", completion_text="updated reply")
+
+    async def stream(**kwargs):
+        if not requests:
+            yield LLMResponse(
+                role="assistant", completion_text="partial reply", is_chunk=True
+            )
+        yield await chat(**kwargs)
+
+    provider.text_chat = chat
+    provider.text_chat_stream = stream
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        streaming=phase == "streaming",
+        tool_schema_mode="skills_like" if requery else "full",
+        enforce_max_turns=1,
+        fallback_providers=[fallback],
+        conversation_event_sink=sink,
+    )
+
+    turn = asyncio.create_task(collect_events(runner.step_until_done(1)))
+    try:
+        await asyncio.wait_for(started.wait(), 2)
+        ticket = runner.follow_up(message_text="change direction")
+        events = await asyncio.wait_for(turn, 2)
+    finally:
+        if not turn.done():
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
+
+    assert closed.is_set()
+    assert ticket is not None and ticket.consumed and ticket.resolved.is_set()
+    assert len(requests) == (3 if requery else 2)
+    assert requests[-1][0].content == runner.run_context.messages[0].content
+    original, reminder = requests[-1][-1].content
+    assert original == TextPart(text="change direction")
+    assert "user-visible text" in reminder.text
+    assert [message.role for message in runner.run_context.messages] == [
+        "user", "user", "assistant",
+    ]
+    finished = [event for event in events if event.type == "request.finished"]
+    expected = ["completed", "cancelled", "completed"] if requery else [
+        "cancelled", "completed",
+    ]
+    assert [event.status for event in finished] == expected
+    assert all(event.error is None for event in finished)
+    abandoned = [
+        event.data["message"]
+        for (event,), _ in sink.await_args_list
+        if event.type == "message.appended" and event.data["status"] == "cancelled"
+    ]
+    assert len(abandoned) == 1 and abandoned[0]["_no_save"]
+    if phase == "streaming":
+        messages = [event for event in events if event.type == "message.completed"]
+        assert [event.status for event in messages] == ["cancelled", "completed"]
+        assert messages[0].content[0].text == "partial reply"
+        assert messages[0].message_id != messages[1].message_id
+    hooks.on_tool_start.assert_not_awaited()
+    hooks.on_agent_done.assert_awaited_once()
+    assert fallback.call_count == 0
+    assert runner._step_budget_used == 1
+    assert runner.run_context.run_end_reason == "completed"
+    assert runner.get_final_llm_resp().completion_text == "updated reply"
+
+
+@pytest.mark.asyncio
+async def test_running_tool_returns_its_real_result_before_steering(
+    runner, provider_request, mock_hooks, monkeypatch
+):
+    """A pending steer waits for a tool that has already started."""
+    from mcp.types import CallToolResult, TextContent
+
+    from astrbot.core.agent.runtime import AgentSessionRef
+
+    wakeup = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup
+    )
+    event = MagicMock(role="member", unified_msg_origin="test:GroupMessage:steering")
+    event.get_extra.return_value = None
+    context = SimpleNamespace(
+        event=event,
+        context=object(),
+        agent_session=AgentSessionRef("astrbot", "conversation"),
+    )
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    requests = []
+
+    class SlowExecutor(FunctionToolExecutor):
+        @classmethod
+        async def execute(cls, tool, run_context, **arguments):
+            calls.append(tool.name)
+            started.set()
+            await release.wait()
+            yield CallToolResult(content=[TextContent(type="text", text="finished once")])
+
+    provider = VaryingUsageProvider()
+    original_chat = provider.text_chat
+
+    async def capture_request(**kwargs):
+        requests.append(list(kwargs["contexts"]))
+        return await original_chat(**kwargs)
+
+    provider.text_chat = capture_request
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=context), tool_executor=SlowExecutor,
+        agent_hooks=mock_hooks, streaming=False, enforce_max_turns=1,
+    )
+    turn = asyncio.create_task(collect_events(runner.step_until_done(3)))
+    try:
+        await asyncio.wait_for(started.wait(), 2)
+        ticket = runner.follow_up(message_text="also consider this")
+        assert ticket is not None
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(ticket.resolved.wait(), 0.05)
+        assert not turn.done() and len(requests) == 1
+        release.set()
+        events = await asyncio.wait_for(turn, 2)
+    finally:
+        if not turn.done():
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
+
+    assert calls == ["test_tool"]
+    assert ticket.consumed and ticket.resolved.is_set()
+    assert len(requests) == 2
+    assert [message.role for message in requests[1]] == [
+        "user", "assistant", "tool", "user",
+    ]
+    assert requests[1][-2].content == "finished once"
+    original, reminder = requests[1][-1].content
+    assert original == TextPart(text="also consider this")
+    assert "a steer for the current turn" in reminder.text
+    finished = [event for event in events if event.type == "tool.finished"]
+    assert len(finished) == 1 and finished[0].status == "completed"
+    assert finished[0].structured_result is None
+    wakeup.assert_not_awaited()

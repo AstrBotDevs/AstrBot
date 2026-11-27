@@ -95,7 +95,7 @@
     "platformTooltips": {
       "qq_official": "QQ's official bot platform. Supports private chats, joining QQ group chats (you only need to be the group owner), Markdown rendering in QQ, and one-click QR setup.",
       "qq_official_webhook": "QQ's official bot platform. Supports private chats, joining QQ group chats (you only need to be the group owner), Markdown rendering in QQ, and one-click QR setup. This Webhook method requires a public IP address, so the WebSocket method above is recommended.",
-      "aiocqhttp": "A well-known instant messaging protocol. Connect through third-party services such as NapCat to integrate instant messaging apps.",
+      "aiocqhttp": "A well-known instant messaging protocol.",
       "weixin_oc": "WeChat's official bot integration. Supports private chats only and one-click QR setup."
     },
     "configFileTitle": "Config File",

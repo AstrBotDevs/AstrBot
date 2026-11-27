@@ -263,6 +263,7 @@ async def test_webchat_action_row_is_persisted_with_callback_data(tmp_path):
                 )
             ]
         ),
+        session_id="session-1",
         insert_attachment=insert_attachment,
         attachments_dir=tmp_path,
     )

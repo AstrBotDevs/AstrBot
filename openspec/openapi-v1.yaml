@@ -3088,7 +3088,7 @@ paths:
   /api/v1/tools:
     get:
       tags: [Tools]
-      summary: List LLM tools
+      summary: List registered plugin and MCP tools
       operationId: listTools
       x-astrbot-scope: tool
       parameters:
@@ -3096,7 +3096,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [builtin, plugin, mcp]
+            enum: [plugin, mcp]
         - name: enabled
           in: query
           schema:
@@ -4455,6 +4455,12 @@ paths:
             type: boolean
             default: false
           description: Paginate by UMO and return all conversation summaries for each selected session.
+        - name: group_webchat
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Combine matching WebChat conversations into one group when group_by_session is enabled.
         - name: include_history
           in: query
           schema:
@@ -5551,6 +5557,141 @@ paths:
         "200":
           description: Webhook accepted
 
+  /api/v1/chat/workbench/views:
+    get:
+      tags: [Chat]
+      summary: List registered workbench launcher views
+      operationId: listWorkbenchViews
+      x-astrbot-scope: chat
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/chat/workbench/views/{plugin_name}/{view_name}:
+    get:
+      tags: [Chat]
+      summary: Get a registered workbench view entry
+      operationId: getWorkbenchView
+      x-astrbot-scope: chat
+      parameters:
+        - name: plugin_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: view_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+        "404":
+          description: The view is unavailable or not registered for the launcher.
+
+  /api/v1/chat/views/{view_id}:
+    get:
+      tags:
+      - Chat
+      summary: Get Chat View
+      description: 'Return an authorized card snapshot and scoped frontend resources.
+
+
+        **Required scope:** `chat`'
+      operationId: get_chat_view_api_v1_chat_views__view_id__get
+      parameters:
+      - name: view_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: View Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      x-astrbot-scope: chat
+  /api/v1/chat/views/{view_id}/actions:
+    post:
+      tags:
+      - Chat
+      summary: Run Chat View Action
+      description: 'Submit a view action to the authenticated message event pipeline.
+
+
+        **Required scope:** `chat`'
+      operationId: run_chat_view_action_api_v1_chat_views__view_id__actions_post
+      parameters:
+      - name: view_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: View Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ViewActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      x-astrbot-scope: chat
+  /api/v1/chat/views/{view_id}/actions/{interaction_id}:
+    get:
+      tags:
+      - Chat
+      summary: Get Chat View Action
+      description: 'Read an accepted action without executing plugin code again.
+
+
+        **Required scope:** `chat`'
+      operationId: get_chat_view_action_api_v1_chat_views__view_id__actions__interaction_id__get
+      parameters:
+      - name: view_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: View Id
+      - name: interaction_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Interaction Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      x-astrbot-scope: chat
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -5779,6 +5920,67 @@ components:
         type: string
 
   schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ViewActionRequest:
+      properties:
+        action_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Action Id
+        interaction_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Interaction Id
+        expected_revision:
+          type: integer
+          minimum: 1.0
+          title: Expected Revision
+        data:
+          title: Data
+      additionalProperties: false
+      type: object
+      required:
+      - action_id
+      - interaction_id
+      - expected_revision
+      title: ViewActionRequest
+      description: Untrusted input submitted by a view through the authenticated host.
     StatsSystemResources:
       type: object
       required: [uptime_seconds, cpu_percent, memory, disk]

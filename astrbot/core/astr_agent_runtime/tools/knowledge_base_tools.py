@@ -5,13 +5,8 @@ from astrbot.api import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
-from astrbot.core.astr_agent_runtime.tools.registry import builtin_tool
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.star.context import Context
-
-_KNOWLEDGE_BASE_TOOL_CONFIG = {
-    "kb_agentic_mode": True,
-}
 
 
 def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
@@ -76,7 +71,6 @@ async def retrieve_knowledge_base(
     return None
 
 
-@builtin_tool(config=_KNOWLEDGE_BASE_TOOL_CONFIG)
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     name: str = "astr_kb_search"
