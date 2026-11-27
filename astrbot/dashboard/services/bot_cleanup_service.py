@@ -174,6 +174,12 @@ async def delete_bot_data(
                         )
                     )
 
+        # The history transaction has committed and the adapter is still stopped.
+        if "conversations" in targets:
+            notify = core.conversation_manager.on_platform_conversations_deleted
+            if notify:
+                notify(bot_id)
+
     if "traces" in targets:
         await asyncio.to_thread(
             get_trace_store(core.astrbot_config).clear_history, platform_id=bot_id
