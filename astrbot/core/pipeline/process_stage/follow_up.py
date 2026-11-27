@@ -9,8 +9,10 @@ from astrbot.core.agent.runtime import (
     AgentTurn,
     InputReceipt,
 )
+from astrbot.core.message.components import Forward, Node, Nodes
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
+_NON_PLAIN_STEERING_COMPONENTS = (Forward, Node, Nodes)
 _FOLLOW_UP_ORDER_STATE: dict[str, dict[str, object]] = {}
 """UMO-level follow-up order state.
 
@@ -149,6 +151,13 @@ async def _monitor_follow_up_ticket(
         await _mark_follow_up_consumed(umo, order_seq)
 
 
+def _has_non_plain_steering_components(event: AstrMessageEvent) -> bool:
+    """Return whether ``event`` carries components that require full turn processing."""
+    message_obj = getattr(event, "message_obj", None)
+    components = getattr(message_obj, "message", None) or ()
+    return any(isinstance(comp, _NON_PLAIN_STEERING_COMPONENTS) for comp in components)
+
+
 def try_capture_follow_up(
     event: AstrMessageEvent, turn: AgentTurn | None = None
 ) -> FollowUpCapture | None:
@@ -161,7 +170,11 @@ def try_capture_follow_up(
     Returns:
         A capture to await, or None when this input must open a separate turn.
     """
-    if turn is None or event.get_extra("agent_stop_requested"):
+    if (
+        turn is None
+        or event.get_extra("agent_stop_requested")
+        or _has_non_plain_steering_components(event)
+    ):
         return None
     receipt = turn.steer(
         AgentInput(

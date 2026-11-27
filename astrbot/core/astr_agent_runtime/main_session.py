@@ -13,6 +13,10 @@ from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConf
 from astrbot.core.astr_agent_runtime.main_agent.request import collect_initial_request
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.message.components import Reply
+from astrbot.core.utils.quoted_message.forward_extractor import (
+    has_forward_components,
+    is_forward_content_injected,
+)
 
 from .session import NativeAgentSession
 
@@ -90,11 +94,17 @@ class MainAgentSession(NativeAgentSession):
                 part.source for part in input.content if isinstance(part, ImageInput)
             ]
         parse_quoted = req is None or (
-            any(isinstance(part, Reply) for part in event.message_obj.message)
-            and not any(
-                isinstance(part, TextPart)
-                and part.text.startswith("<Quoted Message>\n")
-                for part in req.extra_user_content_parts
+            (
+                any(isinstance(part, Reply) for part in event.message_obj.message)
+                and not any(
+                    isinstance(part, TextPart)
+                    and part.text.startswith("<Quoted Message>\n")
+                    for part in req.extra_user_content_parts
+                )
+            )
+            or (
+                has_forward_components(event)
+                and not is_forward_content_injected(event, req.extra_user_content_parts)
             )
         )
         quote_refs: set[str] = set()

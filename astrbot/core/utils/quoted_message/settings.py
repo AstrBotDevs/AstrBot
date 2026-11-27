@@ -7,12 +7,15 @@ from typing import Any
 _DEFAULT_MAX_COMPONENT_CHAIN_DEPTH = 4
 _DEFAULT_MAX_FORWARD_NODE_DEPTH = 6
 _DEFAULT_MAX_FORWARD_FETCH = 32
+_DEFAULT_MAX_FORWARD_CHARS = 8000
 
 
 def _read_int_mapping(
     mapping: Mapping[str, Any],
     key: str,
     default: int,
+    *,
+    min_value: int = 0,
 ) -> int:
     raw = mapping.get(key)
     if raw is None:
@@ -21,7 +24,7 @@ def _read_int_mapping(
         value = int(raw)
     except (TypeError, ValueError):
         return default
-    if value < 0:
+    if value < min_value:
         return default
     return value
 
@@ -51,6 +54,7 @@ class QuotedMessageParserSettings:
     max_forward_node_depth: int = _DEFAULT_MAX_FORWARD_NODE_DEPTH
     max_forward_fetch: int = _DEFAULT_MAX_FORWARD_FETCH
     warn_on_action_failure: bool = False
+    max_forward_chars: int = _DEFAULT_MAX_FORWARD_CHARS
 
     def with_overrides(
         self,
@@ -78,6 +82,12 @@ class QuotedMessageParserSettings:
                 overrides,
                 "warn_on_action_failure",
                 self.warn_on_action_failure,
+            ),
+            max_forward_chars=_read_int_mapping(
+                overrides,
+                "max_forward_chars",
+                self.max_forward_chars,
+                min_value=1,
             ),
         )
 
