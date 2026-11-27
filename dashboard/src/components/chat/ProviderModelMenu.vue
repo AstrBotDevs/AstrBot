@@ -6,6 +6,7 @@
     provider-type="chat_completion"
     :variant="variant"
     :allow-empty="true"
+    model-only
     @update:model-value="updateSelection"
     @select="saveSelection"
   />

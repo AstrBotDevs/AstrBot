@@ -62,3 +62,8 @@
 - Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
 - `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
 - Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
+
+### ChatUI appearance / ChatUI 外观
+
+- ChatUI 的模型按钮只显示模型名，不再显示提供商 ID；悬停显示完整的提供商 ID，菜单中仍按提供商列出。
+- The ChatUI model button shows only the model name instead of the provider ID; hover to see the full provider ID, and the menu still lists entries by provider.

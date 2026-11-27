@@ -14,6 +14,7 @@
           class="provider-trigger"
           :class="`provider-trigger--${variant}`"
           type="button"
+          :title="modelOnly ? (modelValue as string) || undefined : undefined"
         >
           <span class="provider-trigger-copy">
             <span class="provider-trigger-title">{{ triggerTitle }}</span>
@@ -491,6 +492,8 @@ const props = withDefaults(
     variant?: "config" | "input" | "header";
     allowEmpty?: boolean;
     multiple?: boolean;
+    // The trigger shows only the model name, with the provider ID as its tooltip.
+    modelOnly?: boolean;
   }>(),
   {
     modelValue: "",
@@ -572,6 +575,12 @@ const triggerTitle = computed(() => {
         })
       : sharedTm("providerSelector.notSelected");
   }
+  // Providers load when the menu opens; the saved model name covers until then.
+  // Once loaded, a provider without a model name (or no longer listed) shows its ID.
+  const modelName = providersLoaded.value
+    ? selectedProvider.value?.model
+    : props.fallbackModel;
+  if (props.modelOnly && props.modelValue && modelName) return modelName;
   if (selectedProvider.value?.id) return selectedProvider.value.id;
   if (typeof props.modelValue === "string" && props.modelValue) {
     return props.modelValue;
