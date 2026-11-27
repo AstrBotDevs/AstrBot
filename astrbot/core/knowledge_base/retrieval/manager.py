@@ -3,6 +3,7 @@
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
 
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -18,6 +19,86 @@ from ..kb_helper import KBHelper
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+RERANK_AUTH_BILLING_STATUS_CODES = frozenset({401, 402, 403})
+DEFAULT_RERANK_AUTH_COOLDOWN_SECONDS = 300.0
+DEFAULT_RERANK_AUTH_MAX_COOLDOWN_SECONDS = 1800.0
+
+_HTTP_STATUS_TEXT_RE = re.compile(
+    r"\b(?:HTTP\s*|status[_\s]*code[:=\s]*)(401|402|403)\b",
+    re.IGNORECASE,
+)
+_BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-~+/=]+")
+_SECRET_KV_RE = re.compile(
+    r"(?i)\b(api[_-]?key|token|secret|authorization)\s*([=:])\s*[^\s,;'\"]+"
+)
+_URL_QUERY_RE = re.compile(r"(https?://[^\s?'\"<>]+)\?[^\s'\"<>]+")
+
+
+@dataclass
+class _RerankCooldownState:
+    open_until: float
+    cooldown_seconds: float
+    status_code: int
+    provider_ref_id: int
+
+
+def _extract_http_status(exc: BaseException) -> int | None:
+    """Extract an HTTP status code from an exception or its cause/context chain."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        for attr in ("status", "status_code"):
+            raw = getattr(current, attr, None)
+            if isinstance(raw, int) and not isinstance(raw, bool) and 100 <= raw <= 599:
+                return raw
+        response = getattr(current, "response", None)
+        if response is not None:
+            for attr in ("status_code", "status"):
+                raw = getattr(response, attr, None)
+                if (
+                    isinstance(raw, int)
+                    and not isinstance(raw, bool)
+                    and 100 <= raw <= 599
+                ):
+                    return raw
+        match = _HTTP_STATUS_TEXT_RE.search(str(current))
+        if match:
+            return int(match.group(1))
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _sanitize_error_summary(exc: BaseException, *, max_len: int = 200) -> str:
+    """Produce a concise, single-line, credential-free summary for logs."""
+    text = " ".join(str(exc).split())
+    text = _BEARER_RE.sub("Bearer ***", text)
+    text = _SECRET_KV_RE.sub(r"\1\2***", text)
+    text = _URL_QUERY_RE.sub(r"\1?***", text)
+    if len(text) > max_len:
+        text = text[:max_len].rstrip() + "..."
+    return text or type(exc).__name__
+
+
+def _resolve_rerank_provider_id(
+    rerank_provider: RerankProvider, explicit_id: str | None = None
+) -> str:
+    if explicit_id:
+        return str(explicit_id)
+    meta_fn = getattr(rerank_provider, "meta", None)
+    if callable(meta_fn):
+        try:
+            meta = meta_fn()
+            meta_id = getattr(meta, "id", None)
+            if meta_id:
+                return str(meta_id)
+        except Exception:
+            pass
+    provider_config = getattr(rerank_provider, "provider_config", None)
+    if isinstance(provider_config, dict) and provider_config.get("id"):
+        return str(provider_config["id"])
+    return f"{type(rerank_provider).__name__}@{id(rerank_provider)}"
 
 
 @dataclass
@@ -47,6 +128,9 @@ class RetrievalManager:
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
         kb_db: KBSQLiteDatabase,
+        *,
+        rerank_auth_cooldown_seconds: float = DEFAULT_RERANK_AUTH_COOLDOWN_SECONDS,
+        rerank_auth_max_cooldown_seconds: float = DEFAULT_RERANK_AUTH_MAX_COOLDOWN_SECONDS,
     ) -> None:
         """初始化检索管理器
 
@@ -55,11 +139,66 @@ class RetrievalManager:
             sparse_retriever: 稀疏检索器
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例
+            rerank_auth_cooldown_seconds: Rerank 遇到 401/402/403 时的初始冷却秒数
+            rerank_auth_max_cooldown_seconds: Rerank 连续认证/欠费失败时的最大冷却秒数
 
         """
         self.sparse_retriever = sparse_retriever
         self.rank_fusion = rank_fusion
         self.kb_db = kb_db
+        self._rerank_auth_cooldown_seconds = max(1.0, float(rerank_auth_cooldown_seconds))
+        self._rerank_auth_max_cooldown_seconds = max(
+            self._rerank_auth_cooldown_seconds,
+            float(rerank_auth_max_cooldown_seconds),
+        )
+        self._rerank_cooldowns: dict[str, _RerankCooldownState] = {}
+
+    def _is_rerank_in_cooldown(
+        self, provider_id: str, rerank_provider: RerankProvider, now: float
+    ) -> float:
+        """Return remaining cooldown seconds (>0) if the provider circuit is open."""
+        state = self._rerank_cooldowns.get(provider_id)
+        if state is None:
+            return 0.0
+        # If the provider instance was reloaded (e.g., API key updated in WebUI),
+        # reset the circuit immediately so fixed credentials take effect right away.
+        if state.provider_ref_id != id(rerank_provider):
+            self._rerank_cooldowns.pop(provider_id, None)
+            return 0.0
+        remaining = state.open_until - now
+        if remaining > 0:
+            return remaining
+        return 0.0
+
+    def _record_rerank_auth_failure(
+        self,
+        provider_id: str,
+        rerank_provider: RerankProvider,
+        status_code: int,
+        now: float,
+    ) -> float:
+        """Open or extend the recoverable cooldown circuit for auth/billing HTTP errors."""
+        prev = self._rerank_cooldowns.get(provider_id)
+        if prev is not None and prev.provider_ref_id == id(rerank_provider):
+            cooldown = min(
+                self._rerank_auth_max_cooldown_seconds,
+                prev.cooldown_seconds * 2.0,
+            )
+        else:
+            cooldown = self._rerank_auth_cooldown_seconds
+        self._rerank_cooldowns[provider_id] = _RerankCooldownState(
+            open_until=now + cooldown,
+            cooldown_seconds=cooldown,
+            status_code=status_code,
+            provider_ref_id=id(rerank_provider),
+        )
+        return cooldown
+
+    def _record_rerank_success(self, provider_id: str) -> None:
+        if self._rerank_cooldowns.pop(provider_id, None) is not None:
+            logger.info(
+                f"Rerank 提供商 '{provider_id}' 在冷却探测后已恢复正常，重新启用重排序。"
+            )
 
     async def retrieve(
         self,
@@ -171,6 +310,7 @@ class RetrievalManager:
 
         # 5. Rerank
         first_rerank = None
+        first_rerank_provider_id = None
         for kb_opt in kb_options.values():
             vec_db = kb_opt.get("vec_db")
             rerank_provider = (
@@ -178,17 +318,42 @@ class RetrievalManager:
             )
             if rerank_provider is not None:
                 first_rerank = rerank_provider
+                first_rerank_provider_id = kb_opt.get("rerank_provider_id")
                 break
         if first_rerank and retrieval_results:
-            try:
-                retrieval_results = await self._rerank(
-                    query=query,
-                    results=retrieval_results,
-                    top_k=top_m_final,
-                    rerank_provider=first_rerank,
+            provider_id = _resolve_rerank_provider_id(
+                first_rerank, first_rerank_provider_id
+            )
+            now = time.monotonic()
+            remaining = self._is_rerank_in_cooldown(provider_id, first_rerank, now)
+            if remaining > 0:
+                logger.debug(
+                    f"Rerank 提供商 '{provider_id}' 处于认证/欠费冷却中（剩余约 {int(remaining)}s），跳过重排序并使用融合结果"
                 )
-            except Exception as e:
-                logger.warning(f"Rerank 执行失败，已跳过重排序并使用融合结果: {e}")
+            else:
+                try:
+                    retrieval_results = await self._rerank(
+                        query=query,
+                        results=retrieval_results,
+                        top_k=top_m_final,
+                        rerank_provider=first_rerank,
+                    )
+                    self._record_rerank_success(provider_id)
+                except Exception as e:
+                    status_code = _extract_http_status(e)
+                    summary = _sanitize_error_summary(e)
+                    if status_code in RERANK_AUTH_BILLING_STATUS_CODES:
+                        cooldown = self._record_rerank_auth_failure(
+                            provider_id, first_rerank, status_code, time.monotonic()
+                        )
+                        logger.warning(
+                            f"Rerank 提供商 '{provider_id}' 返回 HTTP {status_code}（认证/额度异常），"
+                            f"已进入冷却熔断 {int(cooldown)}s 并使用融合结果: {summary}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Rerank 执行失败，已跳过重排序并使用融合结果: {type(e).__name__}: {summary}"
+                        )
 
         return retrieval_results[:top_m_final]
 
