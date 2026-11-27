@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import inspect
 import json
 import os
 import threading
 import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+from contextlib import aclosing
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -231,7 +233,6 @@ class _PermissionGuardedTool(FunctionTool):
             parameters=getattr(tool, "parameters", {}),
             is_background_task=getattr(tool, "is_background_task", False),
             execution_timeout=getattr(tool, "execution_timeout", None),
-            strict=getattr(tool, "strict", None),
         )
         self._wrapped = tool
         self._mgr = manager
@@ -240,6 +241,11 @@ class _PermissionGuardedTool(FunctionTool):
         self.handler_module_path = getattr(tool, "handler_module_path", None)
 
     def is_available(self) -> bool:
+        """Check that the wrapped registration is still active.
+
+        Returns:
+            Whether this exact registration can still be used.
+        """
         if not self.active or not getattr(self._wrapped, "active", True):
             return False
         if isinstance(self._wrapped, MCPTool):
@@ -251,7 +257,14 @@ class _PermissionGuardedTool(FunctionTool):
         return self._mgr.get_func(self.name) is self._wrapped
 
     async def authorization_error(self, context: Any) -> str | None:
-        """Check execution permission and the current registration."""
+        """Check execution permission and the current registration.
+
+        Args:
+            context: Execution context of the caller.
+
+        Returns:
+            A denial message, or None if authorized.
+        """
         error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
@@ -264,46 +277,41 @@ class _PermissionGuardedTool(FunctionTool):
             return f"error: Tool {self.name} is no longer available."
         return None
 
-    async def call(self, context: Any, **kwargs: Any) -> Any:
-        import inspect as _inspect
+    async def invoke(self, context: Any, **kwargs: Any) -> Any:
+        """Authorize a tool invocation without consuming its generator results.
 
+        Args:
+            context: Execution context of the caller.
+            **kwargs: Arguments for the wrapped tool.
+
+        Returns:
+            The tool result, its async generator, or a denial message.
+        """
         error = await self.authorization_error(context)
         if error is not None:
             return error
 
-        # @filter.llm_tool decorated tools have a handler attribute, which is the actual callable.
-        if self._wrapped.handler is not None:
-            event = context.context.event
-            result = self._wrapped.handler(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
+        wrapped = self._wrapped
+        if handler := getattr(wrapped, "handler", None):
+            result = handler(context.context.event, **kwargs)
+        elif getattr(type(wrapped), "call", None) not in (None, FunctionTool.call):
+            result = wrapped.call(context, **kwargs)
+        elif run := getattr(wrapped, "run", None):
+            result = run(context.context.event, **kwargs)
+        else:
+            return "error: tool has no callable handler"
+        return await result if inspect.isawaitable(result) else result
 
-        # If the tool has a "call" method that is not the default FunctionTool.call, invoke it.
-        call_override = getattr(type(self._wrapped), "call", None)
-        if call_override is not None and call_override is not FunctionTool.call:
-            return await self._wrapped.call(context, **kwargs)
-
-        # Compatibility fallback: if the tool has a "run" method, invoke it. This is for legacy tools that don't use the new handler/call interface.
-        run = getattr(self._wrapped, "run", None)
-        if run is not None:
-            event = context.context.event
-            result = run(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
-
-        return "error: tool has no callable handler"
+    async def call(self, context: Any, **kwargs: Any) -> Any:
+        result = await self.invoke(context, **kwargs)
+        if inspect.isasyncgen(result):
+            # Direct callers still expect one result; the native executor uses invoke().
+            async with aclosing(result):
+                last = None
+                async for last in result:
+                    pass
+            return last
+        return result
 
 
 class FunctionToolManager:

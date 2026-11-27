@@ -1,4 +1,4 @@
-"""Validate tool arguments without letting tool-supplied regexes block the runner."""
+"""Validate tool arguments without letting tool-supplied schemas block the runner."""
 
 import asyncio
 import json
@@ -45,27 +45,10 @@ async def validate_tool_arguments(schema: dict, arguments: object) -> None:
     if not isinstance(arguments, dict):
         raise ValueError("Tool arguments must be an object.")
 
-    stack: list = [schema]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, dict):
-            if "pattern" in node or "patternProperties" in node:
-                break
-            stack.extend(node.values())
-        elif isinstance(node, list):
-            stack.extend(node)
-    else:
-        if error := _validation_error(schema, arguments):
-            raise ValueError(error)
-        return
-
-    # Threads cannot safely bound stdlib regex evaluation. Kill a separate worker
-    # on timeout, including regexes that jsonschema evaluates indirectly.
+    # Regexes and combinators can both run unbounded; a thread cannot be killed.
     payload = json.dumps([schema, arguments]).encode()
     if len(payload) > _MAX_WORKER_INPUT_BYTES:
-        raise ValueError(
-            "Tool schema and arguments exceed the regex validation size limit."
-        )
+        raise ValueError("Tool schema and arguments exceed the validation size limit.")
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         str(Path(__file__).resolve()),

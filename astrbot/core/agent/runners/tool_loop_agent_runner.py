@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -612,6 +613,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         error = None
         settled = False
 
+        def final_response(response: LLMResponse) -> LLMResponse:
+            if (
+                self.tool_schema_mode == "dynamic"
+                and self.run_context.run_end_reason == "max_steps"
+                and response.tools_call_name
+                and response.role != "err"
+            ):
+                # Keep wire definitions stable, but never dispatch a call made after the budget.
+                response = copy.copy(response)
+                response.role = "assistant"
+                response.tools_call_name = []
+                response.tools_call_args = []
+                response.tools_call_ids = []
+                response.tools_call_extra_content = {}
+                if not response.completion_text:
+                    response.completion_text = (
+                        "I reached the tool-call limit before I could finish. "
+                        "You can ask me to continue."
+                    )
+            return response
+
         async def settle() -> None:
             nonlocal settled
             if settled:
@@ -722,7 +744,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if response.usage is not None:
                             partial_usage = response.usage
                         if not response.is_chunk:
-                            final = response
+                            final = response = final_response(response)
                             status = (
                                 TurnStatus.FAILED
                                 if response.role == "err"
@@ -737,7 +759,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     self.provider.text_chat(**payload), interrupt_for_steering=True
                 )
                 if response is not None:
-                    final = response
+                    final = response = final_response(response)
                     status = (
                         TurnStatus.FAILED
                         if response.role == "err"
@@ -781,7 +803,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             hint = (
                 "Use astrbot_search_tools to find tools for a capability. Call "
                 "astrbot_describe_tool for a tool's schema, then use astrbot_call_tool "
-                "with arguments matching that schema. If you already know the tool name, "
+                "with a JSON object string matching that schema. If you already know the tool name, "
                 "you can describe it without searching. Use tools only when needed."
             )
             if contexts and contexts[0].role == "system":
@@ -954,13 +976,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_set = self.req.func_tool
         if self.tool_schema_mode == "dynamic":
             discovery = self._tool_discovery
-            tool_set = (
-                discovery.tools
-                if discovery
-                and discovery.catalog
-                and self.run_context.run_end_reason != "max_steps"
-                else None
-            )
+            tool_set = discovery.tools if discovery and discovery.catalog else None
         if not tool_set:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
@@ -1821,8 +1837,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         continue
                     # Preserve the outer wire call in history, but use the real tool for
                     # validation, hooks, execution, and events.
-                    func_tool_name = func_tool_args["name"]
-                    func_tool_args = func_tool_args["arguments"]
+                    name = func_tool_args["name"]
+                    try:
+                        arguments = json.loads(func_tool_args["arguments"])
+                    except (ValueError, RecursionError) as exc:
+                        raise ValueError(
+                            "Tool arguments must be a valid JSON object string."
+                        ) from exc
+                    if not isinstance(arguments, dict):
+                        raise ValueError("Tool arguments must decode to an object.")
+                    func_tool_name, func_tool_args = name, arguments
                     func_tool = described.get(func_tool_name)
                     if func_tool is None:
                         raise ValueError(

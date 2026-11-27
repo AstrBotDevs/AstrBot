@@ -12,7 +12,15 @@ class BaseFunctionToolExecutor(Generic[TContext]):
     def prepare_tools(
         cls, tools: ToolSet, run_context: ContextWrapper[TContext]
     ) -> ToolSet:
-        """Bind host execution policies to the catalog before discovery."""
+        """Bind host execution policies to the catalog before discovery.
+
+        Args:
+            tools: Candidate tools for this run.
+            run_context: Context in which the tools will execute.
+
+        Returns:
+            The tool catalog with applicable host execution policies.
+        """
         return tools
 
     @classmethod

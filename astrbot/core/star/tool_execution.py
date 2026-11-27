@@ -87,6 +87,10 @@ async def call_local_llm_tool(
     if not ready_to_call:
         return
 
+    is_awaitable = inspect.isawaitable(ready_to_call)
+    if is_awaitable:
+        ready_to_call = await ready_to_call
+
     if inspect.isasyncgen(ready_to_call):
 
         async def checked_results():
@@ -117,9 +121,8 @@ async def call_local_llm_tool(
         except Exception as e:
             logger.error(f"Previous Error: {trace_}")
             raise e
-    elif inspect.iscoroutine(ready_to_call):
-        # 如果只是一个协程, 直接执行
-        ret = await ready_to_call
+    elif is_awaitable:
+        ret = ready_to_call
         if isinstance(ret, MessageEventResult | CommandResult):
             event.set_result(ret)
             yield

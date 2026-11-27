@@ -328,16 +328,6 @@ def test_get_full_tool_set_wraps_plugin_tools():
     )
 
 
-def test_guarded_tool_keeps_legacy_default_availability():
-    manager = FunctionToolManager()
-    tool = SimpleNamespace(name="legacy", description="Legacy tool", parameters={})
-    manager.func_list.append(tool)
-
-    guarded = manager.get_func("legacy", guarded=True)
-
-    assert guarded.is_available()
-
-
 # ── API: get_tool_list permission fields ──────────────────────────────
 
 

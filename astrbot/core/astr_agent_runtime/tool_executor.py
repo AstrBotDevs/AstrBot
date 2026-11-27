@@ -70,7 +70,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def prepare_tools(
         cls, tools: ToolSet, run_context: ContextWrapper[AstrAgentContext]
     ) -> ToolSet:
-        """Keep registry permissions on tools passed as raw objects by callers."""
+        """Keep registry permissions on tools passed as raw objects by callers.
+
+        Args:
+            tools: Candidate tools supplied by the caller.
+            run_context: Context providing the tool registry.
+
+        Returns:
+            A tool catalog with registered objects wrapped for authorization.
+        """
         ctx = getattr(run_context.context, "context", None)
         manager = (
             ctx.get_llm_tool_manager()
@@ -321,7 +329,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         toolset.add_tool(resolved)
                 elif isinstance(tool, FunctionTool):
                     toolset.add_tool(tool)
-            return cls.prepare_tools(toolset, run_context) or None
+            prepared = cls.prepare_tools(toolset, run_context)
+            return None if prepared.empty() else prepared
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -626,7 +635,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         awaitable = None
         method_name = ""
-        if tool.handler:
+        if isinstance(tool, _PermissionGuardedTool):
+            awaitable = tool.invoke
+            method_name = "call"
+        elif tool.handler:
             awaitable = tool.handler
             method_name = "decorator_handler"
         elif is_override_call:

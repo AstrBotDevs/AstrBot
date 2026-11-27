@@ -57,24 +57,33 @@ class ToolDiscovery:
                 ),
                 FunctionTool(
                     "astrbot_call_tool",
-                    "Invoke a previously described tool by name with arguments matching its schema.",
+                    "Invoke a previously described tool by name with its arguments encoded as a JSON object string.",
                     {
                         "type": "object",
                         "properties": {
                             "name": {"type": "string"},
-                            "arguments": {"type": "object"},
+                            "arguments": {
+                                "type": "string",
+                                "description": "JSON-encoded argument object, or '{}' for no arguments.",
+                            },
                         },
                         "required": ["name", "arguments"],
                         "additionalProperties": False,
                     },
-                    # Responses must not infer an empty closed object for arbitrary arguments.
-                    strict=False,
                 ),
             ]
         )
 
     def search(self, context: ContextWrapper, query: str) -> str:
-        """Return a short list of new matching tools, without exposing schemas."""
+        """Find matching tools without exposing their schemas.
+
+        Args:
+            context: Current run and its available tools.
+            query: Keywords describing the desired capability.
+
+        Returns:
+            A JSON list of new matches, or guidance when none remain.
+        """
         terms = _terms(query)
         ranked = []
         for tool in self.catalog.values():
@@ -104,7 +113,18 @@ class ToolDiscovery:
         return "No matching tools. Try a more specific capability or other keywords."
 
     def describe(self, context: ContextWrapper, name: str) -> str:
-        """Return a currently available tool's schema and record its identity."""
+        """Describe a currently available tool and record its identity.
+
+        Args:
+            context: Current run and its available tools.
+            name: Exact name of the tool to describe.
+
+        Returns:
+            A JSON object containing the tool's complete definition.
+
+        Raises:
+            ValueError: The tool is unavailable in the current catalog.
+        """
         tool = self.catalog.get(name)
         if tool is None or not context.is_tool_available(tool):
             raise ValueError("Tool is not available in the current catalog.")

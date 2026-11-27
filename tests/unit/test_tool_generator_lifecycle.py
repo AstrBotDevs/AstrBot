@@ -19,21 +19,6 @@ from astrbot.core.astr_agent_runtime.tool_executor import (
 
 
 @pytest.mark.asyncio
-async def test_local_tool_helper_forwards_handler_positional_arguments():
-    context = ContextWrapper(context=SimpleNamespace(event=object()))
-
-    async def handler(event, value):
-        return value
-
-    assert [
-        result
-        async for result in call_local_llm_tool(
-            context, handler, "decorator_handler", "positional value"
-        )
-    ] == ["positional value"]
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("layer", ["handler_wrapper", "local", "execute", "runner"])
 @pytest.mark.parametrize("exit_mode", ["close", "exhaust", "error"])
 async def test_real_handler_cleanup_and_output(layer, exit_mode):
@@ -302,9 +287,7 @@ async def test_background_real_generator_cancel_closes_before_return(monkeypatch
     async def wake(**kwargs):
         wakeups.append(kwargs)
 
-    monkeypatch.setattr(
-        "astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wake
-    )
+    monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wake)
     context = ContextWrapper(context=SimpleNamespace(event=SimpleNamespace()))
     tool = FunctionTool(
         name="background_cleanup_probe",

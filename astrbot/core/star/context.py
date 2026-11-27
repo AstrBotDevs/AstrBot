@@ -270,7 +270,7 @@ class Context:
                 tool_schema_mode: str - use "dynamic" to discover tools from the supplied ToolSet
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
                 agent_context: AstrAgentContext - context to use for the agent
-                run_context: ContextWrapper - reuse caller-owned state for this Context and event
+                run_context: ContextWrapper - reuse caller-owned state sequentially for this Context and event
 
                 other kwargs will be DIRECTLY passed to the runner.reset() method
 
@@ -279,6 +279,7 @@ class Context:
 
         Raises:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
+            ValueError: If the supplied run context is already in use.
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
@@ -370,17 +371,23 @@ class Context:
                 "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
             )
 
-        await agent_runner.reset(
-            provider=prov,
-            request=request,
-            run_context=run_context,
-            tool_executor=tool_executor,
-            agent_hooks=agent_hooks,
-            streaming=streaming,
-            **other_kwargs,
-        )
-        async for _ in agent_runner.step_until_done(max_steps):
-            pass
+        if run_context._sdk_in_use:
+            raise ValueError("run_context is already in use by another tool loop")
+        run_context._sdk_in_use = True
+        try:
+            await agent_runner.reset(
+                provider=prov,
+                request=request,
+                run_context=run_context,
+                tool_executor=tool_executor,
+                agent_hooks=agent_hooks,
+                streaming=streaming,
+                **other_kwargs,
+            )
+            async for _ in agent_runner.step_until_done(max_steps):
+                pass
+        finally:
+            run_context._sdk_in_use = False
         llm_resp = agent_runner.get_final_llm_resp()
         if not llm_resp:
             raise Exception("Agent did not produce a final LLM response")

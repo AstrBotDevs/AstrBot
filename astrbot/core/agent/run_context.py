@@ -26,6 +26,8 @@ class ContextWrapper(Generic[TContext]):
     """The executable tools available to this run."""
     dynamic_tools: bool = False
     """Restrict execution to the current catalog in dynamic tool mode."""
+    _sdk_in_use: bool = Field(default=False, init=False, repr=False)
+    """Whether an SDK tool loop owns this mutable context."""
 
     def is_tool_available(self, tool: FunctionTool) -> bool:
         """Check live availability and, in discovery mode, current run membership.

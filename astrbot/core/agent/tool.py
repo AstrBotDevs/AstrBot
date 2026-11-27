@@ -70,14 +70,16 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     """
     execution_timeout: float | None = None
     """Optional per-call timeout in seconds, overriding the runner's default."""
-    strict: bool | None = None
-    """OpenAI function-calling hint; None uses the provider's default."""
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
     def is_available(self) -> bool:
-        """Return whether this tool instance is still available."""
+        """Check whether this tool instance is available.
+
+        Returns:
+            Whether the tool can be used.
+        """
         return self.active
 
     async def call(
@@ -223,8 +225,6 @@ class ToolSet:
             func_def = {"type": "function", "function": {"name": tool.name}}
             if tool.description:
                 func_def["function"]["description"] = tool.description
-            if (strict := getattr(tool, "strict", None)) is not None:
-                func_def["function"]["strict"] = strict
 
             if tool.parameters is not None:
                 if (

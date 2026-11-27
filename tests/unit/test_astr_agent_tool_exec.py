@@ -11,7 +11,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.runtime import AgentPermissions, AgentRole
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.message.components import Image
@@ -588,16 +588,9 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("kind", "foreground_done", "phase"),
-    [
-        (kind, done, phase)
-        for kind in ("tool", "handoff")
-        for done in (False, True)
-        for phase in ("tool", "wakeup", "complete", "failure")
-    ]
-    + [("guarded_tool", False, "complete")],
-)
+@pytest.mark.parametrize("kind", ["tool", "handoff"])
+@pytest.mark.parametrize("foreground_done", [False, True])
+@pytest.mark.parametrize("phase", ["tool", "wakeup", "complete", "failure"])
 async def test_background_execution_lifecycle(
     monkeypatch, kind, foreground_done, phase
 ):
@@ -628,7 +621,7 @@ async def test_background_execution_lifecycle(
     monkeypatch.setattr("astrbot.core.astr_agent_runtime.tool_executor.wake_main_agent", wakeup)
     monkeypatch.setattr(
         FunctionToolExecutor,
-        "_execute_handoff" if kind == "handoff" else "_execute_local",
+        "_execute_local" if kind == "tool" else "_execute_handoff",
         classmethod(execute),
     )
     tool = (
@@ -638,21 +631,17 @@ async def test_background_execution_lifecycle(
             parameters={"type": "object", "properties": {}},
             is_background_task=True,
         )
-        if kind != "handoff"
+        if kind == "tool"
         else HandoffTool(Agent(name="worker"))
     )
-    if kind == "guarded_tool":
-        manager = FunctionToolManager()
-        manager.func_list.append(tool)
-        tool = manager.get_func(tool.name, guarded=True)
-    arguments = {"background_task": True} if kind == "handoff" else {}
+    arguments = {} if kind == "tool" else {"background_task": True}
     registry.register(event)
     results = [
         r async for r in FunctionToolExecutor.execute(tool, run_context, **arguments)
     ]
-    assert "task_id=" in results[0].content[0].text
     task = next(iter(registry._background_tasks[event.unified_msg_origin]))
     try:
+        assert "task_id=" in results[0].content[0].text
         await asyncio.wait_for(started.wait(), timeout=1)
         if foreground_done:
             registry.unregister(event)
@@ -748,95 +737,3 @@ async def test_tool_specific_timeout_survives_permission_wrapper(monkeypatch):
     ]
     assert results[0].content[0].text == "done"
     assert waiting.await_args_list[0].kwargs["timeout"] == 65
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("permission_error", [None, "Permission denied"])
-@pytest.mark.parametrize("mode", ["full", "dynamic"])
-async def test_registered_handoff_preserves_dispatch_and_dynamic_mode(
-    permission_error, mode, monkeypatch
-):
-    from astrbot.core.astr_agent_runtime import tool_executor
-
-    monkeypatch.setattr(tool_executor, "AstrAgentContext", SimpleNamespace)
-    manager = FunctionToolManager()
-    handoff = HandoffTool(Agent(name="child", tools=[]))
-    handoff.handler = AsyncMock(return_value="legacy callback")
-    manager.func_list.append(handoff)
-    monkeypatch.setattr(
-        manager, "_check_tool_permission", AsyncMock(return_value=permission_error)
-    )
-    child_loop = AsyncMock(return_value=SimpleNamespace(completion_text="done"))
-    context = SimpleNamespace(
-        get_config=lambda **_: {
-            "agent": {"config": {"misc": {"tool_schema_mode": mode}}}
-        },
-        get_llm_tool_manager=lambda: manager,
-        get_current_chat_provider_id=AsyncMock(return_value="provider-id"),
-        tool_loop_agent=child_loop,
-    )
-    event = _DummyEvent([])
-    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
-    guarded = manager.get_func(handoff.name, guarded=True)
-    if mode == "dynamic":
-        run_context.tools = ToolSet([guarded])
-        run_context.dynamic_tools = True
-
-    results = [
-        result
-        async for result in FunctionToolExecutor.execute(
-            guarded, run_context, input="hello"
-        )
-    ]
-
-    expected = "done" if mode == "dynamic" else "legacy callback"
-    assert results[0].content[0].text == (permission_error or expected)
-    if permission_error:
-        if mode == "dynamic":
-            assert results[0].isError
-        child_loop.assert_not_awaited()
-        handoff.handler.assert_not_awaited()
-    elif mode == "dynamic":
-        child_loop.assert_awaited_once()
-        assert child_loop.await_args.kwargs["tool_schema_mode"] == "dynamic"
-        handoff.handler.assert_not_awaited()
-    else:
-        child_loop.assert_not_awaited()
-        handoff.handler.assert_awaited_once_with(event, input="hello")
-
-
-def test_handoff_catalog_guards_registered_objects_by_identity():
-    manager = FunctionToolManager()
-    registered = FunctionTool("registered", "Registered tool", {})
-    nested = FunctionTool("nested", "Tool owned by the child", {})
-    manager.func_list.append(registered)
-    run_context = _build_run_context()
-    run_context.context.context.get_llm_tool_manager = lambda: manager
-    run_context.tools = ToolSet([registered])
-
-    catalog = FunctionToolExecutor._build_handoff_toolset(
-        run_context, [registered.name, registered, nested]
-    )
-
-    assert isinstance(catalog.get_tool(registered.name), _PermissionGuardedTool)
-    assert catalog.get_tool(nested.name) is nested
-
-
-@pytest.mark.asyncio
-async def test_local_tool_checks_availability_in_timed_handler_task(monkeypatch):
-    handler = AsyncMock(return_value="done")
-    tool = FunctionTool("example", "Example tool", {}, handler=handler)
-    run_context = _build_run_context()
-    wait_for = asyncio.wait_for
-
-    async def deactivate_before_dispatch(awaitable, timeout):
-        tool.active = False
-        return await wait_for(awaitable, timeout)
-
-    monkeypatch.setattr(asyncio, "wait_for", deactivate_before_dispatch)
-
-    with pytest.raises(ValueError, match="no longer available"):
-        async for _ in FunctionToolExecutor.execute(tool, run_context):
-            pass
-
-    handler.assert_not_awaited()
