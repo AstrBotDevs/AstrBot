@@ -12,7 +12,7 @@ def _make_provider() -> ProviderOpenAIWhisperAPI:
         provider_config={
             "id": "test-whisper-api",
             "type": "openai_whisper_api",
-            "model": "whisper-1",
+            "model": "gpt-transcribe",
             "api_key": "test-key",
         },
         provider_settings={},
