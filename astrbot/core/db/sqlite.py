@@ -140,10 +140,13 @@ class SQLiteDatabase(BaseDatabase):
 
         @event.listens_for(self.engine.sync_engine, "connect")
         def configure_sqlite_connection(connection, _record):
-            """Apply per-connection SQLite integrity and bounded memory PRAGMAs."""
+            """Apply per-connection SQLite integrity, durability, and memory PRAGMAs."""
             cursor = connection.cursor()
             try:
                 cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA temp_store=MEMORY")
                 # Negative cache_size sets KiB (~8 MiB); positive values count 4 KiB pages.
                 cursor.execute("PRAGMA cache_size=-8000")
                 # Leave file caching to the OS page cache so memory stays reclaimable.
@@ -170,9 +173,6 @@ class SQLiteDatabase(BaseDatabase):
                 )
             )
             await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA busy_timeout=30000"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA optimize"))
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
