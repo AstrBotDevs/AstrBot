@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import hashlib
+import json
 import sys
 import time
 import traceback
@@ -116,6 +118,16 @@ class FollowUpTicket:
     for the current run but is excluded from restored long-term history."""
     consumed: bool = False
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+@dataclass(slots=True)
+class _ContextUsageSnapshot:
+    """Store provider prompt usage bound to one request context."""
+
+    message_fingerprints: tuple[str, ...]
+    prompt_tokens: int
+    provider: Provider
+    tool_schema_fingerprint: str | None
 
 
 class _ToolExecutionInterrupted(Exception):
@@ -333,6 +345,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
 
         self.provider = provider
+        self._context_usage_snapshot: _ContextUsageSnapshot | None = None
         self.fallback_providers: list[Provider] = []
         seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
         for fallback_provider in fallback_providers or []:
@@ -939,6 +952,50 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return self._light_tool_set or None
         return tool_set
 
+    def _context_usage_fingerprints(
+        self,
+        messages: list[Message],
+        func_tool: ToolSet | None,
+    ) -> tuple[tuple[str, ...], str | None]:
+        """Build immutable fingerprints for a context-usage snapshot.
+
+        Args:
+            messages: Messages that form the provider request context.
+            func_tool: Tools exposed to the provider for that request.
+
+        Returns:
+            Immutable fingerprints for the messages and tool schema.
+        """
+        json_dump_kwargs = {
+            "default": str,
+            "ensure_ascii": False,
+            "separators": (",", ":"),
+            "sort_keys": True,
+        }
+        message_fingerprints = tuple(
+            hashlib.sha256(
+                json.dumps(message.model_dump(), **json_dump_kwargs).encode()
+            ).hexdigest()
+            for message in messages
+        )
+        tool_schema_fingerprint = None
+        if func_tool is not None:
+            tool_schema_fingerprint = hashlib.sha256(
+                json.dumps(
+                    [
+                        {
+                            "active": tool.active,
+                            "description": tool.description,
+                            "name": tool.name,
+                            "parameters": tool.parameters,
+                        }
+                        for tool in func_tool.tools
+                    ],
+                    **json_dump_kwargs,
+                ).encode()
+            ).hexdigest()
+        return message_fingerprints, tool_schema_fingerprint
+
     def _simple_print_message_role(self, tag: str, messages: list):
         roles = [m.role for m in messages]
         n = len(roles)
@@ -1254,14 +1311,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         await self._append_pending_follow_ups()
 
         # Process request-time context before sending it to the provider.
-        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        trusted_token_usage = 0
+        snapshot = self._context_usage_snapshot
+        current_func_tool = self._func_tool_for_provider()
+        if snapshot:
+            message_fingerprints, tool_schema_fingerprint = (
+                self._context_usage_fingerprints(
+                    self.run_context.messages,
+                    current_func_tool,
+                )
+            )
+            if (
+                self.enforce_max_turns == -1
+                and snapshot.provider is self.provider
+                and snapshot.tool_schema_fingerprint == tool_schema_fingerprint
+                and len(self.run_context.messages) >= len(snapshot.message_fingerprints)
+                and snapshot.message_fingerprints
+                == message_fingerprints[: len(snapshot.message_fingerprints)]
+            ):
+                # The previous provider prompt includes overhead such as tool schemas.
+                # Only reuse it while the current request preserves that exact prefix.
+                tail_messages = self.run_context.messages[
+                    len(snapshot.message_fingerprints) :
+                ]
+                trusted_token_usage = snapshot.prompt_tokens + (
+                    self.request_context_manager.token_counter.count_tokens(
+                        tail_messages
+                    )
+                )
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         previous_messages = self.run_context.messages
         context_revision = self.request_context_manager.revision
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
                 self.run_context.messages,
-                trusted_token_usage=token_usage,
+                trusted_token_usage=trusted_token_usage,
             )
         )
         if processed_messages is None:
@@ -1336,6 +1420,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     self.stats.current_context_tokens = llm_response.usage.input
                     if self.req.conversation:
                         self.req.conversation.token_usage = llm_response.usage.total
+                    if llm_response.usage.input > 0:
+                        message_fingerprints, tool_schema_fingerprint = (
+                            self._context_usage_fingerprints(
+                                self.run_context.messages,
+                                self._func_tool_for_provider(),
+                            )
+                        )
+                        self._context_usage_snapshot = _ContextUsageSnapshot(
+                            message_fingerprints=message_fingerprints,
+                            prompt_tokens=llm_response.usage.input,
+                            provider=self.provider,
+                            tool_schema_fingerprint=tool_schema_fingerprint,
+                        )
                 # Preserve legacy statistics for history and plugin readers.
                 self.stats.end_time = time.time()
                 break  # got final response
