@@ -12,6 +12,7 @@ import io
 import math
 import mimetypes
 import os
+import re
 import shutil
 import stat
 import struct
@@ -196,6 +197,14 @@ class ResolvedMediaFile:
         _cleanup_paths(self.cleanup_paths)
 
 
+# Rejection-only guard matching any prefix CPython's urlsplit() can normalize
+# to the "file" scheme, keeping large data:/base64:// refs out of its LRU cache.
+_FILE_SCHEME_PREFIX = re.compile(
+    r"[\x00-\x20]*f[\t\r\n]*i[\t\r\n]*l[\t\r\n]*e[\t\r\n]*:",
+    re.ASCII | re.IGNORECASE,
+)
+
+
 def is_file_uri(value: object) -> bool:
     """Return whether a value is a ``file:`` URI.
 
@@ -207,6 +216,8 @@ def is_file_uri(value: object) -> bool:
     """
 
     if not isinstance(value, str):
+        return False
+    if type(value) is str and not _FILE_SCHEME_PREFIX.match(value):
         return False
     try:
         return urlsplit(value).scheme.lower() == "file"
@@ -342,22 +353,33 @@ def describe_media_ref(media_ref: object | None) -> str:
 
     ref_len = len(media_ref)
     if media_ref.startswith("data:"):
-        header, _, payload = media_ref.partition(",")
+        comma_idx = media_ref.find(",")
+        header = media_ref[:comma_idx] if comma_idx != -1 else media_ref
+        payload_len = ref_len - comma_idx - 1 if comma_idx != -1 else 0
         mime_type = header[5:].split(";", 1)[0] or "unknown"
-        return f"data URI mime={mime_type!r} payload_len={len(payload)}"
+        return f"data URI mime={mime_type!r} payload_len={payload_len}"
 
     if media_ref.startswith("base64://"):
-        return f"base64 media payload_len={len(media_ref.removeprefix('base64://'))}"
+        return f"base64 media payload_len={ref_len - len('base64://')}"
 
-    parsed = urlparse(media_ref)
-    if parsed.scheme in {"http", "https"}:
-        filename = Path(unquote(parsed.path or "")).name
-        suffix = f" file={filename!r}" if filename else ""
-        return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={ref_len}"
+    # Skip URL parsing (and its global LRU cache) for plain ASCII strings
+    # without scheme or IPv6 delimiters, such as bare base64 payloads.
+    if not (
+        type(media_ref) is str
+        and media_ref.isascii()
+        and ":" not in media_ref
+        and "[" not in media_ref
+        and "]" not in media_ref
+    ):
+        parsed = urlparse(media_ref)
+        if parsed.scheme in {"http", "https"}:
+            filename = Path(unquote(parsed.path or "")).name
+            suffix = f" file={filename!r}" if filename else ""
+            return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={ref_len}"
 
-    if is_file_uri(media_ref):
-        filename = Path(file_uri_to_path(media_ref)).name
-        return f"file URI name={filename!r} len={ref_len}"
+        if is_file_uri(media_ref):
+            filename = Path(file_uri_to_path(media_ref)).name
+            return f"file URI name={filename!r} len={ref_len}"
 
     media_path_exists = False
     try:
