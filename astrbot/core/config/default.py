@@ -1907,6 +1907,8 @@ CONFIG_METADATA_2 = {
                         "model": "s2-pro",
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
+                        "fishaudio-tts-format": "wav",
+                        "fishaudio-tts-mp3-bitrate": "128",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -3028,6 +3030,18 @@ CONFIG_METADATA_2 = {
                         "description": "reference_id",
                         "type": "string",
                         "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID",
+                    },
+                    "fishaudio-tts-format": {
+                        "description": "音频格式",
+                        "type": "string",
+                        "options": ["wav", "mp3"],
+                        "hint": "FishAudio TTS 返回的音频格式。默认 wav 保持兼容；长语音场景推荐选择 mp3 以显著减小音频体积并降低传输开销。",
+                    },
+                    "fishaudio-tts-mp3-bitrate": {
+                        "description": "MP3 码率 (kbps)",
+                        "type": "string",
+                        "options": ["64", "128", "192"],
+                        "hint": "仅当音频格式选择 mp3 时生效，可选 64 / 128 / 192 kbps，默认 128。",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",

@@ -1997,6 +1997,14 @@
         "description": "reference_id",
         "hint": "Fishaudio TTS reference model ID (optional). If set, the model ID is used directly instead of looking up by role name. Example: 626bb6d3f3364c9cbc3aa6a67300a664. More models: https://fish.audio/zh-CN/discovery; open a model detail page to copy the model ID."
       },
+      "fishaudio-tts-format": {
+        "description": "Audio Format",
+        "hint": "Audio format returned by FishAudio TTS. Defaults to wav for backward compatibility; mp3 is recommended for long speech to significantly reduce file size and transfer overhead."
+      },
+      "fishaudio-tts-mp3-bitrate": {
+        "description": "MP3 Bitrate (kbps)",
+        "hint": "Applies only when Audio Format is set to mp3. Supports 64, 128, or 192 kbps (default: 128)."
+      },
       "whisper_hint": {
         "description": "Notes for local Whisper deployment",
         "hint": "Before enabling, install the openai-whisper library (NVIDIA users download ~2GB mainly for torch and cuda; CPU users download ~1GB), and install ffmpeg. Otherwise STT will not work."

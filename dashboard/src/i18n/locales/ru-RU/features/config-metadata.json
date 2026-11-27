@@ -2101,6 +2101,14 @@
                 "description": "Coze API Key",
                 "hint": "ID модели Fishaudio; используется вместо имени роли."
             },
+            "fishaudio-tts-format": {
+                "description": "Формат аудио",
+                "hint": "Формат аудио, возвращаемый FishAudio TTS. По умолчанию wav для совместимости; для длинной речи рекомендуется mp3 для значительного уменьшения размера файла."
+            },
+            "fishaudio-tts-mp3-bitrate": {
+                "description": "Битрейт MP3 (kbps)",
+                "hint": "Применяется только при выборе формата mp3. Доступные значения: 64, 128 или 192 kbps (по умолчанию 128)."
+            },
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",
                 "hint": "Перед включением установите openai-whisper и ffmpeg."
