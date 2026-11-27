@@ -35,6 +35,8 @@ class HasInitialize(Protocol):
 
 
 class ProviderManager:
+    _PROVIDER_TERMINATE_TIMEOUT_S: float = 10.0
+
     def __init__(
         self,
         acm: AstrBotConfigManager,
@@ -43,6 +45,7 @@ class ProviderManager:
     ) -> None:
         self.reload_lock = asyncio.Lock()
         self.resource_lock = asyncio.Lock()
+        self._terminating: bool = False
         self.persona_mgr = persona_mgr
         self.acm = acm
         config = acm.confs["default"]
@@ -710,6 +713,13 @@ class ProviderManager:
         return provider_config
 
     async def load_provider(self, provider_config: dict) -> None:
+        if getattr(self, "_terminating", False):
+            logger.warning(
+                "Skipping load_provider for %s because ProviderManager is shutting down.",
+                provider_config.get("id", "unknown"),
+            )
+            return
+
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
 
@@ -764,8 +774,6 @@ class ProviderManager:
                 logger.error(f"Could not find a class for {provider_metadata.type}")
                 return
 
-            provider_metadata.id = provider_config["id"]
-
             match provider_metadata.provider_type:
                 case ProviderType.SPEECH_TO_TEXT:
                     # STT 任务
@@ -803,7 +811,7 @@ class ProviderManager:
 
                     self.tts_provider_insts.append(inst)
                     if (
-                        self.provider_settings.get("provider_id")
+                        self.provider_tts_settings.get("provider_id")
                         == provider_config["id"]
                     ):
                         self.curr_tts_provider_inst = inst
@@ -872,6 +880,21 @@ class ProviderManager:
                         f"Unknown provider type: {provider_metadata.provider_type}"
                     )
 
+            if getattr(self, "_terminating", False):
+                terminate_fn = getattr(inst, "terminate", None)
+                if callable(terminate_fn):
+                    try:
+                        await asyncio.wait_for(
+                            terminate_fn(), timeout=self._PROVIDER_TERMINATE_TIMEOUT_S
+                        )
+                    except Exception:
+                        logger.error(
+                            "Error terminating provider %s loaded during shutdown",
+                            provider_config.get("id", "unknown"),
+                            exc_info=True,
+                        )
+                return
+
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
             logger.error(
@@ -885,13 +908,22 @@ class ProviderManager:
 
     async def reload(self, provider_config: dict) -> None:
         async with self.reload_lock:
+            if getattr(self, "_terminating", False):
+                logger.warning(
+                    "Skipping reload for %s because ProviderManager is shutting down.",
+                    provider_config.get("id", "unknown"),
+                )
+                return
+
+            # Refresh config and provider_sources before load_provider merges sources.
+            default_conf = getattr(self.acm, "default_conf", astrbot_config)
+            self.providers_config = default_conf["provider"]
+            self.provider_sources_config = default_conf.get("provider_sources", [])
+
             await self.terminate_provider(provider_config["id"])
             if provider_config["enable"]:
                 await self.load_provider(provider_config)
 
-            # 和配置文件保持同步
-            self.providers_config = astrbot_config["provider"]
-            self.provider_sources_config = astrbot_config.get("provider_sources", [])
             config_ids = [provider["id"] for provider in self.providers_config]
             logger.info(f"providers in user's config: {config_ids}")
             for key in list(self.inst_map.keys()):
@@ -964,6 +996,12 @@ class ProviderManager:
         if prov_inst in self.tts_provider_insts:
             if isinstance(prov_inst, TTSProvider):
                 self.tts_provider_insts.remove(prov_inst)
+        if prov_inst in self.embedding_provider_insts:
+            if isinstance(prov_inst, EmbeddingProvider):
+                self.embedding_provider_insts.remove(prov_inst)
+        if prov_inst in self.rerank_provider_insts:
+            if isinstance(prov_inst, RerankProvider):
+                self.rerank_provider_insts.remove(prov_inst)
         if prov_inst in self.decision_provider_insts:
             if isinstance(prov_inst, DecisionProvider):
                 self.decision_provider_insts.remove(prov_inst)
@@ -977,15 +1015,22 @@ class ProviderManager:
         if prov_inst == self.curr_decision_provider_inst:
             self.curr_decision_provider_inst = None
 
-        if getattr(prov_inst, "terminate", None):
-            await prov_inst.terminate()  # type: ignore
+        try:
+            if getattr(prov_inst, "terminate", None):
+                await prov_inst.terminate()  # type: ignore
+        except Exception:
+            logger.error(
+                f"Error while terminating provider adapter {provider_id}",
+                exc_info=True,
+            )
+        finally:
+            self.inst_map.pop(provider_id, None)
 
         logger.info(
             f"Provider adapter {provider_id} terminated "
             f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
             f"{len(self.tts_provider_insts)})",
         )
-        del self.inst_map[provider_id]
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
@@ -1038,6 +1083,8 @@ class ProviderManager:
     async def create_provider(self, new_config: dict) -> None:
         """Add and load a provider, saving config only after it loads successfully."""
         async with self.resource_lock:
+            if getattr(self, "_terminating", False):
+                raise RuntimeError("ProviderManager is shutting down")
             npid = new_config.get("id", None)
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
@@ -1055,9 +1102,34 @@ class ProviderManager:
                 raise
             config.save_config()
             # sync in-memory config for API queries (e.g., embedding provider list)
-            self.providers_config = astrbot_config["provider"]
+            self.providers_config = config["provider"]
 
     async def terminate(self) -> None:
+        """Terminate all loaded providers and disable MCP servers."""
+        async with self.resource_lock:
+            async with self.reload_lock:
+                self._terminating = True
+                all_insts = (
+                    *self.provider_insts,
+                    *self.stt_provider_insts,
+                    *self.tts_provider_insts,
+                    *self.embedding_provider_insts,
+                    *self.rerank_provider_insts,
+                    *self.decision_provider_insts,
+                    *self.inst_map.values(),
+                )
+                self.provider_insts.clear()
+                self.stt_provider_insts.clear()
+                self.tts_provider_insts.clear()
+                self.embedding_provider_insts.clear()
+                self.rerank_provider_insts.clear()
+                self.decision_provider_insts.clear()
+                self.inst_map.clear()
+                self.curr_provider_inst = None
+                self.curr_stt_provider_inst = None
+                self.curr_tts_provider_inst = None
+                self.curr_decision_provider_inst = None
+
         if self._mcp_init_task and not self._mcp_init_task.done():
             self._mcp_init_task.cancel()
             try:
@@ -1065,9 +1137,33 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in [*self.provider_insts, *self.decision_provider_insts]:
-            if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+        seen_inst_ids: set[int] = set()
+        for provider_inst in all_insts:
+            if id(provider_inst) in seen_inst_ids:
+                continue
+            seen_inst_ids.add(id(provider_inst))
+            terminate_fn = getattr(provider_inst, "terminate", None)
+            if callable(terminate_fn):
+                provider_id = getattr(provider_inst, "provider_config", {}).get(
+                    "id", type(provider_inst).__name__
+                )
+                try:
+                    await asyncio.wait_for(
+                        terminate_fn(),  # type: ignore
+                        timeout=self._PROVIDER_TERMINATE_TIMEOUT_S,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Timed out while terminating provider %s after %.1fs",
+                        provider_id,
+                        self._PROVIDER_TERMINATE_TIMEOUT_S,
+                    )
+                except Exception:
+                    logger.error(
+                        "Error while terminating provider %s",
+                        provider_id,
+                        exc_info=True,
+                    )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:
