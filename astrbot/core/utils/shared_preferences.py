@@ -267,6 +267,11 @@ class SharedPreferences:
                             )
                 else:
                     raise ValueError(f"Unknown preference write operation: {action}")
+            except asyncio.CancelledError:
+                self._finalize_cache_operation(operation, succeeded=False)
+                if completion is not None and not completion.done():
+                    completion.cancel()
+                raise
             except Exception as exc:
                 self._finalize_cache_operation(operation, succeeded=False)
                 logger.error(
@@ -364,7 +369,7 @@ class SharedPreferences:
             return
         await asyncio.sleep(0)
         await self._write_queue.join()
-        if self._writer_task is not None:
+        if self._writer_task is not None and not self._writer_task.cancelled():
             await self._writer_task
 
     async def close(self) -> None:
@@ -384,21 +389,26 @@ class SharedPreferences:
         await self.initialize()
         if scope_id is None or key is None:
             return default
-        with self._cache_lock:
-            value = self._cache.get((scope, scope_id, key), _MISSING)
-            if value is _DELETED:
+        while True:
+            with self._cache_lock:
+                value = self._cache.get((scope, scope_id, key), _MISSING)
+                if value is _DELETED:
+                    return default
+                if value is not _MISSING:
+                    return deepcopy(value)
+                if (scope, scope_id) in self._cleared_scope_seq or (
+                    scope,
+                    key,
+                ) in self._replaced_scope_key_seq:
+                    return default
+                before_seq = self._write_seq
+            preference = await self.db_helper.get_preference(scope, scope_id, key)
+            with self._cache_lock:
+                if self._write_seq != before_seq:
+                    continue
+            if preference is None:
                 return default
-            if value is not _MISSING:
-                return deepcopy(value)
-            if (scope, scope_id) in self._cleared_scope_seq or (
-                scope,
-                key,
-            ) in self._replaced_scope_key_seq:
-                return default
-        preference = await self.db_helper.get_preference(scope, scope_id, key)
-        if preference is None:
-            return default
-        return deepcopy(preference.value["val"])
+            return deepcopy(preference.value["val"])
 
     async def range_get_async(
         self,
@@ -581,46 +591,53 @@ class SharedPreferences:
             )
         resolved_scope = scope or "unknown"
         resolved_scope_id = scope_id or "unknown"
-        with self._cache_lock:
-            value = self._cache.get((resolved_scope, resolved_scope_id, key), _MISSING)
-            if value is _DELETED:
-                return default
-            if value is not _MISSING:
-                return default if value is None else deepcopy(value)
-            if (resolved_scope, resolved_scope_id) in self._cleared_scope_seq or (
-                resolved_scope,
-                key,
-            ) in self._replaced_scope_key_seq:
-                return default
-        # Overlay miss: fall back to a point query through a dedicated
-        # synchronous database connection. This briefly blocks the calling
-        # thread (unavoidable for a synchronous API), but never touches the
-        # async connection pool, so it cannot deadlock the event loop.
-        get_sync = getattr(self.db_helper, "get_preference_sync", None)
-        if get_sync is None:
-            if not self._warned_sync_read_unsupported:
-                self._warned_sync_read_unsupported = True
-                logger.warning(
-                    "SharedPreferences sync get() is not supported by database "
-                    "backend %s; returning the default. Use get_async() instead.",
-                    type(self.db_helper).__name__,
+        while True:
+            with self._cache_lock:
+                value = self._cache.get(
+                    (resolved_scope, resolved_scope_id, key), _MISSING
                 )
-            return default
-        try:
-            stored = get_sync(resolved_scope, resolved_scope_id, key)
-        except Exception as exc:
-            logger.warning(
-                "SharedPreferences sync get() failed for %s/%s/%s: %s",
-                resolved_scope,
-                resolved_scope_id,
-                key,
-                exc,
-            )
-            return default
-        if stored is None:
-            return default
-        value = stored.get("val")
-        return default if value is None else deepcopy(value)
+                if value is _DELETED:
+                    return default
+                if value is not _MISSING:
+                    return default if value is None else deepcopy(value)
+                if (resolved_scope, resolved_scope_id) in self._cleared_scope_seq or (
+                    resolved_scope,
+                    key,
+                ) in self._replaced_scope_key_seq:
+                    return default
+                before_seq = self._write_seq
+            # Overlay miss: fall back to a point query through a dedicated
+            # synchronous database connection. This briefly blocks the calling
+            # thread (unavoidable for a synchronous API), but never touches the
+            # async connection pool, so it cannot deadlock the event loop.
+            get_sync = getattr(self.db_helper, "get_preference_sync", None)
+            if get_sync is None:
+                if not self._warned_sync_read_unsupported:
+                    self._warned_sync_read_unsupported = True
+                    logger.warning(
+                        "SharedPreferences sync get() is not supported by database "
+                        "backend %s; returning the default. Use get_async() instead.",
+                        type(self.db_helper).__name__,
+                    )
+                return default
+            try:
+                stored = get_sync(resolved_scope, resolved_scope_id, key)
+            except Exception as exc:
+                logger.warning(
+                    "SharedPreferences sync get() failed for %s/%s/%s: %s",
+                    resolved_scope,
+                    resolved_scope_id,
+                    key,
+                    exc,
+                )
+                return default
+            with self._cache_lock:
+                if self._write_seq != before_seq:
+                    continue
+            if stored is None:
+                return default
+            value = stored.get("val")
+            return default if value is None else deepcopy(value)
 
     @deprecated(version="4.0.0", reason="Use range_get_async() instead.")
     def range_get(
@@ -643,58 +660,69 @@ class SharedPreferences:
         Returns:
             Preferences matching the supplied filters.
         """
-        get_sync = getattr(self.db_helper, "get_preferences_sync", None)
-        if get_sync is None:
-            if not self._warned_sync_range_read_unsupported:
-                self._warned_sync_range_read_unsupported = True
-                logger.warning(
-                    "SharedPreferences sync range_get() is not supported by "
-                    "database backend %s; returning process-local values only. "
-                    "Use range_get_async() instead.",
-                    type(self.db_helper).__name__,
-                )
-            persisted: list[Preference] = []
-        else:
-            try:
-                persisted = get_sync(scope, scope_id, key)
-            except Exception as exc:
-                logger.warning(
-                    "SharedPreferences sync range_get() failed for %s/%s/%s: %s",
-                    scope,
-                    scope_id,
-                    key,
-                    exc,
-                )
-                persisted = []
+        while True:
+            with self._cache_lock:
+                before_seq = self._write_seq
+            get_sync = getattr(self.db_helper, "get_preferences_sync", None)
+            if get_sync is None:
+                if not self._warned_sync_range_read_unsupported:
+                    self._warned_sync_range_read_unsupported = True
+                    logger.warning(
+                        "SharedPreferences sync range_get() is not supported by "
+                        "database backend %s; returning process-local values only. "
+                        "Use range_get_async() instead.",
+                        type(self.db_helper).__name__,
+                    )
+                persisted: list[Preference] = []
+            else:
+                try:
+                    persisted = get_sync(scope, scope_id, key)
+                except Exception as exc:
+                    logger.warning(
+                        "SharedPreferences sync range_get() failed for %s/%s/%s: %s",
+                        scope,
+                        scope_id,
+                        key,
+                        exc,
+                    )
+                    persisted = []
 
-        values = {
-            (preference.scope, preference.scope_id, preference.key): preference
-            for preference in persisted
-        }
-        with self._cache_lock:
-            for cache_key in list(values):
-                cache_scope, cache_scope_id, cache_key_name = cache_key
-                if (cache_scope, cache_scope_id) in self._cleared_scope_seq or (
+            with self._cache_lock:
+                if get_sync is not None and self._write_seq != before_seq:
+                    continue
+                values = {
+                    (preference.scope, preference.scope_id, preference.key): preference
+                    for preference in persisted
+                }
+                for cache_key in list(values):
+                    cache_scope, cache_scope_id, cache_key_name = cache_key
+                    if (cache_scope, cache_scope_id) in self._cleared_scope_seq or (
+                        cache_scope,
+                        cache_key_name,
+                    ) in self._replaced_scope_key_seq:
+                        values.pop(cache_key, None)
+                for (
                     cache_scope,
-                    cache_key_name,
-                ) in self._replaced_scope_key_seq:
-                    values.pop(cache_key, None)
-            for (cache_scope, cache_scope_id, cache_key), value in self._cache.items():
-                if (
-                    cache_scope == scope
-                    and (scope_id is None or cache_scope_id == scope_id)
-                    and (key is None or cache_key == key)
-                ):
-                    if value is _DELETED:
-                        values.pop((cache_scope, cache_scope_id, cache_key), None)
-                    else:
-                        values[(cache_scope, cache_scope_id, cache_key)] = Preference(
-                            scope=cache_scope,
-                            scope_id=cache_scope_id,
-                            key=cache_key,
-                            value={"val": deepcopy(value)},
-                        )
-        return list(values.values())
+                    cache_scope_id,
+                    cache_key,
+                ), value in self._cache.items():
+                    if (
+                        cache_scope == scope
+                        and (scope_id is None or cache_scope_id == scope_id)
+                        and (key is None or cache_key == key)
+                    ):
+                        if value is _DELETED:
+                            values.pop((cache_scope, cache_scope_id, cache_key), None)
+                        else:
+                            values[(cache_scope, cache_scope_id, cache_key)] = (
+                                Preference(
+                                    scope=cache_scope,
+                                    scope_id=cache_scope_id,
+                                    key=cache_key,
+                                    value={"val": deepcopy(value)},
+                                )
+                            )
+                return list(values.values())
 
     @deprecated(
         version="4.0.0",

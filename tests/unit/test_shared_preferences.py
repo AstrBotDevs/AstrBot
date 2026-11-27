@@ -365,29 +365,135 @@ async def test_failed_put_invalidates_stale_cache_without_clobbering_newer_write
         assert await store.get_async("global", "global", "k1") == "committed"
 
         # A failing older write must not erase a newer queued write for the same key.
+        remove_started = asyncio.Event()
         gate = asyncio.Event()
+        put_applied = asyncio.Event()
+        put_db_gate = asyncio.Event()
         original_remove = database.remove_preference
 
         async def failing_remove(scope, scope_id, key):
+            remove_started.set()
             await gate.wait()
             raise RuntimeError("remove failed")
 
+        async def blocked_upsert(scope, scope_id, key, value):
+            await put_db_gate.wait()
+            await original_upsert(scope, scope_id, key, value)
+
+        orig_schedule = store._schedule_write
+
+        def track_schedule(operation):
+            orig_schedule(operation)
+            if operation[0] == "put" and operation[4] == "newer-val":
+                put_applied.set()
+
         database.remove_preference = failing_remove  # type: ignore[method-assign]
+        database.insert_preference_or_update = blocked_upsert  # type: ignore[method-assign]
+        store._schedule_write = track_schedule  # type: ignore[method-assign]
         fail_k1 = False
         remove_task = asyncio.create_task(store.remove_async("global", "global", "k1"))
-        await asyncio.sleep(0)
+        await asyncio.wait_for(remove_started.wait(), timeout=1.0)
         put_task = asyncio.create_task(
             store.put_async("global", "global", "k1", "newer-val")
         )
-        await asyncio.sleep(0)
+        await asyncio.wait_for(put_applied.wait(), timeout=1.0)
         gate.set()
 
         with pytest.raises(RuntimeError, match="remove failed"):
             await remove_task
-        await put_task
+        # Verify the newer write is still served from cache BEFORE its DB write completes.
+        assert await store.get_async("global", "global", "k1") == "newer-val"
 
+        put_db_gate.set()
+        await put_task
         assert await store.get_async("global", "global", "k1") == "newer-val"
         database.remove_preference = original_remove  # type: ignore[method-assign]
+        database.insert_preference_or_update = original_upsert  # type: ignore[method-assign]
+        store._schedule_write = orig_schedule  # type: ignore[method-assign]
+    finally:
+        await store.close()
+        await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cache_miss_read_overlapping_mutation_retries_instead_of_returning_stale(
+    tmp_path,
+):
+    """A cache-miss get_async() overlapping a remove_async() must not return stale data."""
+    database = SQLiteDatabase(str(tmp_path / "overlap-read.db"))
+    await database.initialize()
+    await database.insert_preference_or_update(
+        "global", "global", "race_key", {"val": "old-val"}
+    )
+
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    try:
+        await store.initialize()
+
+        query_started = asyncio.Event()
+        allow_query_finish = asyncio.Event()
+        original_get_pref = database.get_preference
+
+        async def slow_first_get_preference(scope, scope_id, key):
+            if not query_started.is_set():
+                query_started.set()
+                await allow_query_finish.wait()
+                # Return the pre-remove snapshot captured before remove committed.
+                return await asyncio.sleep(
+                    0, result=type("P", (), {"value": {"val": "old-val"}})()
+                )
+            return await original_get_pref(scope, scope_id, key)
+
+        database.get_preference = slow_first_get_preference  # type: ignore[method-assign]
+
+        read_task = asyncio.create_task(
+            store.get_async("global", "global", "race_key", "missing")
+        )
+        await asyncio.wait_for(query_started.wait(), timeout=1.0)
+        await store.remove_async("global", "global", "race_key")
+        allow_query_finish.set()
+
+        assert await read_task == "missing"
+        database.get_preference = original_get_pref  # type: ignore[method-assign]
+    finally:
+        await store.close()
+        await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_writer_task_finalizes_cache_state(tmp_path):
+    """Cancelling _writer_task mid-write rolls back its uncommitted cache mutation."""
+    database = SQLiteDatabase(str(tmp_path / "cancelled-writer.db"))
+    await database.initialize()
+    await database.insert_preference_or_update(
+        "global", "global", "ck", {"val": "committed"}
+    )
+
+    store = SharedPreferences(database, tmp_path / "preferences.json")
+    try:
+        await store.initialize()
+
+        write_started = asyncio.Event()
+        original_upsert = database.insert_preference_or_update
+
+        async def hang_upsert(scope, scope_id, key, value):
+            write_started.set()
+            await asyncio.Future()
+
+        database.insert_preference_or_update = hang_upsert  # type: ignore[method-assign]
+        put_task = asyncio.create_task(
+            store.put_async("global", "global", "ck", "uncommitted")
+        )
+        await asyncio.wait_for(write_started.wait(), timeout=1.0)
+        assert store._writer_task is not None
+        store._writer_task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await put_task
+
+        database.insert_preference_or_update = original_upsert  # type: ignore[method-assign]
+        assert ("global", "global", "ck") not in store._cache
+        assert await store.get_async("global", "global", "ck") == "committed"
     finally:
         await store.close()
         await database.engine.dispose()
