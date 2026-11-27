@@ -515,3 +515,40 @@ def test_gemini_4_thinking_levels_match_frontend_registry():
         model_id: tuple(level.upper() for level in levels)
         for model_id, levels in frontend_registry["models"].items()
     } == gemini_source.GEMINI_4_THINKING_LEVELS
+
+
+@pytest.mark.asyncio
+async def test_prepare_conversation_pairs_reused_ids_and_replays_tool_parts():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    messages = [{"role": "user", "content": "start"}]
+    for name in ("first", "second"):
+        messages.extend(
+            [
+                {
+                    "role": "assistant",
+                    "content": [],
+                    "tool_calls": [
+                        {
+                            "id": "call_0",
+                            "function": {"name": name, "arguments": "{}"},
+                            "extra_content": {
+                                "google": {
+                                    "server_parts": [{"text": "server output"}],
+                                    "thought_signature": "c2ln",
+                                }
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_0", "content": "done"},
+            ]
+        )
+
+    contents = await provider._prepare_conversation({"messages": messages})
+    for i, name in ((1, "first"), (3, "second")):
+        server, call = contents[i].parts
+        assert server.text == "server output"
+        assert call.thought_signature == b"sig"
+        assert (call.function_call.name, call.function_call.id) == (name, "call_0")
+        response = contents[i + 1].parts[0].function_response
+        assert (response.name, response.id) == (name, "call_0")
