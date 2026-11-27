@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import mimetypes
@@ -228,7 +229,9 @@ class WecomAIBotWebhookClient:
                             )
             elif isinstance(component, ActionRow):
                 await flush_markdown_buffer(markdown_buffer)
-                template_card = build_wecom_button_card([component])
+                template_card = await asyncio.to_thread(
+                    build_wecom_button_card, [component]
+                )
                 if template_card:
                     await self.send_payload(
                         {

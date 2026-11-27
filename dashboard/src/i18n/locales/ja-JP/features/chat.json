@@ -95,6 +95,8 @@
     "output": "出力"
   },
   "toolStatus": {
+    "interrupted": "中断（結果不明）",
+    "interruptedDetail": "結果を受け取る前に実行が中断されました（停止・タイムアウト・エラー）。操作が反映されている可能性があるため、再実行の前に確認してください。",
     "done": "完了",
     "running": "実行中"
   },
@@ -273,5 +275,45 @@
     "exit": "終了",
     "partialFailure": "{total} 件の会話のうち {failed} 件を削除できませんでした",
     "requestFailed": "会話の削除に失敗しました。もう一度お試しください。"
+  },
+  "pluginView": {
+    "loading": "ビューを読み込み中…",
+    "unavailable": "このビューは利用できません。代わりにテキストの結果を表示します。"
+  },
+  "workbench": {
+    "newTab": "新しいワークベンチ",
+    "chooseView": "プラグインビューを選択",
+    "empty": "ワークベンチビューが登録されていません。対応するプラグインを有効にしてください。",
+    "loadError": "ビューを読み込めませんでした。",
+    "retry": "再試行",
+
+    "title": "ワークベンチ",
+    "openView": "ワークベンチで開く",
+    "hide": "ワークベンチを閉じる",
+    "expand": "ワークベンチを拡大",
+    "restore": "パネルサイズを戻す",
+    "resize": "ワークベンチの幅を調整",
+    "closeTab": "{title} を閉じる",
+    "resize": "ワークベンチの幅を調整"
+  },
+  "executionError": {
+    "noModel": {
+      "title": "利用可能なチャットモデルがありません",
+      "description": "モデルを設定して有効にすると、チャットを開始できます。"
+    },
+    "modelConfiguration": {
+      "title": "このモデルは利用できません",
+      "description": "モデルの設定を確認するか、別の利用可能なチャットモデルを選択してください。"
+    },
+    "connection": {
+      "title": "接続に問題が発生しました",
+      "description": "ネットワーク接続を確認して、しばらくしてから再試行してください。"
+    },
+    "generic": {
+      "title": "返信を完了できませんでした",
+      "description": "しばらくしてから再試行するか、詳細を開いて原因を確認してください。"
+    },
+    "configureModels": "モデルを設定",
+    "details": "詳細を表示"
   }
 }

@@ -5,6 +5,7 @@ from typing import cast
 from astrbot.core import logger
 from astrbot.core.config.runtime import MessageConfig, current_message_config
 from astrbot.core.log import log_context
+from astrbot.core.message.components import UIInteraction
 from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.platform.astr_message_event import event_context
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
@@ -73,7 +74,8 @@ class PipelineScheduler:
                             logger.debug(
                                 f"Stage {stage.__class__.__name__} stopped event propagation.",
                             )
-                            break
+                            # The downstream stages already handled this result.
+                            return
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
@@ -107,7 +109,34 @@ class PipelineScheduler:
                 event_context(event),
                 trace_execution(event.trace),
             ):
-                await self._process_stages(event)
+                try:
+                    await self._process_stages(event)
+                finally:
+                    interaction = event.get_ui_interaction()
+                    if isinstance(interaction, UIInteraction):
+                        import asyncio
+
+                        from astrbot.core.message.components import Json
+                        from astrbot.core.message.interactive_ui import view_store
+                        from astrbot.core.message.message_event_result import (
+                            MessageChain,
+                        )
+
+                        receipt = await asyncio.to_thread(
+                            view_store.finish,
+                            interaction.view.id,
+                            interaction.interaction_id,
+                            error={
+                                "code": "ACTION_FAILED",
+                                "message": "The action was not completed.",
+                            },
+                        )
+                        if not event.get_extra("ui_action_acknowledged"):
+                            await event.send(
+                                MessageChain(
+                                    chain=[Json(receipt)], type="ui_action_result"
+                                )
+                            )
 
                 # Send the closing frame before the event is marked complete.
                 if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):

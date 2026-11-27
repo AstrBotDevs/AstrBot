@@ -17,7 +17,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 from .wecom_kf_message import WeChatKFMessage
@@ -210,7 +210,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                     menu_list = []
                     for button in comp.buttons:
                         if isinstance(button.action, Button.CallbackAction):
-                            callback_id = encode_button_callback(
+                            callback_id = await encode_button_callback_async(
                                 button.id,
                                 button.action.data,
                                 expires_at=comp.action_expires_at,
@@ -366,7 +366,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                         }
                         if isinstance(button.action, Button.CallbackAction):
                             item["type"] = 0
-                            item["key"] = encode_button_callback(
+                            item["key"] = await encode_button_callback_async(
                                 button.id,
                                 button.action.data,
                                 expires_at=comp.action_expires_at,

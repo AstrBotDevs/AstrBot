@@ -464,6 +464,17 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
     if config.get("config_version", 0) < 6:
         config["config_version"] = 6
         changed = True
+    platforms = config.get("platform")
+    if isinstance(platforms, list):
+        for platform_config in platforms:
+            if (
+                isinstance(platform_config, dict)
+                and platform_config.get("type")
+                in {"qq_official", "qq_official_webhook"}
+                and "use_markdown" in platform_config
+            ):
+                platform_config.pop("use_markdown")
+                changed = True
     return changed
 
 

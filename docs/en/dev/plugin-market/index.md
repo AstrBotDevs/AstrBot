@@ -6,5 +6,6 @@ This section lists published AstrBot plugin market JSON specifications.
 
 | Version | Schema Version | Status |
 | --- | --- | --- |
-| [2026-06-27](./2026-06-27) | `1` | Current |
+| [2026-11-25](./2026-11-25) | `1` | Current |
+| [2026-06-27](./2026-06-27) | `1` | Previous |
 

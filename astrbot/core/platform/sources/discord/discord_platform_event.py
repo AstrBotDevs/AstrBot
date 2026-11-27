@@ -444,7 +444,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 logger.warning(
                     "[Discord] Common ActionRow components override a legacy Discord view."
                 )
-            view = action_rows_to_discord_view(action_rows)
+            view = await action_rows_to_discord_view(action_rows)
 
         content = "".join(content_parts)
         if len(content) > 2000:

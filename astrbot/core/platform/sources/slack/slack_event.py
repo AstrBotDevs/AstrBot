@@ -20,7 +20,7 @@ from astrbot.api.message_components import (
     Record,
 )
 from astrbot.api.platform import Group, MessageMember
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
 
 
@@ -127,7 +127,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     "action_id": button.id,
                 }
                 if isinstance(button.action, Button.CallbackAction):
-                    value = encode_button_callback(
+                    value = await encode_button_callback_async(
                         button.id,
                         button.action.data,
                         expires_at=segment.action_expires_at,

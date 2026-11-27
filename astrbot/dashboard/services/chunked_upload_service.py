@@ -302,11 +302,10 @@ class ChunkedUploadService:
     def ensure_cleanup_task_started(self) -> None:
         if self._cleanup_task is None or self._cleanup_task.done():
             try:
-                self._cleanup_task = asyncio.create_task(
-                    self._cleanup_expired_sessions()
-                )
+                loop = asyncio.get_running_loop()
             except RuntimeError:
-                pass
+                return
+            self._cleanup_task = loop.create_task(self._cleanup_expired_sessions())
 
     async def _cleanup_expired_sessions(self) -> None:
         while True:

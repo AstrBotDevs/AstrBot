@@ -193,3 +193,53 @@ async def test_cancelled_turn_retains_already_reported_usage():
     events = [event async for event in turn.events()]
     assert sum(event.type == "turn.finished" for event in events) == 1
     assert events[-1].payload.result == result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("platform", ["webchat", "test"])
+@pytest.mark.parametrize(
+    "code", ["noProvider", "provider_error", "unknown_runtime_error"]
+)
+async def test_failed_turn_preserves_error_identity_and_partial_reply(
+    streaming, platform, code
+):
+    from astrbot.core.agent.events import RuntimeErrorInfo
+    from astrbot.core.llm_error_messages import set_llm_error_message
+
+    class FailedSession(OutputSession):
+        async def execute_turn(self, turn):
+            turn.emit(
+                MessageCompleted(
+                    message_id="partial", content=(PlainOutput(text="Partial reply"),)
+                )
+            )
+            return TurnResult(
+                status="failed",
+                error=RuntimeErrorInfo(
+                    code="runtime_error" if code == "noProvider" else code,
+                    message="Failure detail",
+                ),
+            )
+
+    session = FailedSession("session", "test:FriendMessage:user")
+    input = input_for(session)
+    extras = {"locale": "en-US"}
+    input.event.get_extra.side_effect = lambda key, default=None: extras.get(
+        key, default
+    )
+    input.event.set_extra.side_effect = extras.__setitem__
+    input.event.get_platform_name.return_value = platform
+    if code == "noProvider":
+        set_llm_error_message(input.event, code)
+    turn = await session.run_turn(input)
+    chains = [chain async for chain in present_turn(turn, streaming=streaming)]
+    assert chains[0].get_plain_text() == "Partial reply"
+    assert len(chains) == 2
+    if platform == "webchat":
+        assert chains[-1].type == "chatui_error"
+        assert chains[-1].chain[0].data["code"] == code
+        assert "Failure detail" in chains[-1].chain[0].data["message"]
+    else:
+        assert chains[-1].type is None
+        assert "Failure detail" in chains[-1].get_plain_text()

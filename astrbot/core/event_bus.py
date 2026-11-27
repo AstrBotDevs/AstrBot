@@ -23,6 +23,10 @@ from astrbot.core.platform.message_type import MessageType
 from .platform import AstrMessageEvent
 from .utils.active_event_registry import active_event_registry
 
+_MISSING_SCHEDULER_TRACE_ERROR = (
+    "Message discarded: no pipeline scheduler for the selected profile."
+)
+
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -51,11 +55,12 @@ class EventBus:
         # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
         self._pending_tasks: dict[asyncio.Task, AstrMessageEvent] = {}
         self.stopped_platforms: set[str] = set()
+        self._closed = False
 
     async def dispatch(self) -> None:
-        while True:
+        while not self._closed:
             event: AstrMessageEvent = await self.event_queue.get()
-            if event.get_platform_id() in self.stopped_platforms:
+            if self._closed or event.get_platform_id() in self.stopped_platforms:
                 event.trace.record("pipeline_end", status="cancelled")
                 continue
             original_umo = event.unified_msg_origin
@@ -65,6 +70,9 @@ class EventBus:
             if not scheduler:
                 logger.error(
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                )
+                event.trace.record(
+                    "pipeline_end", status="error", error=_MISSING_SCHEDULER_TRACE_ERROR
                 )
                 continue
             self._apply_session_isolation(event, scheduler.ctx.astrbot_config)
@@ -80,6 +88,11 @@ class EventBus:
                     logger.error(
                         f"PipelineScheduler not found for id: {conf_id}, event ignored."
                     )
+                    event.trace.record(
+                        "pipeline_end",
+                        status="error",
+                        error=_MISSING_SCHEDULER_TRACE_ERROR,
+                    )
                     continue
             conf_name = conf_info.get("name") or conf_id
             with event.trace.context():
@@ -87,6 +100,14 @@ class EventBus:
             task = asyncio.create_task(scheduler.execute(event))
             self._pending_tasks[task] = event
             task.add_done_callback(self._on_task_done)
+
+    async def close(self) -> None:
+        """Stop dispatching and let active message pipelines finish cancellation."""
+        self._closed = True
+        tasks = list(self._pending_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def stop_platform(self, platform_id: str) -> None:
         """Block queued messages and drain an adapter's active executions.
