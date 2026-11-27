@@ -25,7 +25,7 @@ This page covers AstrBot's current built-in knowledge base, available since 4.5.
 3. Enter the service's API endpoint, API key, model name, vector dimensions, and other required settings.
 4. Save and make sure the provider is available.
 
-Current integrations include OpenAI-compatible services, Google Gemini, Ollama, Alibaba Cloud Model Studio, and NVIDIA embedding services. For `OpenAI Embedding`, use the service's API base URL and an embedding model name, not a chat model name.
+Current integrations include OpenAI-compatible services, Google Gemini, Ollama, Alibaba Cloud Model Studio, Volcengine, and NVIDIA embedding services. For `OpenAI Embedding`, use the service's API base URL and an embedding model name, not a chat model name.
 
 For local services such as Ollama, the endpoint must be reachable from the environment running AstrBot. In Docker, `localhost` points to the AstrBot container, not automatically to your host machine.
 
@@ -132,7 +132,7 @@ Too few results can miss an answer; too many increase input length and noise. St
 
 ### Choose a knowledge base for one group or private chat
 
-Under `Custom Rules`, assign knowledge bases and a retrieval count to a specific message source. Session selections override the profile. Clearing the selection and saving removes the override and restores the profile's knowledge bases. See [Custom Rules](./custom-rules.md).
+Under **Config → Manage session mappings**, select knowledge bases and a retrieval count for a session. An empty list disables knowledge-base retrieval; choose **Follow profile** to restore inheritance. See [Session Overrides](./custom-rules.md).
 
 ## Maintain a knowledge base
 

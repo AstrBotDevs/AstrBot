@@ -8,13 +8,14 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from astrbot.core.agent.input import ImageInput, InputComponent, format_input_content
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import (
     ContentPart,
     ImageURLPart,
     Message,
     TextPart,
-    bind_checkpoint_messages,
-    dump_messages_with_checkpoints,
+    dump_messages,
+    load_messages,
 )
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runtime import (
@@ -59,9 +60,7 @@ async def native_user_message(
         if isinstance(item, ImageInput):
             reference = item.source
             if item.path is not None:
-                resolver = caller.context.get_llm_tool_manager().get_builtin_tool(
-                    SendMessageToUserTool
-                )
+                resolver = SendMessageToUserTool()
                 reference, _ = await resolver._resolve_path_from_sandbox(
                     ContextWrapper(context=caller.agent_context),
                     item.path,
@@ -76,7 +75,7 @@ async def native_user_message(
 
 @dataclass
 class NativeConversation:
-    """The complete persisted state owned by the native runtime."""
+    """An open child conversation with resolved settings and committed history."""
 
     conversation_id: str
     provider_id: str
@@ -98,36 +97,61 @@ class DelegatedAgentSession(NativeAgentSession):
         self, runtime: AstrAgentRuntime, conversation: NativeConversation, umo: str
     ) -> None:
         super().__init__(runtime, conversation.conversation_id, umo)
-        self.runtime = runtime
-        self.db = runtime.context._db
+        self.store = runtime.context._db.conversation_store
         self.conversation = conversation
 
     @classmethod
-    async def create(
+    async def open(
         cls,
         runtime: AstrAgentRuntime,
         umo: str,
         input: DelegatedAgentInput,
         options: dict,
+        *,
+        session_id: str | None = None,
     ) -> DelegatedAgentSession:
-        """Snapshot native configuration and its capabilities when a child session opens.
+        """Open a child conversation with current settings and persisted history.
 
         Args:
             runtime: Owner supplying storage and application services.
             umo: Owner message source.
-            input: Initial caller and its currently delegable capabilities.
-            options: Validated runtime configuration and display metadata.
+            input: Current caller and its delegable capabilities.
+            options: Runtime configuration and display metadata for a new child.
+            session_id: Existing registered conversation to restore, if any.
 
         Returns:
-            A new persisted private session with no model work started.
+            An open child session, ready to accept a turn.
 
         Raises:
-            ValueError: If the caller, persona or configured provider is unavailable.
+            ValueError: If ownership or the requested configuration is invalid.
         """
         caller = input.caller
-        if caller is None:
+        if caller is None or caller.scope.umo != umo:
             raise ValueError("A delegated session requires an owning caller")
-        overrides = runtime.normalize_config(options.get("config", {}), delegated=True)
+        store = runtime.context._db.conversation_store
+        overrides = options.get("config", {})
+        history = []
+        token_usage = 0
+        if session_id is not None:
+            agent = runtime.subagents.store.find_native_conversation(umo, session_id)
+            loaded = await store.read_for_execution(session_id) if agent else None
+            if agent is None or loaded is None or loaded[0].user_id != umo:
+                raise ValueError(
+                    f"Native agent conversation not found or inaccessible: {session_id}"
+                )
+            record, _ = loaded
+            history = load_messages(record.content or [])
+            token_usage = record.token_usage
+            config_id = agent.options.get("config_id")
+            overrides = {}
+            if config_id is not None:
+                selected = await runtime.agent_configs.get(config_id)
+                if not selected.enabled or selected.runtime != "astrbot":
+                    raise ValueError(
+                        f"Native agent configuration is unavailable: {config_id}"
+                    )
+                overrides = selected.config
+        overrides = runtime.normalize_config(overrides, delegated=True)
         config = runtime.normalize_config(
             caller.context.get_config(umo=umo).get("agent", {}).get("config", {})
         )
@@ -178,13 +202,15 @@ class DelegatedAgentSession(NativeAgentSession):
                 f"Unknown or unavailable chat provider: {provider_id}. Available chat provider IDs: {available}"
             )
         conversation = NativeConversation(
-            conversation_id=uuid4().hex,
+            conversation_id=session_id or uuid4().hex,
             provider_id=provider_id,
             instructions=instructions,
             tools=tools,
             skills=skills,
             runtime_config=config,
-            initial_dialogs=bind_checkpoint_messages(
+            messages=history,
+            token_usage=token_usage,
+            initial_dialogs=load_messages(
                 [
                     {**item.model_dump(), "_no_save": item._no_save}
                     if isinstance(item, Message)
@@ -193,86 +219,31 @@ class DelegatedAgentSession(NativeAgentSession):
                 ]
             ),
         )
-        session = cls(runtime, conversation, umo)
-        await session._commit_history([], None)
-        return session
-
-    @classmethod
-    async def restore(
-        cls, runtime: AstrAgentRuntime, umo: str, session_id: str
-    ) -> DelegatedAgentSession:
-        """Restore exact persisted native state without replaying unfinished work.
-
-        Args:
-            runtime: Owner of the native persistence service.
-            umo: Expected conversation source.
-            session_id: Exact private native conversation identity.
-
-        Returns:
-            A live session with its committed history.
-
-        Raises:
-            ValueError: If the session is missing or belongs to another UMO.
-        """
-        row = await runtime.context._db.get_preference(
-            "subagent_native", "conversation", session_id
-        )
-        if row is None or row.value.get("umo") != umo:
-            raise ValueError(
-                f"Native agent conversation not found or inaccessible: {session_id}"
-            )
-        data = row.value
-        return cls(
-            runtime,
-            NativeConversation(
-                conversation_id=session_id,
-                provider_id=data["provider_id"],
-                instructions=data["instructions"],
-                tools=data["tools"],
-                skills=data.get("skills"),
-                runtime_config=data.get("runtime_config", {"misc": {"max_steps": 30}}),
-                initial_dialogs=bind_checkpoint_messages(
-                    data.get("initial_dialogs", [])
-                ),
-                messages=bind_checkpoint_messages(data["messages"]),
-                token_usage=data.get("token_usage", 0),
-            ),
-            umo,
-        )
+        return cls(runtime, conversation, umo)
 
     async def _commit_history(
         self, history: list[dict], token_usage: int | None
     ) -> None:
-        """Write the shared history policy's output with private session metadata.
+        """Commit the filtered history to the private conversation journal.
 
         Args:
             history: Canonical messages already filtered by native history handling.
             token_usage: Latest context usage, if available.
         """
         conversation = self.conversation
-        await self.db.insert_preference_or_update(
-            "subagent_native",
-            "conversation",
+        await self.store.append(
             self.id,
-            {
-                "umo": self.umo,
-                "provider_id": conversation.provider_id,
-                "instructions": conversation.instructions,
-                "tools": conversation.tools,
-                "skills": conversation.skills,
-                "runtime_config": conversation.runtime_config,
-                "initial_dialogs": [
-                    {
-                        **message.model_dump(),
-                        **({"_no_save": True} if message._no_save else {}),
-                    }
-                    for message in conversation.initial_dialogs
-                ],
-                "messages": history,
-                "token_usage": token_usage or 0,
-            },
+            [
+                {
+                    "type": "conversation.updated",
+                    "payload": {"changes": {}, "token_usage": token_usage or 0},
+                }
+            ],
+            history=history,
+            origin="system",
+            link_display=False,
         )
-        conversation.messages = bind_checkpoint_messages(history)
+        conversation.messages = load_messages(history)
         conversation.token_usage = token_usage or 0
 
     def _build_config(self, turn: AgentTurn) -> MainAgentBuildConfig:
@@ -314,6 +285,7 @@ class DelegatedAgentSession(NativeAgentSession):
             not isinstance(request, DelegatedAgentInput)
             or request.caller is None
             or request.content is None
+            or request.caller.scope.umo != self.umo
         ):
             raise ValueError("Delegated native input requires an owning caller")
         caller = request.caller
@@ -329,35 +301,37 @@ class DelegatedAgentSession(NativeAgentSession):
             user_message,
         ]
 
-        # Resolve tool implementations against fresh permissions each turn; the
-        # saved native configuration stores names, never executable objects.
         manager = caller.context.get_llm_tool_manager()
-        available = ToolSet(
-            tools=list(request.plugin_tools.tools)
-            if request.plugin_tools is not None
-            else list(manager.get_full_tool_set().tools)
-        )
-        for tool in caller.tools:
-            if request.plugin_tools is None or manager.is_builtin_tool(tool.name):
-                available.add_tool(available.get_tool(tool.name) or tool)
+        plugin_tools = request.plugin_tools
+        if plugin_tools is None:
+            plugin_tools = manager.get_full_tool_set()
+        parent_plugin_tools = caller.agent_context.plugin_tools
         selected = (
-            available.tools
+            caller.tools.tools
             if conversation.tools is None
-            else [
-                available.get_tool(name)
-                or (manager.get_func(name) if manager.is_builtin_tool(name) else None)
-                for name in conversation.tools
-            ]
+            else [caller.tools.get_tool(name) for name in conversation.tools]
         )
         tools = ToolSet()
         for tool in selected:
             if (
                 tool is None
-                or not tool.active
-                or tool.name not in caller.tools.names()
                 or tool.name in SUBAGENT_TOOL_NAMES
                 or tool.name.startswith("transfer_to_")
             ):
+                continue
+            # Refresh plugin and MCP instances while keeping the runtime
+            # instance the parent selected, including same-named variants.
+            if parent_plugin_tools is None:
+                tool = plugin_tools.get_tool(tool.name) or tool
+            elif (
+                parent_plugin_tools.get_tool(tool.name) is tool
+                or tool.handler is not None
+                or tool.handler_module_path
+                or isinstance(tool, MCPTool)
+                or manager.get_func(tool.name) is tool
+            ):
+                tool = plugin_tools.get_tool(tool.name)
+            if tool is None or not tool.active:
                 continue
             metadata = (
                 star_map.get(tool.handler_module_path)
@@ -409,16 +383,14 @@ class DelegatedAgentSession(NativeAgentSession):
             plugin_tools=request.plugin_tools,
             plugin_skills=request.plugin_skills,
             agent_session=AgentSessionRef("astrbot", self.id),
+            send_to_user=request.send_to_user,
+            _output_turn=caller.agent_context._output_turn
+            if not request.send_to_user
+            else None,
         )
         req = ProviderRequest(
             system_prompt=instructions.system_prompt,
-            contexts=[
-                {
-                    **message.model_dump(),
-                    **({"_no_save": True} if message._no_save else {}),
-                }
-                for message in history
-            ],
+            contexts=dump_messages(history, include_temporary=True),
             func_tool=tools if tools.tools else None,
             conversation=Conversation(
                 platform_id=caller.event.get_platform_id(),
@@ -442,4 +414,4 @@ class DelegatedAgentSession(NativeAgentSession):
             Serialized messages including portable image data.
         """
         conversation = self.conversation
-        return dump_messages_with_checkpoints(conversation.messages)
+        return dump_messages(conversation.messages)

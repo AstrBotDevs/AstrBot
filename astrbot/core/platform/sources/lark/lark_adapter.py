@@ -31,7 +31,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.button_interaction import decode_button_callback_async
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -802,7 +802,9 @@ class LarkPlatformAdapter(Platform):
             return
 
         try:
-            action_id, data = decode_button_callback(payload, allow_expired=True)
+            action_id, data = await decode_button_callback_async(
+                payload, allow_expired=True
+            )
         except ValueError:
             logger.debug("[Lark] Ignored an invalid AstrBot card callback payload.")
             return

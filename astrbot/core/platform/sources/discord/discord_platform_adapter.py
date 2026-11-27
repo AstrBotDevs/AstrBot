@@ -30,7 +30,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import (
     BUTTON_ACTION_EXPIRED_MESSAGE,
     ButtonActionExpiredError,
-    decode_button_callback,
+    decode_button_callback_async,
 )
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -312,7 +312,9 @@ class DiscordPlatformAdapter(Platform):
             interaction_data = cast(dict, interaction.data or {})
             callback_payload = str(interaction_data.get("custom_id", ""))
             try:
-                action_id, callback_data = decode_button_callback(callback_payload)
+                action_id, callback_data = await decode_button_callback_async(
+                    callback_payload
+                )
             except ButtonActionExpiredError:
                 try:
                     await interaction.followup.send(

@@ -245,9 +245,7 @@ async def test_mattermost_webhook_acknowledges_then_dispatches_button():
     response = await adapter.webhook_callback(FakeRequest())
 
     assert response == {}
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
-    event = adapter._event_queue.get_nowait()
+    event = await asyncio.wait_for(adapter._event_queue.get(), timeout=2)
     assert event.get_sender_id() == "user-1"
     assert event.get_session_id() == "channel-1"
     interaction = event.get_button_interaction()
@@ -314,7 +312,10 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
     stage = preprocess_stage.PreProcessStage()
     stage.config = {}
     stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
+    stage.plugin_manager = MagicMock()
+    stage.plugin_manager.context.get_config.return_value = {
+        "provider_stt_settings": {"enable": False}
+    }
 
     await stage.process(event)
     event.cleanup_temporary_local_files()

@@ -235,7 +235,7 @@ async def test_deleted_or_stopped_parents_are_not_woken(environment, reason):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("read_result", [False, True])
-async def test_native_parent_waits_for_child_without_blocking_delivery(
+async def test_native_parent_receives_child_result_with_pending_tool(
     environment, monkeypatch, read_result
 ):
     from astrbot.core.agent.run_context import ContextWrapper
@@ -317,7 +317,6 @@ async def test_native_parent_waits_for_child_without_blocking_delivery(
         LLMResponse(role="assistant", completion_text="Finished parent"),
     ]
     monkeypatch.setattr(builder, "build_main_agent", build)
-    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     turn = await parent.run_turn(
         MainAgentInput(
@@ -332,11 +331,13 @@ async def test_native_parent_waits_for_child_without_blocking_delivery(
         )
     )
     await asyncio.wait_for(child_done.wait(), 2)
-    if not read_result:
-        await asyncio.wait_for(offered.wait(), 2)
-        assert "Child answer" not in str(parent._runner.run_context.messages)
-    assert not turn.done
-    release.set()
+    try:
+        if not read_result:
+            await asyncio.wait_for(offered.wait(), 2)
+            assert "Child answer" not in str(parent._runner.run_context.messages)
+        assert not turn.done
+    finally:
+        release.set()
     assert (await asyncio.wait_for(turn.result(), 2)).text == "Finished parent"
     await asyncio.wait_for(
         asyncio.gather(*list(env.service.delivery._notifications.values())), 2
@@ -364,13 +365,15 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
     from astrbot.core.event_bus import EventBus
     from astrbot.core.pipeline.context import PipelineContext
     from astrbot.core.pipeline.scheduler import PipelineScheduler
-    from astrbot.core.star.session_llm_manager import SessionServiceManager
 
     env = environment
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["agent"]["config"]["subagents"] = env.config
     config["provider_settings"]["streaming_response"] = False
     env.context.get_config = lambda **_: config
+    env.context.astrbot_config_mgr = SimpleNamespace(
+        _create_message_config=lambda _: (copy.deepcopy(config), frozenset())
+    )
     env.context.send_message = AsyncMock(return_value=True)
     monkeypatch.setattr(
         env.context, "get_using_tts_provider_async", AsyncMock(return_value=None)
@@ -411,16 +414,7 @@ async def test_idle_result_runs_through_pipeline_once_and_commits_to_parent(
 
     env.context.conversation_manager.update_conversation.side_effect = save
     monkeypatch.setattr(builder, "build_main_agent", build)
-    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
-    monkeypatch.setattr(
-        SessionServiceManager,
-        "should_process_llm_request",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        SessionServiceManager, "is_session_enabled", AsyncMock(return_value=True)
-    )
     scheduler = PipelineScheduler(
         PipelineContext(
             config,

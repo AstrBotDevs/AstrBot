@@ -191,12 +191,22 @@ class PluginPageService:
             or plugin.display_name
             or plugin.name
         )
-        page_title = (
-            # "views" is the preferred i18n key prefix; "pages" stays as an alias.
-            self.get_by_path(locale_data, f"views.{view_name}.title")
-            or self.get_by_path(locale_data, f"pages.{view_name}.title")
-            or view_name
+        declaration = next(
+            (view for view in plugin.views if view.name == view_name), None
         )
+        page_title = declaration.title if declaration else ""
+        for candidate in dict.fromkeys((resolved_locale, "zh-CN", "en-US")):
+            translations = plugin_i18n.get(candidate)
+            translated_title = ""
+            for prefix in ("views", "pages"):
+                value = self.get_by_path(translations, f"{prefix}.{view_name}.title")
+                if isinstance(value, str) and value.strip():
+                    translated_title = value.strip()
+                    break
+            if translated_title:
+                page_title = translated_title
+                break
+        page_title = page_title or view_name
 
         return {
             "pluginName": plugin.name,
@@ -206,6 +216,7 @@ class PluginPageService:
             "locale": resolved_locale,
             "i18n": plugin_i18n,
             "isDark": theme == "dark",
+            "target": "plugin_page",
         }
 
     async def get_plugin_page_entry_config(
@@ -639,9 +650,19 @@ class PluginPageService:
         *,
         include_content_path: bool = False,
         asset_token: str = "",
+        target: str = "plugin_page",
     ) -> dict | None:
         plugin_name = plugin.name.strip() if isinstance(plugin.name, str) else ""
         if not plugin_name:
+            return None
+        declaration = next(
+            (spec for spec in plugin.views if spec.name == view_name),
+            None,
+        )
+        if target == "chat_workbench_with_launcher":
+            if not declaration or declaration.target != target:
+                return None
+        elif target != "plugin_page" or (declaration and declaration.target != target):
             return None
         try:
             page = await self.get_plugin_page(plugin, view_name)
@@ -651,8 +672,10 @@ class PluginPageService:
 
         page_data = {
             "name": page.name,
-            "title": page.title,
-            "i18n_key": f"pages.{page.name}",
+            "title": declaration.title or page.title if declaration else page.title,
+            "description": declaration.description if declaration else "",
+            "target": target,
+            "i18n_key": f"views.{page.name}",
         }
         if include_content_path and asset_token:
             page_data["content_path"] = (

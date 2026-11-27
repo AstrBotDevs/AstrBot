@@ -110,7 +110,7 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
+    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: var(--astrbot-radius-control);">
       <v-text-field
         :model-value="searchQuery"
         @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"

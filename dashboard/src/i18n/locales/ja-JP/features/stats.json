@@ -63,7 +63,8 @@
     "avgTtft": "最初のトークンまでの平均時間（TTFT）",
     "avgDuration": "平均応答時間",
     "avgTpm": "平均出力速度（TPM）",
-    "successRate": "呼び出し成功率"
+    "successRate": "呼び出し成功率",
+    "avgCacheHitRate": "平均キャッシュヒット率"
   },
   "modelRanking": {
     "title": "モデル使用量ランキング"

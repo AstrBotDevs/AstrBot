@@ -6,6 +6,7 @@ import json
 from html import escape
 from typing import TYPE_CHECKING
 
+from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_runtime.subagents.caller import AgentCaller
 from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
@@ -92,7 +93,6 @@ async def apply_subagents(
         req.func_tool.remove_tool(name)
     if not enabled or req.conversation is None or runtime is None:
         return True
-    manager = context.get_llm_tool_manager()
     for tool_type in (
         SpawnAgentTool,
         ListAgentsTool,
@@ -101,7 +101,7 @@ async def apply_subagents(
         SendAgentMessageTool,
         CancelAgentTool,
     ):
-        tool = manager.get_builtin_tool(tool_type)
+        tool = tool_type()
         if tool.active:
             req.func_tool.add_tool(tool)
 
@@ -112,7 +112,11 @@ async def apply_subagents(
             if not agent_config.enabled:
                 continue
             if agent_config.runtime not in runtime.subagents.runtimes:
-                raise ValueError(f"Agent runtime unavailable: {agent_config.runtime}")
+                logger.warning(
+                    f"Skipping subagent configuration {agent_config.config_id}: "
+                    f"runtime {agent_config.runtime!r} is unavailable"
+                )
+                continue
             configurations.append(
                 {
                     "config_id": agent_config.config_id,
@@ -178,6 +182,8 @@ async def begin_main_agent(
         agent_session=original.agent_session,
         _runtime=runtime,
         subagent_scope=scope,
+        send_to_user=original.send_to_user,
+        _output_turn=original._output_turn,
         delegable_tools=ToolSet(
             tools=[tool for tool in tools.tools if tool.name not in SUBAGENT_TOOL_NAMES]
         )

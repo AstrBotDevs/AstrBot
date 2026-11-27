@@ -6056,56 +6056,6 @@
         "description": "**Required scope:** `persona`"
       }
     },
-    "/api/v1/sessions": {
-      "get": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "List active UMOs and session status",
-        "operationId": "listSessions",
-        "x-astrbot-scope": "data",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          },
-          {
-            "name": "search",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "platform",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "message_type",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "all",
-                "group",
-                "private"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `data`"
-      }
-    },
     "/api/v1/sessions/active-umos": {
       "get": {
         "tags": [
@@ -6183,6 +6133,43 @@
         }
       }
     },
+    "/api/v1/sessions/overrides": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "operationId": "getSessionOverrides",
+        "summary": "Read session overrides and inherited profile values",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "name": "umo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "profile_id",
+            "in": "query",
+            "description": "Preview a base profile without saving; empty string follows routing.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
     "/api/v1/sessions/rules": {
       "get": {
         "tags": [
@@ -6252,58 +6239,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UmoListRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `data`"
-      }
-    },
-    "/api/v1/sessions/provider": {
-      "patch": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Batch update session provider selection",
-        "operationId": "batchUpdateSessionProvider",
-        "x-astrbot-scope": "data",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BatchSessionProviderRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `data`"
-      }
-    },
-    "/api/v1/sessions/service": {
-      "patch": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Batch update session service settings",
-        "operationId": "batchUpdateSessionService",
-        "x-astrbot-scope": "data",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BatchSessionServiceRequest"
               }
             }
           }
@@ -6522,6 +6457,15 @@
               "default": false
             },
             "description": "Paginate by UMO and return all conversation summaries for each selected session."
+          },
+          {
+            "name": "group_webchat",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Combine matching WebChat conversations into one group when group_by_session is enabled."
           },
           {
             "name": "include_history",
@@ -7015,6 +6959,204 @@
         },
         "description": "**Required scope:** `config`"
       }
+    },
+    "/api/v1/chat/workbench/views": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "List registered workbench launcher views",
+        "operationId": "listWorkbenchViews",
+        "x-astrbot-scope": "chat",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/workbench/views/{plugin_name}/{view_name}": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Get a registered workbench view entry",
+        "operationId": "getWorkbenchView",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "plugin_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "view_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          },
+          "404": {
+            "description": "The view is unavailable or not registered for the launcher."
+          }
+        },
+        "description": "**Required scope:** `chat`"
+      }
+    },
+    "/api/v1/chat/views/{view_id}": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Get Chat View",
+        "description": "Return an authorized card snapshot and scoped frontend resources.\n\n**Required scope:** `chat`",
+        "operationId": "get_chat_view_api_v1_chat_views__view_id__get",
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "View Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-astrbot-scope": "chat"
+      }
+    },
+    "/api/v1/chat/views/{view_id}/actions": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Run Chat View Action",
+        "description": "Submit a view action to the authenticated message event pipeline.\n\n**Required scope:** `chat`",
+        "operationId": "run_chat_view_action_api_v1_chat_views__view_id__actions_post",
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "View Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-astrbot-scope": "chat"
+      }
+    },
+    "/api/v1/chat/views/{view_id}/actions/{interaction_id}": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Get Chat View Action",
+        "description": "Read an accepted action without executing plugin code again.\n\n**Required scope:** `chat`",
+        "operationId": "get_chat_view_action_api_v1_chat_views__view_id__actions__interaction_id__get",
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "View Id"
+            }
+          },
+          {
+            "name": "interaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Interaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-astrbot-scope": "chat"
+      }
     }
   },
   "components": {
@@ -7241,6 +7383,92 @@
       }
     },
     "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ViewActionRequest": {
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Action Id"
+          },
+          "interaction_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Interaction Id"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "data": {
+            "title": "Data"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action_id",
+          "interaction_id",
+          "expected_revision"
+        ],
+        "title": "ViewActionRequest",
+        "description": "Untrusted input submitted by a view through the authenticated host."
+      },
       "BotCleanupTarget": {
         "type": "string",
         "enum": [
@@ -7576,9 +7804,9 @@
             "type": "boolean",
             "description": "Internal WebUI flag for edit/regenerate flows."
           },
-          "_llm_checkpoint_id": {
+          "_turn_id": {
             "type": "string",
-            "description": "Internal WebUI checkpoint override."
+            "description": "Internal WebUI turn ID override."
           },
           "_platform_history_id": {
             "type": "string",
@@ -8235,6 +8463,19 @@
           "rule_key"
         ],
         "properties": {
+          "profile_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Explicit base profile; null follows routing; omitted preserves selection."
+          },
+          "user_alias": {
+            "type": "string",
+            "maxLength": 255
+          },
           "umo": {
             "type": "string"
           },
@@ -8272,58 +8513,11 @@
             "type": "string"
           },
           "rule_key": {
-            "type": "string"
+            "type": "string",
+            "description": "For rule deletion, config_binding clears both profile selection and overrides; config_overrides or omission clears only overrides."
           }
         },
         "additionalProperties": false
-      },
-      "BatchSessionProviderRequest": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/UmoListRequest"
-          },
-          {
-            "type": "object",
-            "required": [
-              "provider_id",
-              "provider_type"
-            ],
-            "properties": {
-              "provider_id": {
-                "type": "string"
-              },
-              "provider_type": {
-                "type": "string",
-                "enum": [
-                  "chat_completion",
-                  "speech_to_text",
-                  "text_to_speech"
-                ]
-              }
-            }
-          }
-        ]
-      },
-      "BatchSessionServiceRequest": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/UmoListRequest"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "session_enabled": {
-                "type": "boolean"
-              },
-              "llm_enabled": {
-                "type": "boolean"
-              },
-              "tts_enabled": {
-                "type": "boolean"
-              }
-            }
-          }
-        ]
       },
       "SessionGroupRequest": {
         "type": "object",

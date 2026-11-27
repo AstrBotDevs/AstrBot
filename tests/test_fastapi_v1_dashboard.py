@@ -17,7 +17,7 @@ import jwt
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse
 from PIL import Image as PILImage
 
 import astrbot.dashboard.services.config_service as config_service
@@ -174,12 +174,6 @@ class FakeLlmTools:
     async def disable_mcp_server(self, name: str, *, timeout: int) -> None:
         self.disabled_servers.append(name)
 
-    def iter_builtin_tools(self) -> list:
-        return []
-
-    def is_builtin_tool(self, _tool_name: str) -> bool:
-        return False
-
     def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
         return True
 
@@ -330,6 +324,7 @@ class FakeConversationManager:
         self.last_umo_query = ""
         self.last_sort = ("created_at", "desc")
         self.last_group_by_session = False
+        self.last_group_webchat = False
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -352,6 +347,7 @@ class FakeConversationManager:
         sort_by: str = "created_at",
         sort_order: str = "desc",
         group_by_session: bool = False,
+        group_webchat: bool = False,
         include_history: bool = True,
     ):
         self.last_include_history = include_history
@@ -359,6 +355,7 @@ class FakeConversationManager:
         self.last_umo_query = umo_query
         self.last_sort = (sort_by, sort_order)
         self.last_group_by_session = group_by_session
+        self.last_group_webchat = group_webchat
         self.last_filter_args = {
             "platforms": platforms,
             "message_types": message_types,
@@ -666,247 +663,6 @@ def _build_fake_config() -> dict:
     )
 
 
-async def _request_json(request: Request, *, silent: bool = False):
-    try:
-        return await request.json()
-    except Exception:
-        if silent:
-            return None
-        raise
-
-
-def _register_dashboard_alias_routes(
-    app: FastAPI,
-    config: dict,
-    provider_manager: FakeProviderManager,
-) -> None:
-    def _alias_username(request: Request) -> str:
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.removeprefix("Bearer ").strip()
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload["username"]
-
-    def alias_get(path: str):
-        return app.get(path, include_in_schema=False)
-
-    def alias_post(path: str):
-        return app.post(path, include_in_schema=False)
-
-    def alias_api_route(path: str, methods: list[str]):
-        return app.api_route(path, methods=methods, include_in_schema=False)
-
-    @alias_get("/api/config/platform/list")
-    async def dashboard_alias_platform_list():
-        return ok({"platforms": config["platform"]})
-
-    @alias_get("/api/config/provider/list")
-    async def dashboard_alias_provider_list(request: Request):
-        provider_type = request.query_params.get("provider_type")
-        provider_types = provider_type.split(",") if provider_type else []
-        provider_source_types = {
-            source["id"]: source.get("provider_type", "chat_completion")
-            for source in provider_manager.provider_sources_config
-        }
-        providers = []
-        for provider in provider_manager.providers_config:
-            source_id = provider.get("provider_source_id")
-            if source_id:
-                if provider_source_types.get(source_id) in provider_types:
-                    providers.append(
-                        provider_manager.get_merged_provider_config(provider)
-                    )
-                continue
-            if provider.get("provider_type") in provider_types:
-                providers.append(provider)
-        return ok(providers)
-
-    @alias_get("/api/stat/start-time")
-    async def dashboard_alias_start_time():
-        return ok({"start_time": 1234567890})
-
-    @alias_get("/api/session/active-umos")
-    async def dashboard_alias_active_umos():
-        return ok(
-            {
-                "umos": ["webchat:FriendMessage:webchat!user!session-1"],
-                "umo_infos": [
-                    {
-                        "umo": "webchat:FriendMessage:webchat!user!session-1",
-                        "platform": "webchat",
-                        "message_type": "FriendMessage",
-                        "session_id": "webchat!user!session-1",
-                    }
-                ],
-            }
-        )
-
-    @alias_get("/api/plugin/get")
-    async def dashboard_alias_plugin_list(request: Request):
-        return ok(
-            {
-                "plugins": [{"name": "astrbot_plugin_demo"}],
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_post("/api/plugin/off")
-    async def dashboard_alias_plugin_off(request: Request):
-        return ok(
-            {
-                "payload": await _request_json(request),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_post("/api/plugin/on")
-    async def dashboard_alias_plugin_on(request: Request):
-        return ok(
-            {
-                "payload": await _request_json(request),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_get("/api/plugin/detail")
-    async def dashboard_alias_plugin_detail(request: Request):
-        return ok({"name": request.query_params.get("name")})
-
-    @alias_post("/api/plugin/uninstall")
-    async def dashboard_alias_plugin_uninstall(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_get("/api/plugin/readme")
-    async def dashboard_alias_plugin_readme(request: Request):
-        return ok({"name": request.query_params.get("name"), "content": "readme"})
-
-    @alias_get("/api/plugin/changelog")
-    async def dashboard_alias_plugin_changelog(request: Request):
-        return ok({"name": request.query_params.get("name"), "content": "changes"})
-
-    @alias_post("/api/plugin/reload")
-    async def dashboard_alias_plugin_reload(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/plugin/update")
-    async def dashboard_alias_plugin_update(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/plugin/check-compat")
-    async def dashboard_alias_plugin_version_support(request: Request):
-        return ok(
-            {
-                "payload": await _request_json(request),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_get("/api/config/get")
-    async def dashboard_alias_config_get(request: Request):
-        return ok(
-            {
-                "plugin_name": request.query_params.get("plugin_name"),
-                "schema": {"type": "object"},
-            }
-        )
-
-    @alias_post("/api/config/plugin/update")
-    async def dashboard_alias_plugin_config_update(request: Request):
-        return ok(
-            {
-                "plugin_name": request.query_params.get("plugin_name"),
-                "payload": await _request_json(request),
-            }
-        )
-
-    @alias_api_route("/api/plug/{plugin_path:path}", methods=["GET", "POST"])
-    async def dashboard_alias_plugin_extension(plugin_path: str, request: Request):
-        return ok(
-            {
-                "plugin_path": plugin_path,
-                "method": request.method,
-                "payload": await _request_json(request, silent=True),
-                "alias_username": _alias_username(request),
-            }
-        )
-
-    @alias_get("/api/config/file/get")
-    async def dashboard_alias_config_file_get(request: Request):
-        return ok(
-            {
-                "scope": request.query_params.get("scope"),
-                "name": request.query_params.get("name"),
-                "key": request.query_params.get("key"),
-            }
-        )
-
-    @alias_post("/api/config/file/upload")
-    async def dashboard_alias_config_file_upload(request: Request):
-        return ok(
-            {
-                "scope": request.query_params.get("scope"),
-                "name": request.query_params.get("name"),
-                "key": request.query_params.get("key"),
-                "payload": await _request_json(request, silent=True),
-            }
-        )
-
-    @alias_post("/api/config/file/delete")
-    async def dashboard_alias_config_file_delete(request: Request):
-        return ok(
-            {
-                "scope": request.query_params.get("scope"),
-                "name": request.query_params.get("name"),
-                "payload": await _request_json(request),
-            }
-        )
-
-    @alias_get("/api/skills")
-    async def dashboard_alias_skill_list():
-        return ok({"skills": [{"name": "demo_skill"}], "runtime": "local"})
-
-    @alias_post("/api/skills/update")
-    async def dashboard_alias_skill_update(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/skills/delete")
-    async def dashboard_alias_skill_delete(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_get("/api/skills/download")
-    async def dashboard_alias_skill_download(request: Request):
-        return ok({"name": request.query_params.get("name")})
-
-    @alias_get("/api/skills/files")
-    async def dashboard_alias_skill_files(request: Request):
-        return ok(
-            {
-                "name": request.query_params.get("name"),
-                "path": request.query_params.get("path"),
-            }
-        )
-
-    @alias_get("/api/skills/file")
-    async def dashboard_alias_skill_file_get(request: Request):
-        return ok(
-            {
-                "name": request.query_params.get("name"),
-                "path": request.query_params.get("path"),
-            }
-        )
-
-    @alias_post("/api/skills/file")
-    async def dashboard_alias_skill_file_update(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_post("/api/config/provider/get_embedding_dim")
-    async def dashboard_alias_provider_embedding_dim(request: Request):
-        return ok({"payload": await _request_json(request)})
-
-    @alias_get("/api/file/{file_token}")
-    async def dashboard_alias_token_file(file_token: str):
-        return PlainTextResponse(f"token:{file_token}")
-
-
 @pytest.fixture
 def fake_db() -> FakeDb:
     return FakeDb()
@@ -991,6 +747,7 @@ def fake_core_lifecycle():
         umop_config_router=umop_config_router,
         platform_manager=SimpleNamespace(
             platform_insts=[platform],
+            get_insts=lambda: [platform],
             fake_platform=platform,
             reload=reload_platform,
             load_platform=load_platform,
@@ -1015,6 +772,7 @@ def fake_core_lifecycle():
         agent_configs=SimpleNamespace(lock=asyncio.Lock()),
         agent_runtimes={},
         star_context=SimpleNamespace(
+            get_all_stars=lambda: [demo_plugin],
             registered_web_apis=[
                 ("/<path:plugin_path>", plugin_extension, ["GET", "POST"], "demo")
             ]
@@ -1032,11 +790,6 @@ def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
         jwt_secret=JWT_SECRET,
     )
     app.state.dashboard_app_adapter = FastAPIAppAdapter(app)
-    _register_dashboard_alias_routes(
-        app,
-        fake_core_lifecycle.astrbot_config,
-        fake_core_lifecycle.provider_manager,
-    )
     return app
 
 
@@ -1057,6 +810,76 @@ def _jwt_headers() -> dict[str, str]:
         algorithm="HS256",
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/stats", "/api/stat/get"])
+async def test_stats_routes_include_daily_usage_and_system_resources(
+    asgi_app, asgi_client, temp_db, path
+):
+    """Both stats routes preserve existing fields and expose daily and host data."""
+    asgi_app.state.services.stats.db_helper = temp_db
+    response = await asgi_client.get(
+        path, params={"offset_sec": 3600}, headers=_jwt_headers()
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["message_count"] == 0
+    assert len(data["message_time_series"]) == 1
+    assert data["daily_usage"] == {
+        "today": {"tokens": 0, "messages": 0, "active_sessions": 0},
+        "yesterday": {"tokens": 0, "messages": 0, "active_sessions": 0},
+    }
+    assert data["memory"]["system"] == data["system"]["memory"]["total"] >> 20
+    assert data["running"] == stat_service.StatService.get_running_time_components(
+        data["system"]["uptime_seconds"]
+    )
+    removed = await asgi_client.get("/api/v1/stats/overview", headers=_jwt_headers())
+    assert removed.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/v1/stats", "/api/stat/get"])
+@pytest.mark.parametrize(
+    ("sections", "expected_fields"),
+    [
+        ("daily_usage,system", {"daily_usage", "system"}),
+        (
+            "messages,process,instances",
+            {
+                "message_count",
+                "message_time_series",
+                "platform",
+                "cpu_percent",
+                "memory",
+                "running",
+                "start_time",
+                "thread_count",
+                "platform_count",
+                "plugin_count",
+                "plugins",
+            },
+        ),
+        ("unknown", None),
+        ("", None),
+    ],
+)
+async def test_stats_routes_select_sections(
+    asgi_app, asgi_client, temp_db, path, sections, expected_fields
+):
+    """Both routes honor sections and reject malformed query selections."""
+    asgi_app.state.services.stats.db_helper = temp_db
+    response = await asgi_client.get(
+        path, params={"sections": sections}, headers=_jwt_headers()
+    )
+
+    if expected_fields is None:
+        assert response.status_code == 400
+        assert "sections must be" in response.json()["message"]
+    else:
+        assert response.status_code == 200
+        assert set(response.json()["data"]) == expected_fields
 
 
 @pytest.mark.asyncio
@@ -1664,6 +1487,7 @@ async def test_conversation_workspace_filters_and_options(
             "sort_by": "updated_at",
             "sort_order": "asc",
             "group_by_session": "true",
+            "group_webchat": "true",
         },
         headers=_jwt_headers(),
     )
@@ -1673,6 +1497,7 @@ async def test_conversation_workspace_filters_and_options(
     assert manager.last_umo_query == "session-1"
     assert manager.last_sort == ("updated_at", "asc")
     assert manager.last_group_by_session is True
+    assert manager.last_group_webchat is True
 
 
 @pytest.mark.asyncio
@@ -2004,43 +1829,25 @@ async def test_config_update_revokes_only_affected_shell_sessions(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scope", ["workspace", "host"])
 @pytest.mark.parametrize(
-    ("system", "backend", "status", "reason"),
+    ("system", "backend", "status", "error"),
     [
-        ("windows", None, "unsupported", "windows"),
-        ("linux", "bubblewrap", "missing", "bwrap"),
-        ("darwin", "seatbelt", "missing", "sandbox-exec"),
+        ("windows", None, "unsupported", None),
+        ("linux", "bubblewrap", "missing", None),
+        ("darwin", "seatbelt", "missing", None),
         ("linux", "bubblewrap", "unavailable", "setting up uid map: Permission denied"),
         ("darwin", "seatbelt", "unavailable", "sandbox_apply: Operation not permitted"),
     ],
 )
-@pytest.mark.parametrize(
-    "path",
-    [
-        "/api/v1/system-config",
-        "/api/v1/config-profiles/default",
-        "/api/config/astrbot/update",
-    ],
-)
-async def test_config_api_saves_local_permissions_without_isolation(
-    asgi_app,
-    asgi_client,
-    fake_core_lifecycle,
-    path,
-    scope,
-    system,
-    backend,
-    status,
-    reason,
+async def test_config_profile_saves_local_permissions_without_isolation(
+    fake_core_lifecycle, scope, system, backend, status, error
 ):
-    runtime = asgi_app.state.services.stats.runtime
-    assert asgi_app.state.services.config_profiles.runtime is runtime
-    runtime.update({"os": system, "sandbox": {"backend": backend, "status": status}})
-    if status == "unavailable":
-        runtime["sandbox"]["error"] = reason
-    original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
-    payload = copy.deepcopy(original)
-    payload["agent"] = {"runtime": "astrbot"}
-    payload["provider_settings"] = {
+    sandbox = {"backend": backend, "status": status}
+    if error:
+        sandbox["error"] = error
+    service = config_service.ConfigProfileService(
+        fake_core_lifecycle, runtime={"os": system, "sandbox": sandbox}
+    )
+    expected_settings = {
         "computer_use_runtime": "local",
         "computer_use_local_permissions": {
             "member": {
@@ -2048,38 +1855,41 @@ async def test_config_api_saves_local_permissions_without_isolation(
                 "allow_execution": True,
                 "allow_network": True,
             },
-            "admin": {"filesystem_scope": "none"},
+            "admin": {
+                "filesystem_scope": "none",
+                "allow_execution": False,
+                "allow_network": False,
+            },
         },
     }
-    legacy = path.startswith("/api/config/")
-    response = await asgi_client.request(
-        "POST" if legacy else "PUT",
-        path,
-        headers=_jwt_headers(),
-        json={"conf_id": "default", "config": payload} if legacy else payload,
+    settings = copy.deepcopy(expected_settings)
+    settings["computer_use_local_permissions"]["admin"] = {"filesystem_scope": "none"}
+
+    await service.update_profile(
+        "default", {"agent": {"runtime": "astrbot"}, "provider_settings": settings}
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
-        allow_execution=False, allow_network=False
-    )
-    assert (
-        fake_core_lifecycle.astrbot_config["provider_settings"]
-        == payload["provider_settings"]
-    )
+    assert fake_core_lifecycle.astrbot_config["provider_settings"] == expected_settings
     assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["missing", "unavailable", "unsupported"])
-async def test_welcome_page_can_enable_local_computer_access_without_isolation(
-    asgi_app, asgi_client, fake_core_lifecycle, status
+@pytest.mark.parametrize(
+    ("method", "path", "status"),
+    [
+        ("PUT", "/api/v1/config-profiles/default", "missing"),
+        ("PUT", "/api/v1/system-config", "unavailable"),
+        ("POST", "/api/config/astrbot/update", "unsupported"),
+    ],
+)
+async def test_config_api_enables_local_runtime_with_default_permissions(
+    asgi_app, asgi_client, fake_core_lifecycle, method, path, status
 ):
     """Welcome setup only changes the runtime and retains default permissions."""
     from astrbot.core.config.default import get_local_permission_defaults
 
     runtime = asgi_app.state.services.stats.runtime
+    assert asgi_app.state.services.config_profiles.runtime is runtime
     runtime.update({"os": "linux", "sandbox": {"status": status}})
     config = fake_core_lifecycle.astrbot_config
     config["agent"] = {"runtime": "astrbot"}
@@ -2090,8 +1900,11 @@ async def test_welcome_page_can_enable_local_computer_access_without_isolation(
     payload = copy.deepcopy(config)
     payload["provider_settings"]["computer_use_runtime"] = "local"
 
-    response = await asgi_client.put(
-        "/api/v1/config-profiles/default", headers=_jwt_headers(), json=payload
+    response = await asgi_client.request(
+        method,
+        path,
+        headers=_jwt_headers(),
+        json={"conf_id": "default", "config": payload} if method == "POST" else payload,
     )
 
     assert response.status_code == 200, response.text
@@ -2726,12 +2539,23 @@ async def test_v1_plugin_repository_install_uses_transport_route(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("has_definitions", "category_id"),
+    [(True, "utility"), (True, "unknown"), (False, "utility"), (True, None)],
+)
 async def test_plugin_service_market_install_uses_registry_entry(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
+    has_definitions: bool,
+    category_id: str | None,
 ):
     plugin_service = asgi_app.state.services.plugins
     captured = {}
+    category = {
+        "id": "utility",
+        "display_name": "Utilities",
+        "i18n": {"zh-CN": {"display_name": "实用工具"}},
+    }
 
     async def fake_get_online_plugins(*, custom_registry, force_refresh):
         captured["registry_url"] = custom_registry
@@ -2741,11 +2565,13 @@ async def test_plugin_service_market_install_uses_registry_entry(
                 "schema_version": 1,
                 "name": "Test Market",
                 "version": "2026.06.27",
+                **({"categories": [category]} if has_definitions else {}),
             },
             "astrbot-plugin-demo": {
                 "author": "AstrBotDevs",
                 "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
                 "download_url": "https://cdn.example/market-plugin.zip",
+                "category": category_id,
             },
         }, None
 
@@ -2761,23 +2587,21 @@ async def test_plugin_service_market_install_uses_registry_entry(
         captured["download_url"] = download_url
         return {"name": "astrbot_plugin_demo"}
 
-    async def fake_persist_plugin_install_source(
-        plugin_info,
-        payload,
-        *,
-        fallback_method,
-        repo_url,
-        download_url,
-    ):
-        captured["persist_payload"] = payload
-        captured["persist_fallback_method"] = fallback_method
-        captured["persist_repo_url"] = repo_url
-        captured["persist_download_url"] = download_url
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        captured["records"] = records
 
     async def fake_sync_skills_after_plugin_change():
         captured["synced"] = True
 
     monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        plugin_service,
+        "find_plugin_by_name",
+        lambda name: SimpleNamespace(root_dir_name=name),
+    )
     monkeypatch.setattr(
         plugin_service.plugin_manager,
         "install_plugin",
@@ -2786,8 +2610,13 @@ async def test_plugin_service_market_install_uses_registry_entry(
     )
     monkeypatch.setattr(
         plugin_service,
-        "persist_plugin_install_source",
-        fake_persist_plugin_install_source,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
     )
     monkeypatch.setattr(
         plugin_service,
@@ -2802,6 +2631,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
             "install_method": "market",
             "registry_url": "https://example.com/plugins.json",
             "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+            "category": {"id": "client_supplied"},
             "proxy": "https://proxy.example",
             "ignore_version_check": True,
         }
@@ -2815,20 +2645,16 @@ async def test_plugin_service_market_install_uses_registry_entry(
     assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
     assert captured["proxy"] == "https://proxy.example"
     assert captured["ignore_version_check"] is True
-    assert captured["persist_fallback_method"] == "repository"
-    assert (
-        captured["persist_repo_url"]
-        == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-    )
-    assert captured["persist_download_url"] == "https://cdn.example/market-plugin.zip"
-    assert (
-        captured["persist_payload"]["registry_url"]
-        == "https://example.com/plugins.json"
-    )
-    assert (
-        captured["persist_payload"]["market_plugin_id"]
-        == "AstrBotDevs/astrbot-plugin-demo"
-    )
+    record = captured["records"]["astrbot_plugin_demo"]
+    assert record["install_method"] == "market"
+    assert record["repo"] == captured["repo_url"]
+    assert record["download_url"] == captured["download_url"]
+    assert record["registry_url"] == captured["registry_url"]
+    assert record["market_plugin_id"] == "AstrBotDevs/astrbot-plugin-demo"
+    if has_definitions and category_id == category["id"]:
+        assert record["category"] == category
+    else:
+        assert "category" not in record
     assert captured["synced"] is True
 
 
@@ -3804,6 +3630,44 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
 
 
 @pytest.mark.asyncio
+async def test_v1_plugin_source_add_is_idempotent_for_concurrent_requests(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    sources = [{"name": "existing", "url": "https://market.example/other.json"}]
+    writes = []
+
+    async def fake_global_get(_key, _default=None):
+        return list(sources)
+
+    async def fake_global_put(_key, value):
+        await asyncio.sleep(0)
+        sources[:] = value
+        writes.append(value)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.sp.global_get", fake_global_get
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.sp.global_put", fake_global_put
+    )
+    new_source = {"name": "Cloud", "url": "https://market.example/plugins.json"}
+    responses = await asyncio.gather(
+        *(
+            asgi_client.post(
+                "/api/v1/plugin-sources", json=new_source, headers=_jwt_headers()
+            )
+            for _ in range(2)
+        )
+    )
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["data"]["sources"] == sources for response in responses)
+    assert sources[1:] == [new_source]
+    assert len(writes) == 1
+
+
+@pytest.mark.asyncio
 async def test_v1_safe_plugin_source_delete_accepts_slash_ids(
     asgi_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -4043,11 +3907,11 @@ def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):
 
 def test_dashboard_config_aliases_are_registered_on_fastapi(asgi_app):
     assert (
-        str(asgi_app.url_path_for("dashboard_alias_platform_list"))
+        str(asgi_app.url_path_for("list_dashboard_alias_platforms"))
         == "/api/config/platform/list"
     )
     assert (
-        str(asgi_app.url_path_for("dashboard_alias_provider_list"))
+        str(asgi_app.url_path_for("list_dashboard_alias_providers"))
         == "/api/config/provider/list"
     )
     assert (
@@ -5280,3 +5144,47 @@ async def test_bot_delete_cleanup_query_is_validated(asgi_app, asgi_client, rout
     invalid = await asgi_client.delete(route, params={"bot_id": "bot", "cleanup": "unknown"}, headers=_jwt_headers())
     assert invalid.status_code == 422
     assert delete_bot.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_session_binding_distinguishes_follow_from_omitted_profile(asgi_client, monkeypatch):
+    from astrbot.dashboard.services.session_management_service import SessionManagementService
+
+    update = AsyncMock(return_value={})
+    monkeypatch.setattr(SessionManagementService, "update_session_rule", update)
+    payload = {"umo": "test:GroupMessage:42", "rule_key": "config_overrides", "rule_value": {}}
+    for selection in ({}, {"profile_id": None}, {"profile_id": "default"}):
+        response = await asgi_client.post("/api/v1/sessions/rules", headers=_jwt_headers(), json={**payload, **selection})
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        assert update.await_args.args[0] == {**payload, **selection}
+
+
+@pytest.mark.asyncio
+async def test_chat_transcription_requires_auth_and_passes_selected_provider(
+    asgi_client, asgi_app
+):
+    service = asgi_app.state.services.chat
+    received = []
+
+    async def transcribe(file, provider_id):
+        received.append((await file.read(), provider_id))
+        return {"text": "dictated words", "provider_id": provider_id}
+
+    service.transcribe_audio = transcribe
+    response = await asgi_client.post(
+        "/api/v1/chat/transcriptions",
+        files={"file": ("voice.webm", b"recording", "audio/webm")},
+        data={"provider_id": "stt-2"},
+    )
+    assert response.status_code == 401
+    assert received == []
+    response = await asgi_client.post(
+        "/api/v1/chat/transcriptions",
+        headers=_jwt_headers(),
+        files={"file": ("voice.webm", b"recording", "audio/webm")},
+        data={"provider_id": "stt-2"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == {"text": "dictated words", "provider_id": "stt-2"}
+    assert received == [(b"recording", "stt-2")]

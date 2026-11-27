@@ -1,10 +1,13 @@
+import asyncio
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from ...provider.modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
-from ..message import Message
+from ..message import Message, dump_messages
+from ..response import AgentResponse
 from .token_counter import EstimateTokenCounter, TokenCounter
 
 if TYPE_CHECKING:
@@ -16,6 +19,9 @@ else:
         import logging
 
         logger = logging.getLogger("astrbot")
+
+from astrbot.core.exceptions import ConversationPersistenceError
+from astrbot.core.utils.event_id import new_event_id
 
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
@@ -130,6 +136,7 @@ class LLMSummaryCompressor:
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
+        request_event_emitter: Callable[[AgentResponse], Awaitable[None]] | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -139,8 +146,11 @@ class LLMSummaryCompressor:
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            token_counter: Optional context token estimator.
+            request_event_emitter: Optional acknowledged runner event sink.
         """
         self.provider = provider
+        self.request_event_emitter = request_event_emitter
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
@@ -247,6 +257,15 @@ class LLMSummaryCompressor:
             if not any(msg.role != "system" for msg in summary_contexts):
                 return messages
 
+        summary_contexts = [
+            Message.model_validate(item)
+            for item in dump_messages(
+                [message for message in summary_contexts if not message._no_save]
+            )
+        ]
+        if not summary_contexts:
+            return messages
+
         if summary_contexts[-1].role != "assistant":
             summary_contexts.append(
                 Message(
@@ -274,15 +293,55 @@ class LLMSummaryCompressor:
         # Generate summary. A single attempt is enough: on failure the caller
         # falls back to truncation, so retrying (e.g. on an exhausted quota)
         # would only hold up the reply.
+        response = None
+        status = "failed"
+        error_code = None
+        event_id = new_event_id()
         try:
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
                 request_max_retries=1,
             )
+            status = "failed" if response.role == "err" else "completed"
             summary_content = (response.completion_text or "").strip()
+            if status == "failed":
+                return messages
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
         except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
+            error_code = type(e).__name__
+            logger.error(f"LLM context compression returned an error: {e}")
             return messages
+        finally:
+            if self.request_event_emitter:
+                payload = {
+                    "message": {
+                        "role": "assistant",
+                        "content": response.completion_text if response else "",
+                        "_no_save": True,
+                    },
+                    "purpose": "compaction",
+                    "status": status,
+                    "provider_id": self.provider.provider_config.get("id", ""),
+                    "model": self.provider.get_model(),
+                }
+                if response is not None and response.usage is not None:
+                    payload["usage"] = {
+                        "input_tokens": response.usage.input,
+                        "cached_input_tokens": response.usage.input_cached,
+                        "output_tokens": response.usage.output,
+                    }
+                if error_code:
+                    payload["error"] = {"code": error_code}
+                try:
+                    await self.request_event_emitter(
+                        AgentResponse("message.appended", payload, event_id)
+                    )
+                except Exception as exc:
+                    raise ConversationPersistenceError(
+                        "Summary response was not acknowledged"
+                    ) from exc
 
         if not summary_content:
             logger.warning("LLM context compression returned an empty summary.")

@@ -25,14 +25,13 @@ async def apply_knowledge_base(
     Args:
         event: Event identifying the session's knowledge bases.
         req: Request receiving a query tool or temporary retrieved context.
-        plugin_context: Knowledge-base services and builtin tool registry.
+        plugin_context: Knowledge-base services.
         config: Knowledge-base mode for this build.
     """
     if config.kb_agentic_mode:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        tool_mgr = plugin_context.get_llm_tool_manager()
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(KnowledgeBaseQueryTool))
+        req.func_tool.add_tool(KnowledgeBaseQueryTool())
     else:
         if req.prompt is None or not req.prompt.strip():
             return

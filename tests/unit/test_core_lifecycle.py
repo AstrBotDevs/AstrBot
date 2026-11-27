@@ -23,6 +23,7 @@ def mock_db():
     """Create a mock database."""
     db = MagicMock()
     db.initialize = AsyncMock()
+    db.chat_usage_writer.close = AsyncMock()
     return db
 
 
@@ -127,6 +128,7 @@ class TestAstrBotCoreLifecycleStop:
 
         # Should not raise
         await lifecycle.stop()
+        mock_db.chat_usage_writer.close.assert_awaited_once()
 
 
 class TestAstrBotCoreLifecycleTaskWrapper:
@@ -865,6 +867,7 @@ class TestAstrBotCoreLifecycleRestart:
             lifecycle.provider_manager.terminate.assert_awaited_once()
             lifecycle.platform_manager.terminate.assert_awaited_once()
             lifecycle.kb_manager.terminate.assert_awaited_once()
+            mock_db.chat_usage_writer.close.assert_awaited_once()
 
             # Verify thread was started
             mock_threading.Thread.assert_called_once()

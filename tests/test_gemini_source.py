@@ -35,39 +35,34 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
 
 
 @pytest.mark.asyncio
-async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
-    model = "gemini-3.7-flash"
+@pytest.mark.parametrize(
+    ("model", "provider_config"),
+    [
+        ("gemini-4-argon", {}),
+        ("gemini-4-argon", {"gm_thinking_config": {"level": "HIGH"}}),
+        (
+            "gemini-4-argon",
+            {
+                "gm_thinking_config": {"level": "HIGH"},
+                "custom_extra_body": {"reasoning_effort": "auto"},
+            },
+        ),
+        ("gemini-4-argon", {"custom_extra_body": {"reasoning_effort": "xhigh"}}),
+        ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
+    ],
+)
+async def test_gemini_omits_unset_or_unsupported_thinking_config(
+    model, provider_config
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-    provider.provider_config = {"gm_thinking_config": {"level": "MINIMAL"}}
+    provider.provider_config = provider_config
     provider.provider_settings = {}
-    provider.model_name = model
+    provider.model_name = "gemini-2.5-flash"
     provider.safety_settings = []
 
     config = await provider._prepare_query_config({"model": model})
 
-    assert config.thinking_config is not None
-    assert config.thinking_config.model_dump(exclude_none=True) == {
-        "thinking_level": types.ThinkingLevel.MEDIUM,
-    }
-
-
-@pytest.mark.asyncio
-async def test_gemini_prepare_conversation_removes_leading_model_content():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
-
-    contents = await provider._prepare_conversation(
-        {
-            "messages": [
-                {"role": "assistant", "content": "stale assistant turn"},
-                {"role": "user", "content": "current user turn"},
-            ]
-        }
-    )
-
-    assert len(contents) == 1
-    assert isinstance(contents[0], types.UserContent)
-    assert contents[0].parts is not None
-    assert contents[0].parts[-1].text == "current user turn"
+    assert "thinking_config" not in config.model_dump(exclude_none=True)
 
 
 @pytest.mark.asyncio
@@ -148,6 +143,48 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
     assert image_part.inline_data.data == image_bytes
 
 
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_resolves_url_history_audio(monkeypatch):
+    audio_url = "https://example.com/history.mp3"
+
+    async def fake_resolve_media_ref(media_ref, *, media_type, strict):
+        assert media_ref == audio_url
+        assert media_type == "audio"
+        assert strict is True
+        return SimpleNamespace(base64_data="YXVkaW8=", mime_type="audio/mpeg")
+
+    monkeypatch.setattr(
+        gemini_source,
+        "resolve_media_ref_to_base64_data",
+        fake_resolve_media_ref,
+    )
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "[Audio]"},
+                        {"type": "audio_url", "audio_url": {"url": audio_url}},
+                    ],
+                },
+                {"role": "assistant", "content": "Received."},
+                {"role": "user", "content": "Reply in text."},
+            ]
+        }
+    )
+
+    assert contents[0].parts is not None
+    audio_part = contents[0].parts[1]
+    assert audio_part.inline_data is not None
+    assert audio_part.inline_data.mime_type == "audio/mpeg"
+    assert audio_part.inline_data.data == b"audio"
+    assert contents[-1].parts is not None
+    assert contents[-1].parts[-1].text == "Reply in text."
+
+
 def test_gemini_empty_output_raises_empty_model_output_error():
     llm_response = LLMResponse(role="assistant")
 
@@ -172,23 +209,24 @@ def test_gemini_reasoning_only_output_is_allowed():
     )
 
 
-def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
+def test_gemini_extract_usage_counts_thoughts_and_tool_input_without_double_counting_cache():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
     usage_metadata = SimpleNamespace(
         prompt_token_count=100,
         cached_content_token_count=30,
         candidates_token_count=50,
+        thoughts_token_count=8,
+        tool_use_prompt_token_count=2,
     )
 
     usage = provider._extract_usage(usage_metadata)
 
-    # prompt_token_count already includes cached tokens; input_other must
-    # exclude them so input (input_other + input_cached) is not inflated.
-    assert usage.input_other == 70
+    # Prompt tokens include cache reads; tool prompts are reported separately.
+    assert usage.input_other == 72
     assert usage.input_cached == 30
-    assert usage.input == 100
-    assert usage.output == 50
+    assert usage.input == 102
+    assert usage.output == 58
 
 
 def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
@@ -296,10 +334,12 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
         for chunk in chunks:
             yield chunk
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def generate_content_stream(**kwargs):
         return fake_stream()
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models, "generate_content_stream", generate_content_stream
+    )
     return [
         response
         async for response in provider._query_stream(
@@ -364,10 +404,12 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
         observed_headers.append(headers.get("x-astrbot-conversation-id"))
         yield _gemini_stream_chunk(text="ok")
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def generate_content_stream(**kwargs):
         return fake_stream()
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models, "generate_content_stream", generate_content_stream
+    )
     responses = [
         response
         async for response in provider._query_stream(

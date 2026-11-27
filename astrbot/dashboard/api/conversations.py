@@ -100,6 +100,7 @@ async def _list_conversations(
     sort_order: Literal["asc", "desc"],
     group_by_session: bool,
     include_history: bool,
+    group_webchat: bool = False,
 ):
     return await _run(
         lambda: service.list_conversations(
@@ -115,6 +116,7 @@ async def _list_conversations(
             sort_by=sort_by,
             sort_order=sort_order,
             group_by_session=group_by_session,
+            group_webchat=group_webchat,
             include_history=include_history,
         )
     )
@@ -134,6 +136,7 @@ async def list_conversations(
     sort_by: Literal["created_at", "updated_at"] = Query(default="created_at"),
     sort_order: Literal["asc", "desc"] = Query(default="desc"),
     group_by_session: bool = Query(default=False),
+    group_webchat: bool = Query(default=False),
     include_history: bool = Query(default=True),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
@@ -152,6 +155,7 @@ async def list_conversations(
         sort_by=sort_by,
         sort_order=sort_order,
         group_by_session=group_by_session,
+        group_webchat=group_webchat,
         include_history=include_history,
     )
 

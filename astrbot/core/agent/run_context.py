@@ -1,12 +1,11 @@
-from typing import Any, Generic, Literal
+from typing import Generic, Literal
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
-from typing_extensions import TypeVar
 
 from .message import Message
-
-TContext = TypeVar("TContext", default=Any)
+from .tool import TContext as TContext
+from .tool import ToolSet
 
 
 @dataclass
@@ -23,6 +22,8 @@ class ContextWrapper(Generic[TContext]):
     """Why execution ended; populated before on_agent_done is called."""
     run_error: str | None = None
     """Error description when execution failed, without retaining a traceback."""
+    tools: ToolSet | None = None
+    """The executable tools available to this run."""
 
 
 NoContext = ContextWrapper[None]

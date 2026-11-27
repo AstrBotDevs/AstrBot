@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING
 
+from astrbot.core import logger
 from astrbot.core.agent.events import RuntimeExecutionError, TurnPrepared
 from astrbot.core.agent.input import format_input_content
+from astrbot.core.agent.message import ContentPart, Message, TextPart
 from astrbot.core.agent.runtime import (
     AgentInput,
     AgentSession,
@@ -16,14 +17,17 @@ from astrbot.core.agent.runtime import (
     AgentTurn,
     InputReceipt,
     TurnResult,
+    TurnStatus,
 )
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
+from astrbot.core.message.mention_render import follow_up_text
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
 from .execution import execute_native_loop
-from .history import record_agent_stats, save_agent_history
+from .history import save_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
@@ -104,6 +108,9 @@ class NativeAgentSession(AgentSession):
             result.provider,
         )
         runner.run_context.context.permissions = turn.input.permissions
+        runner.run_context.context.send_to_user = turn.input.send_to_user
+        if runner.run_context.context._output_turn is None:
+            runner.run_context.context._output_turn = turn
         runner.run_context.context.agent_session = AgentSessionRef("astrbot", self.id)
         self._runner = runner
         runner.run_context.context._runtime = self.runtime
@@ -131,10 +138,50 @@ class NativeAgentSession(AgentSession):
                 streaming=runner.streaming,
             )
         )
+        writer = result.conversation_events
+        status = None
         try:
-            return await execute_native_loop(runner, turn, config.max_steps)
+            if writer is not None:
+                trigger = {"kind": "agent", "umo": self.umo}
+                if isinstance(event, AgentWakeupEvent):
+                    trigger.update(kind=event.source)
+                    if event.source_id is not None:
+                        trigger["source_id"] = event.source_id
+                turn_id = event.get_extra("turn_id")
+                await writer.start_turn(
+                    trigger, event_id=turn_id if isinstance(turn_id, str) else None
+                )
+            if isinstance(event, AgentWakeupEvent) and event.tool_result is not None:
+                tool_name, tool_result = event.tool_result
+                text, images = await runner.prepare_tool_result(
+                    result=tool_result,
+                    tool_call_id=event.source_id or event.message_obj.message_id,
+                    tool_name=tool_name,
+                )
+                parts: list[ContentPart] = [
+                    TextPart(text=f"Background tool output (untrusted data):\n{text}")
+                ]
+                await runner.append_tool_result_images(images, content=parts)
+                # Complete the prepared input before its first persistence boundary.
+                messages = runner.run_context.messages
+                if messages and messages[-1].role == "user":
+                    message = messages[-1]
+                    content = message.content
+                    message.content = (
+                        [TextPart(text=content)]
+                        if isinstance(content, str)
+                        else list(content or [])
+                    ) + parts
+                else:
+                    messages.append(Message(role="user", content=parts))
+            outcome = await execute_native_loop(runner, turn, config.max_steps)
+            status = outcome.status
+            return outcome
+        except asyncio.CancelledError:
+            status = TurnStatus.CANCELLED
+            raise
         finally:
-            await self._finish_turn(turn, result)
+            await self._finish_turn(turn, result, status)
 
     async def _commit_history(
         self, history: list[dict], token_usage: int | None
@@ -149,12 +196,15 @@ class NativeAgentSession(AgentSession):
             self.umo, self.id, history=history, token_usage=token_usage
         )
 
-    async def _finish_turn(self, turn: AgentTurn, result: MainAgentBuildResult) -> None:
+    async def _finish_turn(
+        self, turn: AgentTurn, result: MainAgentBuildResult, status: TurnStatus | None
+    ) -> None:
         """Commit native history and settle steering for every execution path.
 
         Args:
             turn: Execution being finalized.
             result: Prepared runner, request and provider.
+            status: Execution outcome, or None if execution raised an error.
         """
         event = turn.input.event
         runner, req, provider = (
@@ -162,10 +212,22 @@ class NativeAgentSession(AgentSession):
             result.provider_request,
             result.provider,
         )
+        writer = result.conversation_events
         saved = False
         try:
             response = runner.get_final_llm_resp()
-            if not event.is_stopped() and not turn.cancellation_requested:
+            if (
+                not event.is_stopped()
+                and not turn.cancellation_requested
+                and (
+                    writer is None
+                    or (
+                        writer.turn_id is not None
+                        and status is not None
+                        and (status != TurnStatus.CANCELLED or runner.was_aborted())
+                    )
+                )
+            ):
                 try:
                     saved = await save_agent_history(
                         req=req,
@@ -173,16 +235,14 @@ class NativeAgentSession(AgentSession):
                         all_messages=runner.run_context.messages,
                         runner_stats=runner.stats,
                         user_aborted=runner.was_aborted(),
+                        writer=writer,
                         commit=self._commit_history,
-                        checkpoint_id=event.get_extra("llm_checkpoint_id")
-                        if self.is_main
-                        else None,
                     )
                 except Exception as exc:
+                    status = TurnStatus.FAILED
                     raise RuntimeExecutionError(
                         "history_save_failed", str(exc)
                     ) from exc
-            await record_agent_stats(event, req, runner, response)
             event.trace.record(
                 "astr_agent_complete",
                 stats=runner.stats.to_dict(),
@@ -205,6 +265,18 @@ class NativeAgentSession(AgentSession):
                 if self.runtime._active_main.get(self.umo) is turn:
                     self.runtime._active_main.pop(self.umo)
             self._runner = None
+            if writer is not None:
+                journal_status = status or TurnStatus.FAILED
+                if event.is_stopped() or turn.cancellation_requested:
+                    journal_status = TurnStatus.CANCELLED
+                try:
+                    await writer.finish_turn(journal_status.value)
+                except Exception as exc:
+                    if journal_status == TurnStatus.COMPLETED:
+                        raise RuntimeExecutionError(
+                            "history_save_failed", str(exc)
+                        ) from exc
+                    logger.warning("Could not settle conversation turn", exc_info=True)
 
     async def cancel_turn(self, turn: AgentTurn) -> None:
         """Stop this session's current native execution.
@@ -240,12 +312,12 @@ class NativeAgentSession(AgentSession):
         """
         if self._runner is None:
             return None
-        text = (
-            format_input_content(input.content)
-            if input.content is not None
-            else input.event.get_message_str() or input.event.get_message_outline()
-        )
-        ticket = self._runner.follow_up(message_text=text)
+        if input.content is not None:
+            text = format_input_content(input.content)
+            temp_text = None
+        else:
+            text, temp_text = follow_up_text(input.event)
+        ticket = self._runner.follow_up(message_text=text, temp_text=temp_text)
         if ticket is None:
             return None
         receipt = InputReceipt()
@@ -258,7 +330,9 @@ class NativeAgentSession(AgentSession):
         Returns:
             Detached canonical model messages.
         """
-        conversation = await self.runtime.context.conversation_manager.get_conversation(
-            self.umo, self.id
+        conversation = (
+            await self.runtime.context.conversation_manager.db.get_conversation_by_id(
+                self.id
+            )
         )
-        return json.loads(conversation.history) if conversation is not None else []
+        return (conversation.content or []) if conversation is not None else []
