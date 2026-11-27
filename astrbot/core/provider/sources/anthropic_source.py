@@ -1143,8 +1143,10 @@ class ProviderAnthropic(Provider):
         Args:
             key: API key to use for subsequent requests.
         """
-        headers = {"X-Api-Key": key}
+        headers = {}
         for name, value in self.client.default_headers.items():
+            if name.lower() == "x-api-key" and value == self.chosen_api_key:
+                headers[name] = key
             if (
                 name.lower() == "authorization"
                 and value == f"Bearer {self.chosen_api_key}"

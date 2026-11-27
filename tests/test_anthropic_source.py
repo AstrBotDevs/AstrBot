@@ -2,12 +2,12 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from anthropic import BadRequestError
+from anthropic import AuthenticationError, BadRequestError
 from anthropic import _base_client as anthropic_base_client
 from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.provider.entities import TokenUsage
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 # The SDK bundles its own httpx (``httpx`` before 1.0.0, ``httpx2`` after).
@@ -57,6 +57,71 @@ async def test_anthropic_request_sends_single_api_key_header(
             max_tokens=16,
             messages=[{"role": "user", "content": "hi"}],
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_failover_keeps_independent_auth_headers(monkeypatch, streaming):
+    keys = []
+    api_headers = []
+
+    def handle(request):
+        keys.append(request.headers["Authorization"])
+        api_headers.append(request.headers["X-Api-Key"])
+        status = 401 if len(keys) == 1 else 400
+        return sdk_httpx.Response(status, json={"error": {"message": "rejected"}})
+
+    async with sdk_httpx.AsyncClient(
+        transport=sdk_httpx.MockTransport(handle)
+    ) as client:
+        monkeypatch.setattr(ProviderAnthropic, "_create_http_client", lambda *_: client)
+        provider = ProviderAnthropic(
+            {
+                "key": ["first", "second"],
+                "custom_headers": {
+                    "X-Api-Key": "gateway",
+                    "Authorization": "Bearer first",
+                },
+            },
+            {},
+        )
+        with pytest.raises(BadRequestError):
+            if streaming:
+                async for _ in provider.text_chat_stream(
+                    prompt="hello", request_max_retries=1
+                ):
+                    pass
+            else:
+                await provider.text_chat(prompt="hello", request_max_retries=1)
+    assert keys == ["Bearer first", "Bearer second"]
+    assert api_headers == ["gateway", "gateway"]
+
+
+@pytest.mark.asyncio
+async def test_failover_never_replays_partial_stream(monkeypatch):
+    provider = ProviderAnthropic({"key": ["first", "second"]}, {})
+    attempts = []
+
+    async def partial(*args, **kwargs):
+        attempts.append(provider.get_current_key())
+        yield LLMResponse("assistant", completion_text="partial", is_chunk=True)
+        raise AuthenticationError(
+            "expired",
+            response=sdk_httpx.Response(
+                401, request=sdk_httpx.Request("POST", "https://example.org")
+            ),
+            body=None,
+        )
+
+    monkeypatch.setattr(provider, "_query_stream", partial)
+    try:
+        stream = provider.text_chat_stream(prompt="hello")
+        assert (await anext(stream)).completion_text == "partial"
+        with pytest.raises(AuthenticationError):
+            await anext(stream)
+        assert attempts == ["first"]
+    finally:
+        await provider.terminate()
 
 
 def test_anthropic_extract_usage_counts_cache_creation_input():
