@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
+from quart import websocket
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -25,6 +26,18 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
+
+
+class _CQHttp(CQHttp):
+    """Preserve replacement reverse WebSocket connections during cleanup."""
+
+    def _remove_wsr_api_client(self) -> None:
+        """Remove the API registration only if it belongs to this connection."""
+        ws = websocket._get_current_object()
+        self_id = websocket.headers["X-Self-ID"]
+        # A newer connection with the same ID may have replaced this one.
+        if self._wsr_api_clients.get(self_id) is ws:
+            del self._wsr_api_clients[self_id]
 
 
 @register_platform_adapter(
@@ -52,7 +65,7 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = CQHttp(
+        self.bot = _CQHttp(
             use_ws_reverse=True,
             import_name="aiocqhttp",
             api_timeout_sec=180,
