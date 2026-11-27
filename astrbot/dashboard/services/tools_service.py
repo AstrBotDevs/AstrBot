@@ -6,7 +6,6 @@ from typing import Any
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.provider.func_tool_manager import MCP_TOOL_NAMESPACE_SEED
 from astrbot.core.star import star_map
 
 
@@ -72,7 +71,7 @@ class ToolsService:
                     "active": server_config.get("active", True),
                 }
                 for key, value in server_config.items():
-                    if key not in {"active", MCP_TOOL_NAMESPACE_SEED}:
+                    if key != "active":
                         server_info[key] = value
 
                 runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
@@ -121,8 +120,7 @@ class ToolsService:
             for other, other_config in config["mcpServers"].items():
                 if not isinstance(other_config, dict):
                     continue
-                seed = other_config.get(MCP_TOOL_NAMESPACE_SEED) or other
-                if MCPTool.server_namespace(seed) == namespace:
+                if MCPTool.server_namespace(other) == namespace:
                     raise ToolsServiceError(
                         f"Server {other!r} already uses tool namespace {namespace!r}. "
                         "Choose another server name."
@@ -160,8 +158,20 @@ class ToolsService:
                 raise ToolsServiceError(f"Server {old_name} does not exist")
 
             is_rename = name != old_name
-            if name in config["mcpServers"] and is_rename:
-                raise ToolsServiceError(f"Server {name} already exists")
+            if is_rename:
+                if name in config["mcpServers"]:
+                    raise ToolsServiceError(f"Server {name} already exists")
+                namespace = MCPTool.server_namespace(name)
+                for other, other_config in config["mcpServers"].items():
+                    if (
+                        other != old_name
+                        and isinstance(other_config, dict)
+                        and MCPTool.server_namespace(other) == namespace
+                    ):
+                        raise ToolsServiceError(
+                            f"Server {other!r} already uses tool namespace {namespace!r}. "
+                            "Choose another server name."
+                        )
 
             old_config = config["mcpServers"][old_name]
             old_active = (
@@ -176,13 +186,6 @@ class ToolsService:
             )
             self._validate_server_config(server_config)
 
-            # Keep stored tool references valid when only the display name changes.
-            if isinstance(old_config, dict) and (
-                is_rename or MCP_TOOL_NAMESPACE_SEED in old_config
-            ):
-                server_config[MCP_TOOL_NAMESPACE_SEED] = (
-                    old_config.get(MCP_TOOL_NAMESPACE_SEED) or old_name
-                )
             if is_rename:
                 config["mcpServers"].pop(old_name)
             config["mcpServers"][name] = server_config
@@ -393,7 +396,6 @@ class ToolsService:
                 server_config[key] = value
             has_valid_config = True
 
-        server_config.pop(MCP_TOOL_NAMESPACE_SEED, None)
         return has_valid_config, server_config
 
     @staticmethod
@@ -429,7 +431,6 @@ class ToolsService:
                 if key != "active":
                     server_config[key] = value
 
-        server_config.pop(MCP_TOOL_NAMESPACE_SEED, None)
         return only_update_active, server_config
 
     @staticmethod

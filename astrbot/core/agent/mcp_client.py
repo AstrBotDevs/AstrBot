@@ -945,12 +945,10 @@ class MCPTool(FunctionTool, Generic[TContext]):
         mcp_tool: mcp.Tool,
         mcp_client: MCPClient,
         mcp_server_name: str,
-        *,
-        namespace: str | None = None,
         **kwargs,
     ) -> None:
         legacy_name = re.sub(r"[^A-Za-z0-9_-]+", "_", mcp_tool.name)
-        prefix = f"mcp__{namespace or self.server_namespace(mcp_server_name)}__"
+        prefix = f"mcp__{self.server_namespace(mcp_server_name)}__"
         limit = 64 - len(prefix)
         tool_name = legacy_name
         # Preserve the original MCP name for dispatch. Hash lossy aliases so

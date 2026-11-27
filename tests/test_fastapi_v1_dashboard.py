@@ -23,6 +23,7 @@ from PIL import Image as PILImage
 import astrbot.dashboard.services.config_service as config_service
 import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
 from astrbot.dashboard.api.backups import download_backup as download_backup_route
@@ -3986,23 +3987,34 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
 
 
 @pytest.mark.asyncio
-async def test_v1_mcp_rename_preserves_tool_namespace_seed(
+async def test_v1_mcp_rename_reconnects_under_new_server_name(
     asgi_client: httpx.AsyncClient, fake_core_lifecycle
 ):
     headers = _jwt_headers()
     fake_tools = fake_core_lifecycle.provider_manager.llm_tools
-    for old_name, new_name in [("demo-server", "知识库"), ("知识库", "工作知识库")]:
-        response = await asgi_client.put(
-            "/api/v1/mcp/servers/by-name",
-            headers=headers,
-            json={"server_name": old_name, "config": {"name": new_name}},
-        )
-        assert response.status_code == 200
-    renamed = fake_tools.config["mcpServers"]["工作知识库"]
-    assert renamed["_astrbot_tool_namespace_seed"] == "demo-server"
-    response = await asgi_client.get("/api/v1/mcp/servers", headers=headers)
+    original = fake_tools.config["mcpServers"]["demo-server"].copy()
+    taken_namespace = MCPTool.server_namespace("modelscope/demo")
+
+    conflict = await asgi_client.put(
+        "/api/v1/mcp/servers/by-name",
+        headers=headers,
+        json={"server_name": "demo-server", "config": {"name": taken_namespace}},
+    )
+    assert conflict.status_code == 400
+    assert "already uses tool namespace" in conflict.json()["message"]
+    assert fake_tools.config["mcpServers"]["demo-server"] == original
+
+    new_name = "知识库"
+    response = await asgi_client.put(
+        "/api/v1/mcp/servers/by-name",
+        headers=headers,
+        json={"server_name": "demo-server", "config": {"name": new_name}},
+    )
     assert response.status_code == 200
-    assert all("_astrbot_tool_namespace_seed" not in item for item in response.json()["data"])
+    assert "demo-server" not in fake_tools.config["mcpServers"]
+    assert fake_tools.config["mcpServers"][new_name] == original
+    assert fake_tools.disabled_servers == ["demo-server"]
+    assert fake_tools.enabled_servers == [(new_name, original)]
 
 
 @pytest.mark.asyncio

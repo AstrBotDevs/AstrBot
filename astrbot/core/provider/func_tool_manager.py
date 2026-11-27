@@ -21,7 +21,6 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
-MCP_TOOL_NAMESPACE_SEED = "_astrbot_tool_namespace_seed"
 
 DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 180.0
 DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 180.0
@@ -62,7 +61,6 @@ class MCPInitSummary:
 @dataclass
 class _MCPServerRuntime:
     name: str
-    namespace: str
     client: MCPClient
     shutdown_event: asyncio.Event
     lifecycle_task: asyncio.Task[None]
@@ -297,7 +295,7 @@ class FunctionToolManager:
         self._timeout_mismatch_warned = False
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
-        self._mcp_starting: dict[str, str] = {}
+        self._mcp_starting: set[str] = set()
         self._init_timeout_default = _resolve_timeout(
             timeout=None,
             env_name=MCP_INIT_TIMEOUT_ENV,
@@ -615,23 +613,14 @@ class FunctionToolManager:
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
-            namespace = MCPTool.server_namespace(
-                cfg.get(MCP_TOOL_NAMESPACE_SEED) or name
-            )
-            namespaces = {
-                **self._mcp_starting,
-                **{
-                    server.name: server.namespace
-                    for server in self._mcp_server_runtime.values()
-                },
-            }
-            for other, other_namespace in namespaces.items():
-                if other_namespace == namespace:
+            namespace = MCPTool.server_namespace(name)
+            for other in self._mcp_server_runtime.keys() | self._mcp_starting:
+                if MCPTool.server_namespace(other) == namespace:
                     raise MCPInitError(
                         f"MCP servers {name!r} and {other!r} share tool namespace "
                         f"{namespace!r}. Rename one server."
                     )
-            self._mcp_starting[name] = namespace
+            self._mcp_starting.add(name)
 
         if shutdown_event is None:
             shutdown_event = asyncio.Event()
@@ -658,7 +647,6 @@ class FunctionToolManager:
                         mcp_tool=tool,
                         mcp_client=mcp_client,
                         mcp_server_name=name,
-                        namespace=namespace,
                     )
                     for tool in mcp_client.tools
                 ]
@@ -739,12 +727,11 @@ class FunctionToolManager:
         async with self._runtime_lock:
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
-                namespace=namespace,
                 client=mcp_client,
                 shutdown_event=shutdown_event,
                 lifecycle_task=lifecycle_task,
             )
-            self._mcp_starting.pop(name, None)
+            self._mcp_starting.discard(name)
 
         try:
             await asyncio.wait_for(connect_done.wait(), timeout=timeout)
@@ -752,7 +739,7 @@ class FunctionToolManager:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
             async with self._runtime_lock:
-                self._mcp_starting.pop(name, None)
+                self._mcp_starting.discard(name)
                 self._mcp_server_runtime.pop(name, None)
             if isinstance(e, asyncio.TimeoutError):
                 raise MCPInitTimeoutError(
@@ -762,7 +749,7 @@ class FunctionToolManager:
 
         if connect_error is not None:
             async with self._runtime_lock:
-                self._mcp_starting.pop(name, None)
+                self._mcp_starting.discard(name)
                 self._mcp_server_runtime.pop(name, None)
             raise connect_error
 
@@ -846,7 +833,7 @@ class FunctionToolManager:
             ]
             async with self._runtime_lock:
                 self._mcp_server_runtime.pop(name, None)
-                self._mcp_starting.pop(name, None)
+                self._mcp_starting.discard(name)
             logger.info(f"Disconnected from MCP server {name}")
             return
 
@@ -857,7 +844,7 @@ class FunctionToolManager:
             if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
         ]
         async with self._runtime_lock:
-            self._mcp_starting.pop(name, None)
+            self._mcp_starting.discard(name)
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
