@@ -39,3 +39,15 @@
     max(320px, calc(100vw - var(--astrbot-chat-sidebar-width, 0px) - 326px))
   );
 }
+
+/* On desktop a right panel opens below the top bar as a sheet docked into the
+   chat area's right edge, so the top bar keeps the same icons whether a
+   panel is open or not. Its left line meets the top bar's bottom line at a
+   square corner; the top bar draws the line above it. The doubled class
+   outranks each panel's own scoped border rules, whatever its root tag. */
+@media (min-width: 960px) {
+  .chat-ui > .chat-side-panel.chat-side-panel {
+    border: 0;
+    border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  }
+}

@@ -2606,6 +2606,19 @@ html {
   box-shadow: none !important;
 }
 
+/* Desktop ChatUI: a 1px line along the top bar's bottom, drawn inside so the
+   toolbar keeps its height; a docked right panel's left line meets it. On
+   phones the panels open full screen, so there is no line. Not in the macOS
+   desktop shell, where the top bar is the full-width window bar above the
+   sidebar and the line would run across the whole window. */
+@media (min-width: 960px) {
+  html:not([data-astrbot-desktop-platform='macos']) .top-header.chat-mode-header,
+  html:not([data-astrbot-desktop-platform='macos'])
+    .top-header.chat-mode-header.chat-mode-header--dark {
+    box-shadow: inset 0 -1px 0 rgba(var(--v-theme-on-surface), 0.1) !important;
+  }
+}
+
 html[data-astrbot-desktop-platform='macos'] .top-header,
 html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
 html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
@@ -2772,22 +2785,7 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   padding: 0 8px;
   height: var(--astrbot-toolbar-height);
 }
-#chat-workbench-header:has(.workbench-header) {
-  width: calc(var(--astrbot-workbench-width) - var(--workbench-caption-width, 0px));
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-}
-.top-header:has(#chat-workbench-header .workbench-header) {
-  --astrbot-active-workbench-width: var(--astrbot-workbench-width);
-}
 .top-header:has(#chat-workbench-header:not(:empty)) .header-actions {
   margin-right: -18px;
-}
-.top-header:has(.header-caption-btns) {
-  --workbench-caption-width: 132px;
-}
-@media (min-width: 960px) and (max-width: 1400px) {
-  .top-header:has(#chat-workbench-header .workbench-header) .chat-toolbar-context-title {
-    display: none;
-  }
 }
 </style>
