@@ -2,6 +2,7 @@ name: PR size label
 
 on:
   pull_request_target:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -13,6 +14,7 @@ concurrency:
 
 jobs:
   size:
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -23,9 +25,16 @@ jobs:
       - name: Label by changed lines
         run: |
           set -euo pipefail
-          total=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
-            --jq '[.[] | select(.filename | test("^(uv\\.lock|dashboard/pnpm-lock\\.yaml)$|^dashboard/src/api/generated/") | not) | .additions + .deletions] | add // 0' \
-            | awk '{ s += $1 } END { printf "%d\n", s + 0 }')
+          pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
+          head_sha=$(echo "$pr" | jq -r '.head.sha')
+
+          if [ "$(echo "$pr" | jq -r '.changed_files')" -gt 3000 ]; then
+            total=$(echo "$pr" | jq -r '.additions + .deletions')
+          else
+            total=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
+              --jq '[.[] | select(.filename | test("^(uv\\.lock|dashboard/pnpm-lock\\.yaml)$|^dashboard/src/api/generated/") | not) | .additions + .deletions] | add // 0' \
+              | awk '{ s += $1 } END { printf "%d\n", s + 0 }')
+          fi
 
           if   [ "$total" -lt 10 ];   then label=size:XS
           elif [ "$total" -lt 30 ];   then label=size:S
@@ -37,11 +46,21 @@ jobs:
 
           echo "changed lines: $total -> $label"
 
-          current=$(gh api --paginate "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+          if [ "$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')" != "$head_sha" ]; then
+            echo "PR head moved, skipping"
+            exit 0
+          fi
+
+          current=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
           echo "$current" | grep -Fxq "$label" || gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/labels" -f "labels[]=$label" > /dev/null
 
-          for old in $(echo "$current" | grep '^size:' || true); do
-            if [ "$old" != "$label" ]; then
-              gh api -X DELETE "repos/$GH_REPO/issues/$PR_NUMBER/labels/$old"
+          for _ in 1 2; do
+            current=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+            stale=$(echo "$current" | grep '^size:' | grep -Fxv "$label" || true)
+            if [ -z "$stale" ]; then
+              break
             fi
+            for old in $stale; do
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR_NUMBER/labels/$old" || true
+            done
           done
