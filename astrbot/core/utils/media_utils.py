@@ -217,7 +217,7 @@ def is_file_uri(value: object) -> bool:
 
     if not isinstance(value, str):
         return False
-    if type(value) is str and not _FILE_SCHEME_PREFIX.match(value):
+    if not _FILE_SCHEME_PREFIX.match(value):
         return False
     try:
         return urlsplit(value).scheme.lower() == "file"
@@ -365,8 +365,7 @@ def describe_media_ref(media_ref: object | None) -> str:
     # Skip URL parsing (and its global LRU cache) for plain ASCII strings
     # without scheme or IPv6 delimiters, such as bare base64 payloads.
     if not (
-        type(media_ref) is str
-        and media_ref.isascii()
+        media_ref.isascii()
         and ":" not in media_ref
         and "[" not in media_ref
         and "]" not in media_ref
