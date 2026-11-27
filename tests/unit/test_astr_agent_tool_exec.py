@@ -12,7 +12,6 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.runtime import AgentPermissions, AgentRole
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_discovery import ToolDiscovery
 from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.astr_agent_runtime.tools.computer_tools.shell import ShellSessionTool
 from astrbot.core.message.components import Image
@@ -781,7 +780,7 @@ async def test_registered_handoff_preserves_dispatch_and_dynamic_mode(
     guarded = manager.get_func(handoff.name, guarded=True)
     if mode == "dynamic":
         run_context.tools = ToolSet([guarded])
-        run_context.tool_discovery = ToolDiscovery(run_context.tools)
+        run_context.dynamic_tools = True
 
     results = [
         result
@@ -804,6 +803,23 @@ async def test_registered_handoff_preserves_dispatch_and_dynamic_mode(
     else:
         child_loop.assert_not_awaited()
         handoff.handler.assert_awaited_once_with(event, input="hello")
+
+
+def test_handoff_catalog_guards_registered_objects_by_identity():
+    manager = FunctionToolManager()
+    registered = FunctionTool("registered", "Registered tool", {})
+    nested = FunctionTool("nested", "Tool owned by the child", {})
+    manager.func_list.append(registered)
+    run_context = _build_run_context()
+    run_context.context.context.get_llm_tool_manager = lambda: manager
+    run_context.tools = ToolSet([registered])
+
+    catalog = FunctionToolExecutor._build_handoff_toolset(
+        run_context, [registered.name, registered, nested]
+    )
+
+    assert isinstance(catalog.get_tool(registered.name), _PermissionGuardedTool)
+    assert catalog.get_tool(nested.name) is nested
 
 
 @pytest.mark.asyncio

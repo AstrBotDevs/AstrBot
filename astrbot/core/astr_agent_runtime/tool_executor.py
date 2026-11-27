@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from contextlib import aclosing
 from copy import copy
+from functools import partial
 
 import mcp
 
@@ -65,6 +66,19 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    @classmethod
+    def prepare_tools(
+        cls, tools: ToolSet, run_context: ContextWrapper[AstrAgentContext]
+    ) -> ToolSet:
+        """Keep registry permissions on tools passed as raw objects by callers."""
+        ctx = getattr(run_context.context, "context", None)
+        manager = (
+            ctx.get_llm_tool_manager()
+            if hasattr(ctx, "get_llm_tool_manager")
+            else llm_tools
+        )
+        return ToolSet([manager.guard_registered_tool(tool) for tool in tools])
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -156,10 +170,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         send_to_user = getattr(run_context.context, "send_to_user", True)
         # Preserve legacy handoff dispatch outside dynamic mode and keep MCP timeouts.
         if isinstance(tool, _PermissionGuardedTool) and (
-            (
-                run_context.tool_discovery is not None
-                and isinstance(tool._wrapped, HandoffTool)
-            )
+            (run_context.dynamic_tools and isinstance(tool._wrapped, HandoffTool))
             or (tool.is_background_task and send_to_user)
         ):
             error = await tool.authorization_error(run_context)
@@ -169,9 +180,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     isError=True,
                 )
                 return
-            if run_context.tool_discovery is not None and isinstance(
-                tool._wrapped, HandoffTool
-            ):
+            if run_context.dynamic_tools and isinstance(tool._wrapped, HandoffTool):
                 tool = tool._wrapped
 
         if isinstance(tool, HandoffTool):
@@ -312,7 +321,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         toolset.add_tool(resolved)
                 elif isinstance(tool, FunctionTool):
                     toolset.add_tool(tool)
-            return None if toolset.empty() else toolset
+            return cls.prepare_tools(toolset, run_context) or None
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -645,10 +654,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         wrapper = call_local_llm_tool(
             run_context,
-            awaitable,
+            partial(awaitable, **tool_args),
             method_name,
-            tool,
-            **tool_args,
+            tool=tool,
         )
         async with aclosing(wrapper):
             while True:

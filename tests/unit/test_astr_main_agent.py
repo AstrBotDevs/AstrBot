@@ -3841,8 +3841,14 @@ async def test_dynamic_main_agent_respects_persona_plugin_filter_and_permissions
         ),
         LLMResponse(
             role="assistant",
-            tools_call_name=["lookup_ticket"],
-            tools_call_args=[{}],
+            tools_call_name=["astrbot_describe_tool"],
+            tools_call_args=[{"name": "lookup_ticket"}],
+            tools_call_ids=["describe"],
+        ),
+        LLMResponse(
+            role="assistant",
+            tools_call_name=["astrbot_call_tool"],
+            tools_call_args=[{"name": "lookup_ticket", "arguments": {}}],
             tools_call_ids=["lookup"],
         ),
         LLMResponse(role="assistant", completion_text="I could not access the ticket."),
@@ -3867,11 +3873,25 @@ async def test_dynamic_main_agent_respects_persona_plugin_filter_and_permissions
     async for _ in result.agent_runner.step_until_done(5):
         pass
 
-    initial, loaded, final = mock_provider.text_chat.await_args_list
-    assert initial.kwargs["func_tool"].names() == ["astrbot_search_tools"]
-    assert loaded.kwargs["func_tool"].names() == [
-        "astrbot_search_tools",
-        "lookup_ticket",
+    initial, after_search, after_describe, final = (
+        mock_provider.text_chat.await_args_list
+    )
+    assert all(
+        call.kwargs["func_tool"].names()
+        == [
+            "astrbot_search_tools",
+            "astrbot_describe_tool",
+            "astrbot_call_tool",
+        ]
+        for call in (initial, after_search, after_describe, final)
+    )
+    matches = next(
+        msg
+        for msg in after_search.kwargs["contexts"]
+        if msg.get("tool_call_id") == "search"
+    )
+    assert [match["name"] for match in json.loads(matches["content"])] == [
+        "lookup_ticket"
     ]
     denied = next(
         msg for msg in final.kwargs["contexts"] if msg.get("tool_call_id") == "lookup"

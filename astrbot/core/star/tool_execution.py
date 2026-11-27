@@ -23,9 +23,8 @@ async def call_local_llm_tool(
         | T.AsyncGenerator[MessageEventResult | CommandResult | str | None, None],
     ],
     method_name: str,
-    tool: FunctionTool | None = None,
-    /,
     *args,
+    tool: FunctionTool | None = None,
     **kwargs,
 ) -> T.AsyncGenerator[T.Any, None]:
     """执行本地 LLM 工具的处理函数并处理其返回结果"""

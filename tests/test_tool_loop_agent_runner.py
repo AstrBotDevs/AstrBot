@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,7 +15,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ImageURLPart,
+    Message,
+    TextPart,
+)
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -3108,21 +3114,28 @@ async def test_dynamic_tools_search_and_execute_across_sources(streaming):
     class RecordingProvider(SequentialToolProvider):
         def __init__(self):
             super().__init__(
-                [
-                    "astrbot_search_tools",
-                    "github_list_pull_requests",
-                    "astrbot_search_tools",
-                    "calendar_find_event",
-                    "astrbot_search_tools",
-                    "send_message_to_user",
-                ],
+                ["astrbot_search_tools", "astrbot_describe_tool", "astrbot_call_tool"]
+                * 3,
                 [
                     {"query": "list GitHub pull requests"},
-                    {"repo": "AstrBotDevs/AstrBot"},
+                    {"name": "github_list_pull_requests"},
+                    {
+                        "name": "github_list_pull_requests",
+                        "arguments": {"repo": "AstrBotDevs/AstrBot"},
+                    },
                     {"query": "calendar find event"},
-                    {"title": "Planning"},
+                    {"name": "calendar_find_event"},
+                    {"name": "calendar_find_event", "arguments": {"title": "Planning"}},
                     {"query": "send message to user"},
-                    {"messages": [{"type": "plain", "text": "Planning starts at 10"}]},
+                    {"name": "send_message_to_user"},
+                    {
+                        "name": "send_message_to_user",
+                        "arguments": {
+                            "messages": [
+                                {"type": "plain", "text": "Planning starts at 10"}
+                            ]
+                        },
+                    },
                 ],
             )
             self.schemas = []
@@ -3195,28 +3208,49 @@ async def test_dynamic_tools_search_and_execute_across_sources(streaming):
         tool_schema_mode="dynamic",
     )
 
-    async for _ in runner.step_until_done(9):
-        pass
-
-    offered = [
-        {item["function"]["name"]: item["function"] for item in definitions}
-        for definitions in provider.schemas
+    called = [
+        event.name
+        async for event in runner.step_until_done(12)
+        if event.type == "tool.started"
     ]
-    assert set(offered[0]) == {"astrbot_search_tools"}
-    assert set(offered[1]) == {"astrbot_search_tools", "github_list_pull_requests"}
-    assert offered[1]["github_list_pull_requests"]["parameters"]["required"] == ["repo"]
-    assert set(offered[3]) == {
-        "astrbot_search_tools",
+    assert called == [
         "github_list_pull_requests",
         "calendar_find_event",
+        "send_message_to_user",
+    ]
+    wire_definitions = [json.dumps(schema) for schema in provider.schemas]
+    assert len(set(wire_definitions)) == 1
+    bridge = {
+        entry["function"]["name"]: entry["function"] for entry in provider.schemas[0]
     }
+    assert set(bridge) == {
+        "astrbot_search_tools",
+        "astrbot_describe_tool",
+        "astrbot_call_tool",
+    }
+    assert bridge["astrbot_call_tool"]["strict"] is False
+    assert all(
+        earlier == later[: len(earlier)]
+        for earlier, later in zip(provider.contexts, provider.contexts[1:])
+    )
+    schema_result = next(
+        msg
+        for msg in runner.run_context.messages
+        if msg.role == "tool" and msg.tool_call_id == "call_2"
+    )
+    assert json.loads(schema_result.content)["parameters"]["required"] == ["repo"]
+    assert any(
+        call.function.name == "astrbot_call_tool" and call.id == "call_3"
+        for msg in runner.run_context.messages
+        if isinstance(msg, AssistantMessageSegment)
+        for call in msg.tool_calls
+    )
     assert request.func_tool is catalog
     assert "astrbot_search_tools" not in catalog.names()
     mcp_call.assert_awaited_once()
     assert mcp_call.await_args.kwargs["tool_name"] == "github.list_pull_requests"
     assert mcp_call.await_args.kwargs["arguments"] == {"repo": "AstrBotDevs/AstrBot"}
     plugin_call.assert_awaited_once_with(event, title="Planning")
-    assert "send_message_to_user" in offered[5]
     send_message.assert_awaited_once()
     assert send_message.await_args.args[1].get_plain_text() == "Planning starts at 10"
     assert any(
@@ -3232,7 +3266,7 @@ async def test_dynamic_tools_search_and_execute_across_sources(streaming):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["disable", "unregister", "replace"])
-async def test_dynamic_tools_stop_offering_unavailable_registered_tools(change):
+async def test_dynamic_tools_reject_unavailable_registered_tools(change):
     from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
     manager = FunctionToolManager()
@@ -3250,7 +3284,6 @@ async def test_dynamic_tools_stop_offering_unavailable_registered_tools(change):
         async def text_chat(self, **kwargs):
             match self.call_count:
                 case 1:
-                    assert kwargs["func_tool"].get_tool(tool.name) is not None
                     if change == "disable":
                         tool.active = False
                     if change in ("unregister", "replace"):
@@ -3264,13 +3297,16 @@ async def test_dynamic_tools_stop_offering_unavailable_registered_tools(change):
                                 handler=replacement,
                             )
                         )
-                case 2 | 3:
-                    assert kwargs["func_tool"].get_tool(tool.name) is None
+            assert kwargs["func_tool"].get_tool(tool.name) is None
             return await super().text_chat(**kwargs)
 
     provider = RevokingProvider(
-        ["astrbot_search_tools", tool.name, "astrbot_search_tools"],
-        [{"query": "ticket"}, {}, {"query": "ticket"}],
+        ["astrbot_describe_tool", "astrbot_call_tool", "astrbot_search_tools"],
+        [
+            {"name": tool.name},
+            {"name": tool.name, "arguments": {}},
+            {"query": "ticket"},
+        ],
     )
     request = ProviderRequest(
         prompt="Look up a ticket", func_tool=manager.get_full_tool_set()
@@ -3330,8 +3366,10 @@ async def test_dynamic_calls_require_offered_schema_and_execution_permission(
         async def text_chat(self, **kwargs):
             response = await super().text_chat(**kwargs)
             if self.call_count == 1:
-                response.tools_call_name.append("lookup_ticket")
-                response.tools_call_args.append({"id": 42})
+                response.tools_call_name.append("astrbot_call_tool")
+                response.tools_call_args.append(
+                    {"name": "lookup_ticket", "arguments": {"id": 42}}
+                )
                 response.tools_call_ids.append("unoffered_call")
             return response
 
@@ -3341,8 +3379,19 @@ async def test_dynamic_calls_require_offered_schema_and_execution_permission(
                 del tool_args["id"]
 
     provider = ParallelProvider(
-        ["astrbot_search_tools", "lookup_ticket", "lookup_ticket", "lookup_ticket"],
-        [{"query": "ticket"}, {"id": "42"}, {"id": 99}, {"id": 42}],
+        [
+            "astrbot_describe_tool",
+            "astrbot_call_tool",
+            "astrbot_call_tool",
+            "astrbot_call_tool",
+        ],
+        [
+            {"name": "lookup_ticket"},
+            *(
+                {"name": "lookup_ticket", "arguments": {"id": value}}
+                for value in ("42", 99, 42)
+            ),
+        ],
     )
     runner = ToolLoopAgentRunner()
     hooks = ArgumentChangingHooks()
@@ -3350,9 +3399,14 @@ async def test_dynamic_calls_require_offered_schema_and_execution_permission(
     await runner.reset(
         provider=provider,
         request=ProviderRequest(
-            prompt="Look up a ticket", func_tool=manager.get_full_tool_set()
+            prompt="Look up a ticket", func_tool=ToolSet(manager.func_list)
         ),
-        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        run_context=ContextWrapper(
+            context=SimpleNamespace(
+                event=event,
+                context=SimpleNamespace(get_llm_tool_manager=lambda: manager),
+            )
+        ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=hooks,
         tool_schema_mode="dynamic",
@@ -3369,13 +3423,12 @@ async def test_dynamic_calls_require_offered_schema_and_execution_permission(
         for message in runner.run_context.messages
         if message.role == "tool"
     }
-    assert "not found" in results["unoffered_call"]
+    assert "previous response" in results["unoffered_call"]
     assert "input schema" in results["call_2"]
     assert "input schema" in results["call_3"]
     assert "Permission denied" in results["call_4"]
     assert rejected == ["unoffered_call", "call_2", "call_3"]
     assert [call.args[1].name for call in hooks.on_tool_start.await_args_list] == [
-        "astrbot_search_tools",
         "lookup_ticket",
         "lookup_ticket",
     ]
@@ -3398,16 +3451,18 @@ async def test_dynamic_tools_keep_loaded_schema_on_provider_fallback_and_reset()
 
     class PrimaryProvider(SequentialToolProvider):
         async def text_chat(self, **kwargs):
+            assert kwargs["func_tool"].names() == [
+                "astrbot_search_tools",
+                "astrbot_describe_tool",
+                "astrbot_call_tool",
+            ]
             if self.call_count:
-                assert kwargs["func_tool"].names() == [
-                    "astrbot_search_tools",
-                    "find_ticket",
-                ]
                 raise RuntimeError("provider unavailable")
-            assert kwargs["func_tool"].names() == ["astrbot_search_tools"]
             return await super().text_chat(**kwargs)
 
-    fallback = SequentialToolProvider(["find_ticket"], [{}])
+    fallback = SequentialToolProvider(
+        ["astrbot_call_tool"], [{"name": "find_ticket", "arguments": {}}]
+    )
     fallback.text_chat = AsyncMock(wraps=fallback.text_chat)
     runner = ToolLoopAgentRunner()
     run_kwargs = {
@@ -3417,7 +3472,7 @@ async def test_dynamic_tools_keep_loaded_schema_on_provider_fallback_and_reset()
         "tool_schema_mode": "dynamic",
     }
     await runner.reset(
-        provider=PrimaryProvider(["astrbot_search_tools"], [{"query": "ticket"}]),
+        provider=PrimaryProvider(["astrbot_describe_tool"], [{"name": "find_ticket"}]),
         fallback_providers=[fallback],
         request=ProviderRequest(prompt="Find a ticket", func_tool=catalog),
         **run_kwargs,
@@ -3427,12 +3482,14 @@ async def test_dynamic_tools_keep_loaded_schema_on_provider_fallback_and_reset()
 
     assert fallback.text_chat.await_args_list[0].kwargs["func_tool"].names() == [
         "astrbot_search_tools",
-        "find_ticket",
+        "astrbot_describe_tool",
+        "astrbot_call_tool",
     ]
     handler.assert_awaited_once()
 
     next_provider = SequentialToolProvider(
-        ["astrbot_search_tools"], [{"query": "warehouse"}]
+        ["astrbot_call_tool", "astrbot_search_tools"],
+        [{"name": "find_ticket", "arguments": {}}, {"query": "warehouse"}],
     )
     next_provider.text_chat = AsyncMock(wraps=next_provider.text_chat)
     await runner.reset(
@@ -3444,12 +3501,15 @@ async def test_dynamic_tools_keep_loaded_schema_on_provider_fallback_and_reset()
         pass
 
     assert next_provider.text_chat.await_args.kwargs["func_tool"].names() == [
-        "astrbot_search_tools"
+        "astrbot_search_tools",
+        "astrbot_describe_tool",
+        "astrbot_call_tool",
     ]
     assert any(
         message.role == "tool" and "No matching tools" in message.content
         for message in runner.run_context.messages
     )
+    handler.assert_awaited_once()
 
     next_provider.text_chat.reset_mock()
     await runner.reset(
@@ -3463,8 +3523,7 @@ async def test_dynamic_tools_keep_loaded_schema_on_provider_fallback_and_reset()
     assert next_provider.text_chat.await_args.kwargs["func_tool"] is None
 
 
-@pytest.mark.asyncio
-async def test_repeated_discovery_loads_remaining_matches():
+def test_repeated_discovery_returns_remaining_matches():
     from astrbot.core.agent.tool_discovery import ToolDiscovery
 
     catalog = ToolSet(
@@ -3473,12 +3532,12 @@ async def test_repeated_discovery_loads_remaining_matches():
     context = ContextWrapper(context=None)
     discovery = ToolDiscovery(catalog)
 
-    first = await discovery.call(context, query="calendar events")
-    second = await discovery.call(context, query="calendar events")
+    first = discovery.search(context, "calendar events")
+    second = discovery.search(context, "calendar events")
 
     assert "calendar_3" not in first
     assert "calendar_3" in second
-    assert len(discovery.loaded) == 4
+    assert len(discovery.seen) == 4
 
 
 @pytest.mark.asyncio
@@ -3512,5 +3571,7 @@ async def test_dynamic_catalog_is_built_after_agent_begin():
         for message in runner.run_context.messages
         if message.role == "tool"
     ]
-    assert results == ["Loaded tools for the next round: calendar_find."]
+    assert json.loads(results[0]) == [
+        {"name": "calendar_find", "description": "Find calendar entries"}
+    ]
     assert not runner.run_context.is_tool_available(removed)

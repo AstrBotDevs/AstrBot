@@ -1,7 +1,8 @@
+import json
 import re
 
 from .run_context import ContextWrapper
-from .tool import FunctionTool, TContext, ToolSet
+from .tool import FunctionTool, ToolSet
 
 _SEARCH_TERMS = re.compile(r"[\u3400-\u9fff]+|[^\W_\u3400-\u9fff]+")
 _STOP_WORDS = {"a", "an", "for", "from", "i", "in", "of", "the", "to", "with"}
@@ -19,67 +20,101 @@ def _terms(text: str) -> set[str]:
     return terms
 
 
-class ToolDiscovery(FunctionTool[TContext]):
-    """Search the request's tools and make the matches available for later rounds."""
+class ToolDiscovery:
+    """Expose a fixed bridge to the authorized catalog for one Agent run."""
 
     def __init__(self, catalog: ToolSet) -> None:
-        name = "astrbot_search_tools"
-        names = set(catalog.names())
-        suffix = 1
-        while name in names:
-            name = f"astrbot_search_tools_{suffix}"
-            suffix += 1
-        super().__init__(
-            name=name,
-            description=(
-                "Find and load tools by describing the capability you need. "
-                "Use this when a task needs a tool you have not been given yet. "
-                "The next request will include full definitions for the best matches."
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 300,
-                        "description": "Capability to find, with action and domain keywords.",
+        self.catalog = {tool.name: tool for tool in catalog if tool.active}
+        self.seen: set[str] = set()
+        self.described: dict[str, FunctionTool] = {}
+        self.tools = ToolSet(
+            [
+                FunctionTool(
+                    "astrbot_search_tools",
+                    "Find tools for a capability. Describe a matching tool before calling it.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 300,
+                            }
+                        },
+                        "required": ["query"],
+                        "additionalProperties": False,
                     },
-                },
-                "required": ["query"],
-                "additionalProperties": False,
-            },
+                ),
+                FunctionTool(
+                    "astrbot_describe_tool",
+                    "Get a tool's complete input schema by name before calling it.",
+                    {
+                        "type": "object",
+                        "properties": {"name": {"type": "string"}},
+                        "required": ["name"],
+                        "additionalProperties": False,
+                    },
+                ),
+                FunctionTool(
+                    "astrbot_call_tool",
+                    "Invoke a previously described tool by name with arguments matching its schema.",
+                    {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "arguments": {"type": "object"},
+                        },
+                        "required": ["name", "arguments"],
+                        "additionalProperties": False,
+                    },
+                    # Responses must not infer an empty closed object for arbitrary arguments.
+                    strict=False,
+                ),
+            ]
         )
-        self.catalog = tuple(tool for tool in catalog if tool.active)
-        self.loaded: dict[str, FunctionTool] = {}
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> str:
-        query = _terms(kwargs["query"])
+    def search(self, context: ContextWrapper, query: str) -> str:
+        """Return a short list of new matching tools, without exposing schemas."""
+        terms = _terms(query)
         ranked = []
-        for tool in self.catalog:
+        for tool in self.catalog.values():
             # Tool names are stronger signals than words in longer descriptions.
-            score = 3 * len(query & _terms(tool.name)) + len(
-                query & _terms(tool.description)
+            score = 3 * len(terms & _terms(tool.name)) + len(
+                terms & _terms(tool.description)
             )
             if score:
                 ranked.append((-score, tool.name, tool))
 
         matches = []
-        already_loaded = False
+        already_seen = False
         for _, name, tool in sorted(ranked, key=lambda item: item[:2]):
             if not context.is_tool_available(tool):
                 continue
-            if name in self.loaded:
-                already_loaded = True
+            if name in self.seen:
+                already_seen = True
                 continue
-            self.loaded[name] = tool
-            matches.append(name)
+            self.seen.add(name)
+            matches.append({"name": name, "description": tool.description[:240]})
             if len(matches) == _RESULT_LIMIT:
                 break
-        if not matches:
-            if already_loaded:
-                return "No new matching tools. Use the tools already loaded or try other keywords."
-            return (
-                "No matching tools. Try a more specific capability or other keywords."
-            )
-        return f"Loaded tools for the next round: {', '.join(matches)}."
+        if matches:
+            return json.dumps(matches, ensure_ascii=False)
+        if already_seen:
+            return "No new matching tools. Describe a previous match or try other keywords."
+        return "No matching tools. Try a more specific capability or other keywords."
+
+    def describe(self, context: ContextWrapper, name: str) -> str:
+        """Return a currently available tool's schema and record its identity."""
+        tool = self.catalog.get(name)
+        if tool is None or not context.is_tool_available(tool):
+            raise ValueError("Tool is not available in the current catalog.")
+        schema = json.dumps(
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+            },
+            ensure_ascii=False,
+        )
+        self.described[name] = tool
+        return schema

@@ -10,8 +10,6 @@ from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
-from jsonschema.validators import validator_for
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -20,8 +18,6 @@ from mcp.types import (
     TextContent,
     TextResourceContents,
 )
-from referencing import Registry
-from referencing.exceptions import Unresolvable
 from tenacity import (
     AsyncRetrying,
     retry_if_exception_type,
@@ -40,6 +36,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_discovery import ToolDiscovery
 from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
+from astrbot.core.agent.tool_validation import validate_tool_arguments
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
 from astrbot.core.provider.entities import (
@@ -357,7 +354,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
         self.run_context.tools = request.func_tool
-        self.run_context.tool_discovery = None
+        self.run_context.dynamic_tools = tool_schema_mode == "dynamic"
         self._done_hook_called = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
@@ -375,6 +372,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._light_tool_set: ToolSet | None = None
         self._tool_schema_param_set: ToolSet | None = None
         self._offered_tools: ToolSet | None = None
+        self._tool_discovery: ToolDiscovery | None = None
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
@@ -779,13 +777,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
         contexts = self.run_context.messages
-        discovery = self.run_context.tool_discovery
-        if discovery is not None and self._offered_tools:
+        if self._tool_discovery is not None and self._offered_tools:
             hint = (
-                f"When the task needs a capability you do not have, call {discovery.name} "
-                "with a focused search query. Use the full definitions in the next round "
-                "to call discovered tools. Search again if you need more matches or another "
-                "capability. Use tools only when they help answer the request."
+                "Use astrbot_search_tools to find tools for a capability. Call "
+                "astrbot_describe_tool for a tool's schema, then use astrbot_call_tool "
+                "with arguments matching that schema. If you already know the tool name, "
+                "you can describe it without searching. Use tools only when needed."
             )
             if contexts and contexts[0].role == "system":
                 content = contexts[0].content
@@ -954,11 +951,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return sanitized_contexts
 
     def _func_tool_for_provider(self) -> ToolSet | None:
-        tool_set = (
-            self.run_context.tools
-            if self.tool_schema_mode == "dynamic"
-            else self.req.func_tool
-        )
+        tool_set = self.req.func_tool
+        if self.tool_schema_mode == "dynamic":
+            discovery = self._tool_discovery
+            tool_set = (
+                discovery.tools
+                if discovery
+                and discovery.catalog
+                and self.run_context.run_end_reason != "max_steps"
+                else None
+            )
         if not tool_set:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
@@ -972,20 +974,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self._light_tool_set is None:
                 self._light_tool_set = tool_set.get_light_tool_set()
             return self._light_tool_set or None
-        if self.tool_schema_mode == "dynamic":
-            discovery = self.run_context.tool_discovery
-            if not isinstance(discovery, ToolDiscovery) or not discovery.catalog:
-                return None
-            return ToolSet(
-                [
-                    discovery,
-                    *(
-                        tool
-                        for tool in discovery.loaded.values()
-                        if self.run_context.is_tool_available(tool)
-                    ),
-                ]
-            )
         return tool_set
 
     def _simple_print_message_role(self, tag: str, messages: list):
@@ -1268,7 +1256,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 and self.tool_schema_mode == "dynamic"
                 and self.run_context.tools
             ):
-                self.run_context.tool_discovery = ToolDiscovery(self.run_context.tools)
+                if isinstance(self.tool_executor, BaseFunctionToolExecutor):
+                    self.run_context.tools = self.tool_executor.prepare_tools(
+                        self.run_context.tools, self.run_context
+                    )
+                self._tool_discovery = ToolDiscovery(self.run_context.tools)
             if self._step_budget_max is not None:
                 self._step_budget_used += 1
             while True:
@@ -1741,25 +1733,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        def _validate_tool_arguments(tool: FunctionTool, arguments: T.Any) -> None:
-            if not isinstance(arguments, dict):
-                raise ValueError("Tool arguments must be an object.")
-            schema = tool.parameters
-            # Resolve local references without fetching external schemas.
-            validator = validator_for(schema, default=Draft202012Validator)(
-                schema, registry=Registry()
-            )
-            try:
-                error = next(validator.iter_errors(arguments), None)
-            except Unresolvable as exc:
-                raise ValueError(
-                    "Tool input schema has an unresolved reference."
-                ) from exc
-            if error is not None:
-                raise ValueError(
-                    "Tool arguments do not match the provided input schema "
-                    f"({error.json_path}: {error.validator})."
-                )
+        dynamic = self.tool_schema_mode == "dynamic"
+        discovery = self._tool_discovery if dynamic else None
+        # A describe in this response must not unlock a call in the same batch.
+        described = discovery.described.copy() if discovery is not None else {}
 
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
@@ -1774,7 +1751,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 func_tool_args,
             )
             try:
-                dynamic = self.tool_schema_mode == "dynamic"
                 if not dynamic and not req.func_tool:
                     if self._events.active:
                         await self._events.emit(
@@ -1827,12 +1803,36 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
-                if dynamic:
+                if discovery is not None:
+                    await validate_tool_arguments(func_tool.parameters, func_tool_args)
+                    if func_tool_name == "astrbot_search_tools":
+                        _append_tool_call_result(
+                            func_tool_id,
+                            discovery.search(self.run_context, func_tool_args["query"]),
+                        )
+                        continue
+                    if func_tool_name == "astrbot_describe_tool":
+                        _append_tool_call_result(
+                            func_tool_id,
+                            discovery.describe(
+                                self.run_context, func_tool_args["name"]
+                            ),
+                        )
+                        continue
+                    # Preserve the outer wire call in history, but use the real tool for
+                    # validation, hooks, execution, and events.
+                    func_tool_name = func_tool_args["name"]
+                    func_tool_args = func_tool_args["arguments"]
+                    func_tool = described.get(func_tool_name)
+                    if func_tool is None:
+                        raise ValueError(
+                            "Describe the tool in a previous response before calling it."
+                        )
                     if not self.run_context.is_tool_available(func_tool):
                         raise ValueError(
                             f"Tool {func_tool_name} is no longer available."
                         )
-                    _validate_tool_arguments(func_tool, func_tool_args)
+                    await validate_tool_arguments(func_tool.parameters, func_tool_args)
 
                 valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
@@ -1876,7 +1876,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         raise ValueError(
                             f"Tool {func_tool_name} is no longer available."
                         )
-                    _validate_tool_arguments(func_tool, valid_params)
+                    await validate_tool_arguments(func_tool.parameters, valid_params)
 
                 executor = self._recorded_tool_results(
                     func_tool, str(func_tool_id), valid_params

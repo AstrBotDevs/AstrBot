@@ -24,8 +24,8 @@ class ContextWrapper(Generic[TContext]):
     """Error description when execution failed, without retaining a traceback."""
     tools: ToolSet | None = None
     """The executable tools available to this run."""
-    tool_discovery: FunctionTool | None = None
-    """The internal search tool, which is not part of the authorized catalog."""
+    dynamic_tools: bool = False
+    """Restrict execution to the current catalog in dynamic tool mode."""
 
     def is_tool_available(self, tool: FunctionTool) -> bool:
         """Check live availability and, in discovery mode, current run membership.
@@ -38,10 +38,8 @@ class ContextWrapper(Generic[TContext]):
         """
         if not tool.is_available():
             return False
-        return (
-            self.tool_discovery is None
-            or tool is self.tool_discovery
-            or (self.tools is not None and self.tools.get_tool(tool.name) is tool)
+        return not self.dynamic_tools or (
+            self.tools is not None and self.tools.get_tool(tool.name) is tool
         )
 
 

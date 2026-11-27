@@ -231,6 +231,7 @@ class _PermissionGuardedTool(FunctionTool):
             parameters=getattr(tool, "parameters", {}),
             is_background_task=getattr(tool, "is_background_task", False),
             execution_timeout=getattr(tool, "execution_timeout", None),
+            strict=getattr(tool, "strict", None),
         )
         self._wrapped = tool
         self._mgr = manager
@@ -425,6 +426,14 @@ class FunctionToolManager:
             if f.name == name:
                 return _PermissionGuardedTool(f, self) if guarded else f
         return None
+
+    def guard_registered_tool(self, tool: FunctionTool) -> FunctionTool:
+        """Wrap a registry object without rebinding unrelated tools by name."""
+        if not isinstance(tool, _PermissionGuardedTool) and any(
+            registered is tool for registered in self.func_list
+        ):
+            return _PermissionGuardedTool(tool, self)
+        return tool
 
     def _default_permission(self, tool_name: str) -> str:
         """Compute the fallback permission for a plugin or MCP tool.
