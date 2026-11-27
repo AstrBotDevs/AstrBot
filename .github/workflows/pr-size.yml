@@ -27,13 +27,15 @@ jobs:
           set -euo pipefail
           pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
           head_sha=$(echo "$pr" | jq -r '.head.sha')
+          changed_files=$(echo "$pr" | jq -r '.changed_files')
 
-          if [ "$(echo "$pr" | jq -r '.changed_files')" -gt 3000 ]; then
+          stats=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
+            --jq '[(length), ([.[] | select(.filename | test("^(uv\\.lock|dashboard/pnpm-lock\\.yaml)$|^dashboard/src/api/generated/") | not) | .additions + .deletions] | add // 0)] | @tsv')
+          files_count=$(echo "$stats" | awk '{ s += $1 } END { print s + 0 }')
+          total=$(echo "$stats" | awk '{ s += $2 } END { print s + 0 }')
+
+          if [ "$files_count" -lt "$changed_files" ]; then
             total=$(echo "$pr" | jq -r '.additions + .deletions')
-          else
-            total=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
-              --jq '[.[] | select(.filename | test("^(uv\\.lock|dashboard/pnpm-lock\\.yaml)$|^dashboard/src/api/generated/") | not) | .additions + .deletions] | add // 0' \
-              | awk '{ s += $1 } END { printf "%d\n", s + 0 }')
           fi
 
           if   [ "$total" -lt 10 ];   then label=size:XS
@@ -51,12 +53,9 @@ jobs:
             exit 0
           fi
 
-          current=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
-          echo "$current" | grep -Fxq "$label" || gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/labels" -f "labels[]=$label" > /dev/null
-
-          for _ in 1 2; do
-            current=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
-            stale=$(echo "$current" | grep '^size:' | grep -Fxv "$label" || true)
+          for _ in 1 2 3; do
+            labels=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+            stale=$(echo "$labels" | grep '^size:' | grep -Fxv "$label" || true)
             if [ -z "$stale" ]; then
               break
             fi
@@ -64,3 +63,12 @@ jobs:
               gh api -X DELETE "repos/$GH_REPO/issues/$PR_NUMBER/labels/$old" || true
             done
           done
+
+          labels=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+          stale=$(echo "$labels" | grep '^size:' | grep -Fxv "$label" || true)
+          if [ -n "$stale" ]; then
+            echo "failed to remove stale size labels: $stale"
+            exit 1
+          fi
+
+          echo "$labels" | grep -Fxq "$label" || gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/labels" -f "labels[]=$label" > /dev/null
