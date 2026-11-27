@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -34,6 +34,44 @@ if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+
+# Rebuildable cache directories that can always be skipped during backup
+EXCLUDED_CACHE_DIR_NAMES = frozenset(
+    {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+)
+# Temporary/media cache directory names under plugins and plugin_data
+EXCLUDED_PLUGIN_CACHE_DIR_NAMES = frozenset({"cache", ".cache"})
+# Maximum number of skipped-file samples included in the summary warning
+SKIPPED_FILE_SAMPLE_LIMIT = 5
+
+
+def _should_skip_backup_dir(dir_name: str, parent_dir: Path, subdir_name: str) -> bool:
+    """Determine whether a subdirectory should be skipped during backup traversal.
+
+    Always skips common rebuildable cache directories (``__pycache__``,
+    ``.pytest_cache``, ``.ruff_cache``, ``.mypy_cache``), skips ``cache`` and
+    ``.cache`` under ``plugin_data``, and skips ``.cache`` under ``plugins`` as well
+    as ``cache`` directories under ``plugins`` that do not contain ``__init__.py``
+    (to avoid skipping a plugin's Python ``cache`` package).
+
+    Args:
+        dir_name: Top-level backup directory key (e.g., ``"plugins"``, ``"plugin_data"``).
+        parent_dir: Parent directory currently being traversed.
+        subdir_name: Immediate subdirectory name to evaluate.
+
+    Returns:
+        True if the subdirectory should be excluded from the backup archive.
+    """
+    lowered = subdir_name.lower()
+    if lowered in EXCLUDED_CACHE_DIR_NAMES:
+        return True
+    if dir_name == "plugin_data" and lowered in EXCLUDED_PLUGIN_CACHE_DIR_NAMES:
+        return True
+    if dir_name == "plugins" and lowered in EXCLUDED_PLUGIN_CACHE_DIR_NAMES:
+        if lowered == ".cache":
+            return True
+        return not (parent_dir / subdir_name / "__init__.py").exists()
+    return False
 
 
 class AstrBotExporter:
@@ -213,6 +251,7 @@ class AstrBotExporter:
         export_data: dict[str, list[dict]] = {}
 
         async with self.main_db.get_db() as session:
+            await session.execute(text("BEGIN"))
             for table_name, model_class in MAIN_DB_MODELS.items():
                 try:
                     result = await session.execute(select(model_class))
@@ -319,6 +358,8 @@ class AstrBotExporter:
         """
         stats: dict[str, dict[str, int]] = {}
         backup_directories = get_backup_directories()
+        skipped_files = 0
+        skipped_samples: list[str] = []
 
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
@@ -331,24 +372,36 @@ class AstrBotExporter:
 
             try:
                 for root, dirs, files in os.walk(full_path):
-                    # 跳过 __pycache__ 目录
-                    dirs[:] = [d for d in dirs if d != "__pycache__"]
+                    root_path = Path(root)
+                    # Skip bytecode and rebuildable plugin cache directories
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if not _should_skip_backup_dir(dir_name, root_path, d)
+                    ]
 
                     for file in files:
-                        # 跳过 .pyc 文件
-                        if file.endswith(".pyc"):
+                        # Skip .pyc / .pyo bytecode files
+                        if file.endswith((".pyc", ".pyo")):
                             continue
 
-                        file_path = Path(root) / file
+                        file_path = root_path / file
                         try:
-                            # 计算相对路径
+                            # Compute relative path and stat before writing so stats match archived files on error
                             rel_path = file_path.relative_to(full_path)
                             archive_path = f"directories/{dir_name}/{rel_path}"
+                            file_size = file_path.stat().st_size
                             zf.write(str(file_path), archive_path)
-                            file_count += 1
-                            total_size += file_path.stat().st_size
                         except Exception as e:
-                            logger.warning(f"导出文件 {file_path} 失败: {e}")
+                            skipped_files += 1
+                            if len(skipped_samples) < SKIPPED_FILE_SAMPLE_LIMIT:
+                                skipped_samples.append(f"{file_path} ({e})")
+                            logger.debug(
+                                f"Skipped unreadable or inaccessible file during backup export {file_path}: {e}"
+                            )
+                            continue
+                        file_count += 1
+                        total_size += file_size
 
                 stats[dir_name] = {"files": file_count, "size": total_size}
                 logger.debug(
@@ -357,6 +410,12 @@ class AstrBotExporter:
             except Exception as e:
                 logger.warning(f"导出目录 {dir_path} 失败: {e}")
                 stats[dir_name] = {"files": 0, "size": 0}
+
+        if skipped_files:
+            samples_str = ", ".join(skipped_samples)
+            logger.warning(
+                f"Backup export skipped {skipped_files} unreadable or locked file(s); samples: {samples_str}"
+            )
 
         return stats
 

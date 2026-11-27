@@ -4,6 +4,7 @@ import AuthRoutes from './AuthRoutes';
 import ChatBoxRoutes from './ChatBoxRoutes';
 import { useAuthStore } from '@/stores/auth';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
+import { getPluginInstallReturnUrl, hasPluginInstallLink } from '@/utils/pluginInstallLink.mjs';
 
 export const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -39,12 +40,15 @@ router.beforeEach(async (to, from, next) => {
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === '/auth/login' && auth.has_token()) {
-    return next('/welcome');
+    return next(getPluginInstallReturnUrl(router, to.query.redirect) || '/welcome');
   }
 
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
+      if (hasPluginInstallLink(to)) {
+        return next({ path: '/auth/login', query: { redirect: to.fullPath } });
+      }
       return next('/auth/login');
     }
     return next();

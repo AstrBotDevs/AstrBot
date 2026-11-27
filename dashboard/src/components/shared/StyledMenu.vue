@@ -33,17 +33,18 @@ withDefaults(defineProps<{
 
 <style>
 .styled-menu-card {
+  --astrbot-menu-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
   min-width: 100px;
   width: fit-content;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
   background: rgba(var(--v-theme-surface), 0.98) !important;
   backdrop-filter: blur(10px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 .v-overlay.v-menu .v-overlay__content > .styled-menu-card:not(.styled-menu-card-borderless) {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
+  box-shadow: var(--astrbot-menu-shadow) !important;
 }
 
 .styled-menu-card-borderless {
@@ -54,23 +55,46 @@ withDefaults(defineProps<{
   background: transparent !important;
 }
 
-.styled-menu-item {
+.styled-menu-list .styled-menu-item {
+  /* Avoid stacking Vuetify state overlays on the explicit backgrounds. */
+  --v-hover-opacity: 0;
+  --v-activated-opacity: 0;
+  color: rgb(var(--v-theme-on-surface));
   margin: 2px 0;
   transition: all 0.2s ease;
   border-radius: 6px;
 }
 
-.styled-menu-item:hover {
-  background: rgba(var(--v-theme-primary), 0.08) !important;
+.styled-menu-item .v-list-item-title {
+  font-size: 14px;
+  line-height: 20px;
 }
 
-.styled-menu-item-active {
-  background: rgba(var(--v-theme-primary), 0.15) !important;
+.styled-menu-item .v-list-item__prepend > .v-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  opacity: 1;
+}
+
+.styled-menu-item .v-list-item__prepend > .v-icon ~ .v-list-item__spacer {
+  width: 14px;
+}
+
+.styled-menu-item:hover,
+.styled-menu-item[aria-haspopup="menu"][aria-expanded="true"] {
+  background: rgba(var(--v-theme-on-surface), 0.05) !important;
+}
+
+.styled-menu-item-active,
+.styled-menu-item.v-list-item--active {
+  background: rgba(var(--v-theme-on-surface), 0.06) !important;
   font-weight: 500;
 }
 
-.styled-menu-item-active:hover {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
+.styled-menu-item-active:hover,
+.styled-menu-item.v-list-item--active:hover {
+  background: rgba(var(--v-theme-on-surface), 0.09) !important;
 }
 
 /* 深色模式下的下拉框样式 - 需要全局样式才能检测主题 */
@@ -81,18 +105,5 @@ withDefaults(defineProps<{
 
 .v-theme--PurpleThemeDark .styled-menu-card-borderless {
   border: 0 !important;
-}
-
-/* 深色模式下的列表项悬停效果 */
-.v-theme--PurpleThemeDark .styled-menu-item:hover {
-  background: rgba(var(--v-theme-primary), 0.12) !important;
-}
-
-.v-theme--PurpleThemeDark .styled-menu-item-active {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-}
-
-.v-theme--PurpleThemeDark .styled-menu-item-active:hover {
-  background: rgba(var(--v-theme-primary), 0.25) !important;
 }
 </style>

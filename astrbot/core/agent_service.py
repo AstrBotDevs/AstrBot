@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from collections.abc import AsyncIterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from pydantic import JsonValue
 
 from astrbot import logger
 from astrbot.core.agent.input import (
@@ -81,7 +84,7 @@ class AgentRun:
         Args:
             service: Core input and output integration services.
             event: Authorized source and target of this programmatic turn.
-            send_to_user: Whether Core presents runtime output to the platform.
+            send_to_user: Whether Core and runtime-managed tools deliver output.
             runtime_name: Registered runtime selected for this submission.
             options: New-session configuration, or None when restoring a session.
             content: Explicit portable input, retained for execution-time admission.
@@ -107,9 +110,12 @@ class AgentRun:
         """Return the runtime turn identity."""
         return self._turn.id
 
-    @property
-    def session(self) -> AgentSessionStatus:
-        """Sample the owning session's execution state for the caller."""
+    async def get_session(self) -> AgentSessionStatus:
+        """Sample the owning session's execution state for the caller.
+
+        Returns:
+            The session identity, execution state, queue size, and active turn.
+        """
         session = self._turn.session
         active_turn = session.active_turn
         return AgentSessionStatus(
@@ -182,7 +188,7 @@ class AgentRun:
             input_message=input_message,
             send_to_user=self.send_to_user if send_to_user is None else send_to_user,
             source_event=self._event,
-            session_id=session.id,
+            conversation_id=session.id,
         )
 
     async def steer(
@@ -218,6 +224,7 @@ class AgentRun:
             )
             if input is None:
                 return None
+            input.send_to_user = self.send_to_user
             return self._turn.steer(input)
 
 
@@ -342,6 +349,8 @@ class AgentService:
         input_message: Sequence[InputComponent],
         send_to_user: bool = True,
         source_event: AstrMessageEvent | None = None,
+        conversation_id: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
         session_id: str | None = None,
     ) -> AgentRun:
         """Submit a configured runtime turn without waiting for model execution.
@@ -349,21 +358,40 @@ class AgentService:
         Args:
             umo: Target conversation source, including existing isolation.
             input_message: Portable plain, image and file content.
-            send_to_user: Automatically present runtime output to the target
-                conversation. Explicit tool and plugin sends are unaffected.
-                History is saved regardless of this setting.
+            send_to_user: Automatically present runtime output and allow native
+                send_message_to_user delivery. False exposes prepared messages
+                through output.ready events instead. Explicit plugin sends are
+                unaffected. History is saved regardless of this setting.
             source_event: Caller identity; defaults to the active same-UMO event.
-            session_id: Bind an exact conversation, or select the current one.
+            conversation_id: ID of the existing conversation to run in. Omit it
+                to use the current conversation for `umo`.
+            metadata: JSON-compatible plugin data, deep-copied into the wakeup
+                event's "agent_metadata" extra before admission hooks run.
+                Defaults to an empty dict; source-event metadata is not inherited.
+                This data does not grant permissions or automatically enter the
+                model prompt or conversation history.
+            session_id: Deprecated alias for `conversation_id`. Use
+                `conversation_id` in new code.
 
         Returns:
             An SDK view of the runtime turn with independent output observation.
 
         Raises:
             RuntimeError: If the service or selected runtime is unavailable.
-            ValueError: If input or the explicit session target is invalid.
+            ValueError: If input or the conversation target is invalid, or if
+                `conversation_id` and the deprecated `session_id` differ.
         """
         if self._closed:
             raise RuntimeError("Agent service is unavailable")
+        if session_id is not None:
+            if conversation_id is not None and conversation_id != session_id:
+                raise ValueError("conversation_id and deprecated session_id must match")
+            warnings.warn(
+                "session_id is deprecated. Use conversation_id instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            conversation_id = session_id
         if source_event is None:
             current = current_message_event.get()
             if (
@@ -380,8 +408,8 @@ class AgentService:
         )
         if (
             target is not None
-            and session_id is not None
-            and target.session_id == session_id
+            and conversation_id is not None
+            and target.session_id == conversation_id
         ):
             runtime_name = target.runtime
         else:
@@ -390,14 +418,17 @@ class AgentService:
             raise RuntimeError(f"Agent runtime unavailable: {runtime_name}")
         options = (
             {"config": deepcopy(config.get("config", {}))}
-            if session_id is None
+            if conversation_id is None
             else None
         )
         content = tuple(input_message)
         event = self._make_event(umo, content, source_event)
+        event.set_extra(
+            "agent_metadata", deepcopy(metadata) if metadata is not None else {}
+        )
         run = AgentRun(self, event, send_to_user, runtime_name, options, content)
         self._runs.add(run)
-        run._task = asyncio.create_task(self._execute(run, session_id))
+        run._task = asyncio.create_task(self._execute(run, conversation_id))
 
         def completed(task: asyncio.Task[TurnResult]) -> None:
             """Release ownership and settle submissions cancelled before startup.
@@ -445,6 +476,7 @@ class AgentService:
                     permissions=AgentPermissions.from_event(event),
                     content=run._content,
                     streaming=False,
+                    send_to_user=run.send_to_user,
                 )
 
                 async def admit() -> bool:

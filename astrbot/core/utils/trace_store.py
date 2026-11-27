@@ -574,12 +574,23 @@ class TraceStore:
                 values.extend((int(stamp), int(stamp), trace_id))
             where = " WHERE " + " AND ".join(conditions) if conditions else ""
             rows = connection.execute(
-                "SELECT data, start_ns, trace_id FROM traces"
+                "SELECT data, state, has_errors, has_models, has_plugins, "
+                "start_ns, trace_id FROM traces"
                 + where
                 + " ORDER BY start_ns DESC, trace_id DESC LIMIT ? OFFSET ?",
                 [*values, limit + 1, (page - 1) * limit],
             ).fetchall()
-            summaries = [json.loads(row[0]) for row in rows[:limit]]
+            summaries = []
+            for data, state, has_errors, has_models, has_plugins, *_ in rows[:limit]:
+                summary = json.loads(data)
+                # The indexed columns are authoritative for filtering and display.
+                summary.update(
+                    state=state,
+                    has_errors=bool(has_errors),
+                    has_models=bool(has_models),
+                    has_plugins=bool(has_plugins),
+                )
+                summaries.append(summary)
             # Older summaries predate command flags; derive only those flags
             # from this page's indexed spans without loading full trace detail.
             legacy = {
@@ -606,7 +617,7 @@ class TraceStore:
             "traces": summaries,
             "total": total,
             "page": page,
-            "cursor": f"{rows[limit - 1][1]}:{rows[limit - 1][2]}"
+            "cursor": f"{rows[limit - 1][5]}:{rows[limit - 1][6]}"
             if len(rows) > limit
             else None,
             "storage": {"dropped": self.dropped, "error": self.last_error},
@@ -630,7 +641,9 @@ class TraceStore:
         try:
             connection.execute("BEGIN")
             row = connection.execute(
-                "SELECT data FROM traces WHERE trace_id=?", (trace_id,)
+                "SELECT data, state, has_errors, has_models, has_plugins "
+                "FROM traces WHERE trace_id=?",
+                (trace_id,),
             ).fetchone()
             if not row:
                 return None
@@ -652,7 +665,14 @@ class TraceStore:
                 owner = by_id.get(event["span_id"])
                 if owner is not None:
                     owner.setdefault("events", []).append(event)
-            return {"trace": json.loads(row[0]), "spans": spans}
+            summary = json.loads(row[0])
+            summary.update(
+                state=row[1],
+                has_errors=bool(row[2]),
+                has_models=bool(row[3]),
+                has_plugins=bool(row[4]),
+            )
+            return {"trace": summary, "spans": spans}
         finally:
             connection.close()
 

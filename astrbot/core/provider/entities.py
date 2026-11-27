@@ -19,7 +19,6 @@ from astrbot.core.agent.message import (
     ContentPart,
     ToolCall,
     ToolCallMessageSegment,
-    is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -59,9 +58,11 @@ class DecisionBooleanQuestion:
 
     Attributes:
         instructions: The statement or question evaluated by the model.
+        criteria: Optional descriptions for the "true" and/or "false" outcomes.
     """
 
     instructions: str
+    criteria: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +218,7 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    _plugin_id: str | None = field(default=None, init=False, repr=False)
 
     def __repr__(self) -> str:
         return (
@@ -251,8 +253,6 @@ class ProviderRequest:
         result_parts = []
 
         for ctx in self.contexts:
-            if is_checkpoint_message(ctx):
-                continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
 
@@ -485,7 +485,7 @@ class LLMResponse:
     usage: TokenUsage | None = None
     """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
     context_token_usage: int | None = None
-    """Provider estimate of retained context, if different from total usage."""
+    """Provider estimate of tokens retained in the conversation after this response."""
 
     def __init__(
         self,
@@ -506,7 +506,6 @@ class LLMResponse:
         is_chunk: bool = False,
         id: str | None = None,
         usage: TokenUsage | None = None,
-        context_token_usage: int | None = None,
     ) -> None:
         """初始化 LLMResponse
 
@@ -539,7 +538,6 @@ class LLMResponse:
         self.reasoning_signature = reasoning_signature
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
-        self.context_token_usage = context_token_usage
 
         if id is not None:
             self.id = id

@@ -210,6 +210,8 @@ async def test_get_stat_aggregates_platform_stats(temp_db):
         "cpu_percent",
         "thread_count",
         "start_time",
+        "daily_usage",
+        "system",
     }
 
 
@@ -234,12 +236,23 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
     await temp_db.insert_provider_stat(
         umo=aliased_umo,
         provider_id="provider-1",
-        stats={"token_usage": {"input_other": 3, "input_cached": 4, "output": 5}},
+        status="aborted",
+        stats={
+            "token_usage": {"input_other": 3, "input_cached": 4, "output": 5},
+            "start_time": 100,
+            "end_time": 102,
+            "time_to_first_token": 0.25,
+        },
     )
     await temp_db.insert_provider_stat(
         umo=raw_umo,
         provider_id="provider-1",
-        stats={"token_usage": {"input_other": 1, "input_cached": 1, "output": 1}},
+        status="error",
+        stats={
+            "token_usage": {"input_other": 1, "input_cached": 1, "output": 1},
+            "start_time": 100,
+            "end_time": 104,
+        },
     )
     await temp_db.upsert_umo_alias(
         umo=aliased_umo,
@@ -254,6 +267,11 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
     }
     result = await service.get_provider_token_stats(1)
 
+    assert result["range_total_calls"] == 2
+    assert result["range_success_rate"] == 0.5
+    assert result["range_avg_ttft_ms"] == 250
+    assert result["range_avg_duration_ms"] == 3000
+    assert result["range_avg_tpm"] == 60
     assert result["range_by_umo"] == [
         {
             "umo": aliased_umo,

@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -120,6 +121,40 @@ async def environment(tmp_path, request):
         MagicMock(),
         agent_runtimes=runtimes,
     )
+
+    async def read_history(cid):
+        """Read structured data from the fixture's mutable conversation records.
+
+        Args:
+            cid: Public conversation identity.
+
+        Returns:
+            Detached structured record, or None if it was deleted.
+        """
+        record = await context.conversation_manager.get_conversation(
+            conversation.user_id, cid
+        )
+        if record is None:
+            return None
+        return SimpleNamespace(
+            **vars(record),
+            conversation_id=record.cid,
+            umo=record.user_id,
+            content=json.loads(record.history),
+        )
+
+    async def read_execution(cid):
+        record = await read_history(cid)
+        return (record, None) if record is not None else None
+
+    context.conversation_manager.db = SimpleNamespace(
+        get_conversation_by_id=AsyncMock(side_effect=read_history),
+        conversation_store=SimpleNamespace(
+            get_metadata=AsyncMock(side_effect=read_history),
+            read_for_execution=AsyncMock(side_effect=read_execution),
+        ),
+    )
+    context.conversation_manager.to_legacy_conversation = lambda record: record
     context.platform_manager.platform_insts = [
         SimpleNamespace(
             meta=lambda: PlatformMetadata(id="test", name="test", description="Test")

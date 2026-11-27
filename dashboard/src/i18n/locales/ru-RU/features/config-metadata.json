@@ -973,10 +973,6 @@
                 "description": "Единый режим Webhook",
                 "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/v1/webhooks/platforms/{uuid}."
             },
-            "use_markdown": {
-                "description": "Отправлять проактивные сообщения в формате Markdown",
-                "hint": "Если включено, проактивные сообщения по умолчанию отправляются в формате Markdown; явный вызов use_markdown() в плагине имеет приоритет над этой настройкой."
-            },
             "webhook_uuid": {
                 "description": "UUID вебхука",
                 "hint": "Создается автоматически при добавлении платформы."
@@ -1116,6 +1112,14 @@
         "general": {
             "description": "Общие",
             "platform_settings": {
+                "locale": {
+                  "description": "Язык системы",
+                  "hint": "Выберите язык системы для плагинов, сообщений об ошибках и других системных сообщений. Не меняет язык ответов модели или WebUI.",
+                  "labels": [
+                    "🇨🇳 简体中文",
+                    "🇺🇸 English"
+                  ]
+                },
                 "unique_session": {
                     "description": "Изолировать диалоги",
                     "hint": "При включении на платформах с поддержкой изоляции у каждого участника группы будет отдельный контекст диалога. Права на команды настраиваются в разделе управления командами."
@@ -1253,6 +1257,15 @@
         }
     },
     "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
         "name": "Управление доступом",
         "admins": {
             "description": "Администраторы",
@@ -1820,6 +1833,9 @@
             "dashscope_embedding": {
                 "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
             },
+            "volcengine_embedding": {
+              "hint": "Volcengine Embedding, адрес по умолчанию — https://ark.cn-beijing.volces.com/api/v3. Agent Plan — https://ark.cn-beijing.volces.com/api/plan/v3."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."
@@ -1867,6 +1883,10 @@
             "dashscope_tts_voice": {
                 "description": "Голос"
             },
+            "dashscope_tts_websocket_url": {
+                "description": "Адрес WebSocket API",
+                "hint": "Необязательно. Заполните при использовании модели Qwen-Audio-TTS. Оставьте пустым, чтобы использовать адрес DashScope SDK по умолчанию. Укажите полный URL WebSocket, например wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, заменив {WorkspaceId} фактическим ID рабочего пространства."
+            },
             "gm_resp_image_modal": {
                 "description": "Включить визуальную модальность",
                 "hint": "Если включено, ответы могут содержать изображения. Требует поддержки моделью. Совет: для генерации изображений отключите 'Распознавание участников'."
@@ -1907,11 +1927,11 @@
                 "description": "Настройки рассуждения (Thinking)",
                 "budget": {
                     "description": "Бюджет рассуждения",
-                    "hint": "Указывает модели количество токенов рассуждения. См. документацию Google."
+                    "hint": "Бюджет токенов рассуждения Gemini 2.5. Пустое поле использует значение модели по умолчанию."
                 },
                 "level": {
                     "description": "Уровень рассуждения",
-                    "hint": "Рекомендуется для моделей Gemini 3+. Позволяет контролировать процесс рассуждения."
+                    "hint": "См. https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
                 }
             },
             "anth_thinking_config": {
@@ -2017,6 +2037,18 @@
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
             },
+            "stepfun-tts-voice": {
+                "description": "ID голоса"
+            },
+            "deepseek-tts-voice": {
+                "description": "Голос",
+                "hint": "Голос DeepSeek TTS. В API отправляется соответствующий voice_id.",
+                "labels": ["Stella (женский, по умолчанию)", "Tide (мужской)"]
+            },
+            "deepseek-tts-filter-markdown": {
+                "description": "Фильтровать Markdown",
+                "hint": "Удалять разметку Markdown перед синтезом. Включено по умолчанию."
+            },
             "elevenlabs-tts-voice-id": {
                 "description": "ID голоса",
                 "hint": "ID голоса ElevenLabs. Просмотрите и скопируйте ID на https://elevenlabs.io/app/voice-library. По умолчанию 'JBFqnCBsd6RMkjVDRZzb' (George)."
@@ -2068,6 +2100,14 @@
             "fishaudio-tts-reference-id": {
                 "description": "Coze API Key",
                 "hint": "ID модели Fishaudio; используется вместо имени роли."
+            },
+            "fishaudio-tts-format": {
+                "description": "Формат аудио",
+                "hint": "Формат аудио, возвращаемый FishAudio TTS. По умолчанию wav для совместимости; для длинной речи рекомендуется mp3 для значительного уменьшения размера файла."
+            },
+            "fishaudio-tts-mp3-bitrate": {
+                "description": "Битрейт MP3 (kbps)",
+                "hint": "Применяется только при выборе формата mp3. Доступные значения: 64, 128 или 192 kbps (по умолчанию 128)."
             },
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",

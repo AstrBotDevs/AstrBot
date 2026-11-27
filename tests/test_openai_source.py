@@ -1,5 +1,7 @@
 import base64
 import builtins
+import copy
+from contextlib import aclosing
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,14 +9,19 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._models import construct_type
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
+from sqlmodel import select
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.db.po import ChatRequestStat
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.sources import chat_request
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
@@ -1566,7 +1573,10 @@ async def test_parse_openai_completion_reads_nested_data_choices():
 
 
 @pytest.mark.asyncio
-async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
+async def test_query_stream_extracts_usage_from_empty_choices_chunk(
+    monkeypatch, temp_db
+):
+    monkeypatch.setattr(chat_request, "db_helper", temp_db)
     provider = _make_provider()
     try:
         chunks = [
@@ -1648,8 +1658,275 @@ async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch)
         assert final_response.usage.input_other == 62
         assert final_response.usage.input_cached == 2488
         assert final_response.usage.output == 125
+
+        async with aclosing(provider.text_chat_stream(prompt="hello")) as stream:
+            assert (await anext(stream)).is_chunk
+
+        await temp_db.chat_usage_writer.flush()
+        async with temp_db.get_db() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(ChatRequestStat).order_by(ChatRequestStat.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert [(row.status, row.token_output) for row in rows] == [
+            ("completed", 125),
+            ("aborted", None),
+        ]
+        assert rows[0].token_input_other == 62
+        assert rows[0].time_to_first_token is not None
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_normalizes_tool_call_identity_and_index(monkeypatch):
+    """A repeated tool identity with a sparse or omitted index stays one call.
+
+    The SDK concatenates repeated string fields and uses the incoming index as a
+    list position. One call is therefore sent with a replayed identity, a sparse
+    starting index, and continuation frames that omit the index.
+    """
+    provider = _make_provider()
+    tool_set = ToolSet(
+        [
+            FunctionTool(
+                name="read",
+                description="Read a file.",
+                parameters={
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            )
+        ]
+    )
+
+    def chunk(delta: dict, finish_reason: str | None = None) -> ChatCompletionChunk:
+        return ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-stream",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            }
+        )
+
+    def lenient_chunk(
+        delta: dict, finish_reason: str | None = None
+    ) -> ChatCompletionChunk:
+        """Build a chunk the way the SDK parses streamed JSON, without validation.
+
+        A gateway that omits `index` (the case behind AstrBotDevs/AstrBot#6661)
+        reaches the provider as `index=None`; `model_validate` would reject it before
+        the provider could see it.
+        """
+        return construct_type(
+            type_=ChatCompletionChunk,
+            value={
+                "id": "chatcmpl-stream",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            },
+        )
+
+    async def run(chunks: list[ChatCompletionChunk]) -> LLMResponse:
+        async def fake_stream():
+            for item in chunks:
+                yield item
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                tools=tool_set,
+            )
+        ]
+        return responses[-1]
+
+    try:
+        # Repeated identity, a sparse starting index, and continuation frames
+        # without an index all belong to one call.
+        repeated = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 1,
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {"name": "read", "arguments": '{"pa'},
+                            }
+                        ],
+                    }
+                ),
+                lenient_chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {
+                                    "name": "read",
+                                    "arguments": 'th": "x"}',
+                                },
+                            }
+                        ]
+                    }
+                ),
+                lenient_chunk({"tool_calls": [{"function": {"arguments": ""}}]}),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert repeated.tools_call_name == ["read"]
+        assert repeated.tools_call_ids == ["call_a"]
+        assert repeated.tools_call_args == [{"path": "x"}]
+
+    finally:
+        await provider.terminate()
+
+
+def test_sanitize_assistant_messages_renames_reused_ids_across_rounds():
+    def call(call_id):
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "search", "content": "first"},
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "search", "content": "second"},
+            {"role": "assistant", "tool_calls": [call("call_astrbot_2_0")]},
+            {"role": "tool", "tool_call_id": "call_astrbot_2_0", "content": "third"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    messages = payloads["messages"]
+    first = messages[0]["tool_calls"][0]["id"]
+    second = messages[2]["tool_calls"][0]["id"]
+    third = messages[4]["tool_calls"][0]["id"]
+    assert (first, third) == ("search", "call_astrbot_2_0")
+    assert len({first, second, third}) == 3
+    assert [messages[i]["tool_call_id"] for i in (1, 3, 5)] == [
+        first,
+        second,
+        third,
+    ]
+    assert [messages[i]["content"] for i in (1, 3, 5)] == [
+        "first",
+        "second",
+        "third",
+    ]
+    sanitized = copy.deepcopy(payloads)
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+    assert payloads == sanitized
+
+
+def test_sanitize_assistant_messages_keeps_only_resolved_unambiguous_calls():
+    def call(call_id, argument):
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": argument},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    call("duplicate", "first"),
+                    call("duplicate", "second"),
+                    call("unique", "third"),
+                    call("missing", "fourth"),
+                ],
+            },
+            {"role": "tool", "tool_call_id": "duplicate", "content": "ambiguous"},
+            {"role": "tool", "tool_call_id": "unique", "content": "known"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": None, "tool_calls": [call("unique", "third")]},
+        {"role": "tool", "tool_call_id": "unique", "content": "known"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_sanitize_assistant_messages_omits_empty_ambiguous_batch():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": "duplicate", "function": {"name": "first"}},
+                    {"id": "duplicate", "function": {"name": "second"}},
+                ],
+            },
+            {"role": "tool", "tool_call_id": "duplicate", "content": "ambiguous"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_sanitize_assistant_messages_does_not_match_results_across_removed_batch():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "tool_calls": [{"id": "reused"}]},
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "reused"}, {"id": "reused"}],
+            },
+            {"role": "tool", "tool_call_id": "reused", "content": "ambiguous"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "done"},
+    ]
 
 
 def test_sanitize_assistant_messages_removes_orphaned_tool_messages():
@@ -1783,18 +2060,150 @@ def test_sanitize_assistant_messages_resets_tool_ids_after_non_tool_message():
     ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
 
     assert payloads["messages"] == [
+        {"role": "user", "content": "new turn"},
+    ]
+
+
+def test_sanitize_assistant_messages_removes_malformed_tool_calls():
+    valid_call = {
+        "id": "call_ok",
+        "type": "function",
+        "function": {"name": "search", "arguments": "{}"},
+    }
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    "not-a-dict",
+                    {"type": "function", "function": {"name": "no_id"}},
+                    {"id": "", "type": "function", "function": {"name": "empty_id"}},
+                    {"id": 123, "type": "function", "function": {"name": "int_id"}},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": "checking",
+                "tool_calls": [
+                    "bad-entry",
+                    {"type": "function", "function": {"name": "missing_id"}},
+                    valid_call,
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_ok", "content": "result"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {
+            "role": "assistant",
+            "content": "checking",
+            "tool_calls": [valid_call],
+        },
+        {"role": "tool", "tool_call_id": "call_ok", "content": "result"},
+    ]
+
+
+def test_sanitize_assistant_messages_rejects_delayed_result_for_reused_unanswered_id():
+    def call(call_id: str, name: str = "search") -> dict:
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": name, "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "user", "content": "retry"},
+            {
+                "role": "assistant",
+                "tool_calls": [call("search"), call("lookup", "lookup")],
+            },
+            {"role": "tool", "tool_call_id": "search", "content": "delayed old result"},
+            {"role": "tool", "tool_call_id": "lookup", "content": "fresh lookup"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "first"},
+        {"role": "user", "content": "retry"},
         {
             "role": "assistant",
             "content": None,
-            "tool_calls": [
-                {
-                    "id": "call_00",
-                    "type": "function",
-                    "function": {"name": "search", "arguments": "{}"},
-                }
-            ],
+            "tool_calls": [call("lookup", "lookup")],
         },
-        {"role": "user", "content": "new turn"},
+        {"role": "tool", "tool_call_id": "lookup", "content": "fresh lookup"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_sanitize_assistant_messages_avoids_orphan_tool_call_id_collision():
+    def call(call_id: str) -> dict:
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "search", "content": "first"},
+            {"role": "assistant", "tool_calls": [call("search")]},
+            {"role": "tool", "tool_call_id": "call_astrbot_2_0", "content": "orphan"},
+            {"role": "tool", "tool_call_id": "search", "content": "second"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    messages = payloads["messages"]
+    assert len(messages) == 4
+    second_call_id = messages[2]["tool_calls"][0]["id"]
+    assert second_call_id != "search"
+    assert second_call_id != "call_astrbot_2_0"
+    assert messages[3] == {
+        "role": "tool",
+        "tool_call_id": second_call_id,
+        "content": "second",
+    }
+
+
+def test_sanitize_assistant_messages_keeps_prior_valid_round_before_later_ambiguous_batch():
+    def call(call_id: str) -> dict:
+        return {
+            "id": call_id,
+            "type": "function",
+            "function": {"name": "search", "arguments": "{}"},
+        }
+
+    payloads = {
+        "messages": [
+            {"role": "assistant", "tool_calls": [call("dup")]},
+            {"role": "tool", "tool_call_id": "dup", "content": "valid earlier"},
+            {"role": "assistant", "tool_calls": [call("dup"), call("dup")]},
+            {"role": "assistant", "tool_calls": [call("dup")]},
+            {"role": "tool", "tool_call_id": "dup", "content": "ambiguous delayed"},
+            {"role": "assistant", "content": "done"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "assistant", "content": None, "tool_calls": [call("dup")]},
+        {"role": "tool", "tool_call_id": "dup", "content": "valid earlier"},
+        {"role": "assistant", "content": "done"},
     ]
 
 
@@ -1960,6 +2369,7 @@ async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch)
                         }
                     ],
                 },
+                {"role": "tool", "tool_call_id": "call-123", "content": "result"},
                 {"role": "user", "content": "world"},
             ],
         }
@@ -1968,7 +2378,7 @@ async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch)
 
         # The assistant message with tool_calls should be kept but content set to None
         messages = captured_kwargs["messages"]
-        assert len(messages) == 3
+        assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"] is None
         assert messages[1]["tool_calls"] is not None
@@ -2082,6 +2492,7 @@ async def test_query_keeps_assistant_message_with_tool_calls_and_none_content(
                         }
                     ],
                 },
+                {"role": "tool", "tool_call_id": "call-123", "content": "result"},
                 {"role": "user", "content": "world"},
             ],
         }
@@ -2090,7 +2501,7 @@ async def test_query_keeps_assistant_message_with_tool_calls_and_none_content(
 
         # The assistant message with tool_calls should be kept
         messages = captured_kwargs["messages"]
-        assert len(messages) == 3
+        assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
         assert messages[1]["content"] is None
         assert messages[1]["tool_calls"] is not None

@@ -9,7 +9,7 @@ import {
 } from "vue";
 import axios from "axios";
 import DOMPurify from "dompurify";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import defaultPluginIcon from "/favicon.svg";
 import { pluginApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
@@ -38,6 +38,7 @@ const props = defineProps({
 const { tm, router } = props.state;
 const { locale } = useI18n();
 const {
+  categoryName,
   pluginName,
   pluginDesc: resolvePluginDesc,
   pluginViewTitle,
@@ -99,7 +100,9 @@ const renderedChangelog = ref("");
 const expandedCommandGroups = ref(new Set());
 const logoLoadFailed = ref(false);
 const detailPageRef = ref(null);
+const detailHeaderRef = ref(null);
 const isHeaderStuck = ref(false);
+let scrollContainer = null;
 const pluginDetail = ref(null);
 
 const pluginData = computed(() => pluginDetail.value || props.plugin);
@@ -155,16 +158,13 @@ const authorDisplay = computed(() => {
   return typeof author === "string" ? author.trim() : "";
 });
 
-const categoryDisplay = computed(() => {
-  const rawCategory =
-    pluginData.value?.category || props.marketPlugin?.category || "";
-  const category = String(rawCategory || "").trim();
-  if (!category) return "";
-
-  const normalized = category.toLowerCase().replace(/\s+/g, "_");
-  const label = tm(`market.categories.${normalized}`);
-  return label === `market.categories.${normalized}` ? category : label;
-});
+const categoryDisplay = computed(() =>
+  categoryName(
+    isMarketDetail.value
+      ? props.marketPlugin?.market_category
+      : pluginData.value?.install_source?.category,
+  ),
+);
 
 const authorWebsite = computed(() => {
   const plugin = pluginData.value || {};
@@ -646,12 +646,22 @@ const handleDocsClick = (event) => {
 };
 
 const updateHeaderStuckState = () => {
-  const scrollTop =
-    document.scrollingElement?.scrollTop ||
-    document.documentElement.scrollTop ||
-    window.scrollY ||
-    0;
-  isHeaderStuck.value = scrollTop > 0;
+  const headerEl = detailHeaderRef.value;
+  const scrollTop = scrollContainer
+    ? scrollContainer.scrollTop
+    : window.scrollY;
+  const containerTop = scrollContainer
+    ? scrollContainer.getBoundingClientRect().top
+    : 0;
+  const containerPaddingTop = scrollContainer
+    ? parseFloat(getComputedStyle(scrollContainer).paddingTop) || 0
+    : 0;
+  const stickyTop = parseFloat(getComputedStyle(headerEl).top) || 0;
+
+  isHeaderStuck.value =
+    scrollTop > 0 &&
+    headerEl.getBoundingClientRect().top <=
+      containerTop + containerPaddingTop + stickyTop + 1;
 };
 
 const scrollToHashTarget = async () => {
@@ -843,26 +853,41 @@ watch(
 );
 
 onMounted(() => {
+  let node = detailHeaderRef.value.parentElement;
+  while (
+    node &&
+    node !== document.body &&
+    node !== document.documentElement
+  ) {
+    if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) {
+      scrollContainer = node;
+      break;
+    }
+    node = node.parentElement;
+  }
+
   updateHeaderStuckState();
   scrollToHashTarget();
-  window.addEventListener("scroll", updateHeaderStuckState, { passive: true });
-  document.addEventListener("scroll", updateHeaderStuckState, {
-    capture: true,
-    passive: true,
-  });
+  (scrollContainer || window).addEventListener(
+    "scroll",
+    updateHeaderStuckState,
+    { passive: true },
+  );
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("scroll", updateHeaderStuckState);
-  document.removeEventListener("scroll", updateHeaderStuckState, {
-    capture: true,
-  });
+  (scrollContainer || window).removeEventListener(
+    "scroll",
+    updateHeaderStuckState,
+  );
+  scrollContainer = null;
 });
 </script>
 
 <template>
   <div ref="detailPageRef" class="plugin-detail-page">
     <div
+      ref="detailHeaderRef"
       class="detail-header"
       :class="{ 'detail-header--stuck': isHeaderStuck }"
     >
@@ -1155,10 +1180,10 @@ onBeforeUnmount(() => {
 }
 
 .detail-header--stuck::before {
-  background: rgb(var(--v-theme-surface));
+  background: rgb(var(--v-theme-background));
   box-shadow: 0 1px 0 rgba(var(--v-border-color), var(--v-border-opacity));
   content: "";
-  inset: 0 calc(50% - 50vw);
+  inset: -10px calc(50% - 50vw) 0;
   position: absolute;
   z-index: -1;
 }

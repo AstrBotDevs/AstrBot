@@ -26,9 +26,10 @@
         <ChatMessageList
           :messages="messages"
           :is-dark="isDark"
-          :is-streaming="sending"
+          :is-message-streaming="(message) => sending && message === activeBotRecord"
           variant="thread"
           @button-click="handleButtonClick"
+          @configure-models="emit('configureModels')"
         />
       </div>
 
@@ -57,11 +58,13 @@
 
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
-import { nextTick, ref, watch } from "vue";
+import { nextTick, provide, ref, watch } from "vue";
+import { streamViewAction, viewActionKey, workbenchKey } from "@/utils/chatViews";
 import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
+  appendError,
   appendReasoningPart,
   buildChatRequestFlags,
   extractReasoningText,
@@ -88,16 +91,44 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  configureModels: [];
   "update:modelValue": [value: boolean];
   delete: [thread: ChatThread];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+// Thread views stay within their own conversation and action handler.
+provide(workbenchKey, undefined);
 const { locale } = useI18n();
 const messages = ref<ChatRecord[]>([]);
 const draft = ref("");
 const sending = ref(false);
+const activeBotRecord = ref<ChatRecord | null>(null);
 const messagesEl = ref<HTMLElement | null>(null);
+
+provide(viewActionKey, (viewId, input) => {
+  if (sending.value) return Promise.reject(new Error("Wait for the current reply to finish."));
+  const botRecord = ref<ChatRecord>({
+    id: `local-view-${input.interaction_id}`,
+    content: { type: "bot", message: [], reasoning: "", isLoading: true },
+  }).value;
+  let visible = false;
+  activeBotRecord.value = botRecord;
+  sending.value = true;
+  return streamViewAction(viewId, input, (payload) => {
+    if (payload.type === "run_started") return;
+    if (!visible && payload.type !== "end" && payload.type !== "user_message_saved") {
+      messages.value.push(botRecord);
+      visible = true;
+    }
+    processPayload(botRecord, undefined, payload);
+    if (visible) scrollToBottom();
+  }, () => {
+    sending.value = false;
+    activeBotRecord.value = null;
+  });
+});
+
 
 watch(
   () => props.thread?.thread_id,
@@ -156,6 +187,7 @@ async function send() {
   scrollToBottom();
 
   const abort = new AbortController();
+  activeBotRecord.value = threadBotRecord;
   sending.value = true;
   try {
     const selection = props.getProviderSelection();
@@ -184,13 +216,11 @@ async function send() {
       scrollToBottom();
     });
   } catch (error) {
-    appendPlain(
-      threadBotRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendError(threadBotRecord, error, "connection_error");
     console.error("Failed to send thread message:", error);
   } finally {
     sending.value = false;
+    activeBotRecord.value = null;
   }
 }
 
@@ -218,6 +248,7 @@ async function handleButtonClick(payload: {
     scrollToBottom();
   };
 
+  activeBotRecord.value = botRecord;
   sending.value = true;
   try {
     const response = await fetchWithAuth(
@@ -250,13 +281,11 @@ async function handleButtonClick(payload: {
     });
   } catch (error) {
     showBotRecord();
-    appendPlain(
-      botRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendError(botRecord, error, "connection_error");
     console.error("Failed to send thread button interaction:", error);
   } finally {
     sending.value = false;
+    activeBotRecord.value = null;
   }
 }
 
@@ -329,8 +358,8 @@ function processPayload(
     if (!userRecord) return;
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
-    userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+    userRecord.turn_id =
+      data?.turn_id || userRecord.turn_id;
     return;
   }
 
@@ -338,8 +367,8 @@ function processPayload(
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    botRecord.turn_id =
+      data?.turn_id || botRecord.turn_id;
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
@@ -354,7 +383,7 @@ function processPayload(
 
   if (type === "error") {
     markMessageStarted(botRecord);
-    appendPlain(botRecord, `\n\n${String(data)}`);
+    appendError(botRecord, data);
     return;
   }
 
@@ -401,11 +430,11 @@ function processPayload(
     return;
   }
 
-  if (type === "actionrow" && data && typeof data === "object") {
+  if ((type === "actionrow" || type === "view") && data && typeof data === "object") {
     markMessageStarted(botRecord);
     botRecord.content.message.push({
-      type: "actionrow",
       ...(data as Record<string, unknown>),
+      type,
     });
     return;
   }

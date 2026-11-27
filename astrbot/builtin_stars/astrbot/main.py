@@ -17,6 +17,7 @@ from astrbot.core.utils.session_waiter import (
 )
 
 from .group_chat_context import GroupChatContext
+from .i18n import MESSAGES
 
 
 def _iter_message_components(event: AstrMessageEvent):
@@ -35,8 +36,24 @@ class Main(star.Star):
                 self.context.astrbot_config_mgr,
                 self.context,
             )
+            context.conversation_manager.on_current_conversation_deleted = (
+                self.group_chat_context.clear_session
+            )
+            context.conversation_manager.on_platform_conversations_deleted = (
+                self.group_chat_context.clear_platform
+            )
         except BaseException as e:
             logger.error(f"group chat context init failed: {e}")
+
+    async def terminate(self) -> None:
+        manager = self.context.conversation_manager
+        if (
+            self.group_chat_context
+            and manager.on_current_conversation_deleted
+            == self.group_chat_context.clear_session
+        ):
+            manager.on_current_conversation_deleted = None
+            manager.on_platform_conversations_deleted = None
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):
@@ -62,8 +79,26 @@ class Main(star.Star):
             if not (is_empty_mention or is_wake_prefix_only):
                 return
 
+            messages_i18n = MESSAGES.get(
+                await self.context.get_locale(event.unified_msg_origin),
+                MESSAGES["zh-CN"],
+            )
             if p_settings.get("empty_mention_waiting_need_reply", True):
                 try:
+                    # This handler stops the event before on_message runs, so a
+                    # bare @ is never recorded. Record it before the awaits below:
+                    # a group message arriving meanwhile would otherwise be
+                    # recorded ahead of the mention and be wrongly included in
+                    # this reply.
+                    if (
+                        self.group_chat_context
+                        and cfg["provider_ltm_settings"]["group_icl_enable"]
+                    ):
+                        try:
+                            await self.group_chat_context.handle_message(event)
+                        except Exception as e:
+                            logger.error(f"group chat context: {e}")
+
                     curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                         event.unified_msg_origin,
                     )
@@ -97,7 +132,7 @@ class Main(star.Star):
                     )
                 except Exception as e:
                     logger.error(f"LLM response failed: {e!s}")
-                    yield event.plain_result("想要问什么呢？😄")
+                    yield event.plain_result(messages_i18n["empty_mention"])
 
             @session_waiter(60)
             async def empty_mention_waiter(
@@ -120,7 +155,7 @@ class Main(star.Star):
             except TimeoutError:
                 pass
             except Exception as e:
-                yield event.plain_result("发生错误，请联系管理员: " + str(e))
+                yield event.plain_result(messages_i18n["error"].format(detail=str(e)))
             finally:
                 event.stop_event()
         except Exception as e:

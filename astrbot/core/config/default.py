@@ -10,6 +10,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent import get_runtime_config_default
 
+PLUGIN_DEFAULT_REGISTRY_URL = "https://cloud.astrbot.app/api/v1/market/plugins.json"
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults shared by all operating systems.
@@ -93,6 +95,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 DEFAULT_CONFIG = {
     "config_version": 6,
     "platform_settings": {
+        "locale": "zh-CN",
         "unique_session": False,
         "rate_limit": {
             "time": 60,
@@ -103,6 +106,7 @@ DEFAULT_CONFIG = {
         "forward_threshold": 1500,
         "enable_id_white_list": True,
         "id_whitelist": [],
+        "id_blacklist": [],
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
@@ -306,6 +310,7 @@ DEFAULT_CONFIG = {
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
     "default_kb_collection": "",  # 默认知识库名称, 已经过时
+    "disabled_plugins": [],
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
@@ -341,7 +346,6 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
-                        "use_markdown": True,
                     },
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
@@ -349,7 +353,6 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "appid": "",
                         "secret": "",
-                        "use_markdown": True,
                         "is_sandbox": False,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
@@ -942,11 +945,6 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
                     },
-                    "use_markdown": {
-                        "description": "主动消息使用 Markdown",
-                        "type": "bool",
-                        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
-                    },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",
                         "type": "string",
@@ -1148,6 +1146,10 @@ CONFIG_METADATA_2 = {
             "platform_settings": {
                 "type": "object",
                 "items": {
+                    "locale": {
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                    },
                     "unique_session": {
                         "type": "bool",
                     },
@@ -1232,6 +1234,11 @@ CONFIG_METADATA_2 = {
                         "_special": "umo",
                         "items": {"type": "string"},
                         "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的配置文件 -> 访问控制 -> 白名单中管理白名单。",
+                    },
+                    "id_blacklist": {
+                        "type": "list",
+                        "_special": "umo",
+                        "items": {"type": "string"},
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -1351,7 +1358,7 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {"budget": 0, "level": "HIGH"},
+                        "gm_thinking_config": {"budget": None, "level": "AUTO"},
                         "proxy": "",
                     },
                     "Anthropic": {
@@ -1715,7 +1722,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
-                        "model": "whisper-1",
+                        "model": "gpt-transcribe",
                         "proxy": "",
                     },
                     "MiMo STT(API)": {
@@ -1729,6 +1736,18 @@ CONFIG_METADATA_2 = {
                         "model": "mimo-v2.5-asr",
                         "timeout": "20",
                         "proxy": "",
+                    },
+                    "DeepSeek STT(API)": {
+                        "id": "deepseek_stt",
+                        "provider": "deepseek",
+                        "type": "deepseek_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.deepseek.com/v1",
+                        "timeout": "120",
+                        "proxy": "",
+                        "custom_headers": {},
                     },
                     "Whisper(Local)": {
                         "provider": "openai",
@@ -1760,6 +1779,33 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                         "proxy": "",
+                    },
+                    "StepFun TTS(API)": {
+                        "id": "stepfun_tts",
+                        "type": "stepfun_tts_api",
+                        "provider": "stepfun",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.stepfun.com/v1",
+                        "model": "stepaudio-3-tts",
+                        "stepfun-tts-voice": "wenrounvsheng",
+                        "timeout": "60",
+                        "proxy": "",
+                    },
+                    "DeepSeek TTS(API)": {
+                        "id": "deepseek_tts",
+                        "type": "deepseek_tts_api",
+                        "provider": "deepseek",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.deepseek.com/v1",
+                        "deepseek-tts-voice": "stella",
+                        "deepseek-tts-filter-markdown": True,
+                        "timeout": "20",
+                        "proxy": "",
+                        "custom_headers": {},
                     },
                     "MiMo TTS(API)": {
                         "id": "mimo_tts",
@@ -1861,6 +1907,8 @@ CONFIG_METADATA_2 = {
                         "model": "s2-pro",
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
+                        "fishaudio-tts-format": "wav",
+                        "fishaudio-tts-mp3-bitrate": "128",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1874,6 +1922,7 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
+                        "dashscope_tts_websocket_url": "",
                         "timeout": "20",
                     },
                     "Azure TTS": {
@@ -2029,6 +2078,22 @@ CONFIG_METADATA_2 = {
                         "embedding_api_key": "",
                         "embedding_api_base": "https://dashscope.aliyuncs.com/api/v1",
                         "embedding_model": "text-embedding-v4",
+                        "embedding_dimensions": 1024,
+                        "timeout": 60,
+                        "proxy": "",
+                    },
+                    "Volcengine Embedding": {
+                        "id": "volcengine_embedding",
+                        "type": "volcengine_embedding",
+                        "provider": "volcengine",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.volcengine_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        # Agent Plan: https://ark.cn-beijing.volces.com/api/plan/v3
+                        # Use its dedicated API key and doubao-embedding-vision model.
+                        "embedding_api_base": "https://ark.cn-beijing.volces.com/api/v3",
+                        "embedding_model": "doubao-embedding-vision-251215",
                         "embedding_dimensions": 1024,
                         "timeout": 60,
                         "proxy": "",
@@ -2617,6 +2682,11 @@ CONFIG_METADATA_2 = {
                         "secret": True,
                     },
                     "dashscope_tts_voice": {"description": "音色", "type": "string"},
+                    "dashscope_tts_websocket_url": {
+                        "description": "WebSocket Endpoint",
+                        "type": "string",
+                        "hint": "可选，使用 Qwen-Audio-TTS 模型时填写。留空使用 DashScope SDK 默认地址。请填写完整 WebSocket 地址，例如 wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference，并将 {WorkspaceId} 替换为实际业务空间 ID。",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
@@ -2695,17 +2765,20 @@ CONFIG_METADATA_2 = {
                             "budget": {
                                 "description": "Thinking Budget",
                                 "type": "int",
-                                "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget",
+                                "nullable": True,
+                                "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget",
                             },
                             "level": {
                                 "description": "Thinking Level",
                                 "type": "string",
-                                "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
+                                "hint": "AUTO uses Google's model default. See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
                                 "options": [
+                                    "AUTO",
                                     "MINIMAL",
                                     "LOW",
                                     "MEDIUM",
                                     "HIGH",
+                                    "XHIGH",
                                 ],
                             },
                         },
@@ -2907,6 +2980,22 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
                     },
+                    "stepfun-tts-voice": {
+                        "description": "音色 ID",
+                        "type": "string",
+                    },
+                    "deepseek-tts-voice": {
+                        "description": "音色",
+                        "type": "string",
+                        "hint": "DeepSeek TTS 音色，实际请求使用对应的 voice_id。",
+                        "options": ["stella", "tide"],
+                        "labels": ["海星（女声，默认）", "暗潮（男声）"],
+                    },
+                    "deepseek-tts-filter-markdown": {
+                        "description": "过滤 Markdown",
+                        "type": "bool",
+                        "hint": "朗读前移除 Markdown 格式，默认启用。",
+                    },
                     "mimo-tts-voice": {
                         "description": "音色",
                         "type": "string",
@@ -2941,6 +3030,18 @@ CONFIG_METADATA_2 = {
                         "description": "reference_id",
                         "type": "string",
                         "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID",
+                    },
+                    "fishaudio-tts-format": {
+                        "description": "音频格式",
+                        "type": "string",
+                        "options": ["wav", "mp3"],
+                        "hint": "FishAudio TTS 返回的音频格式。默认 wav 保持兼容；长语音场景推荐选择 mp3 以显著减小音频体积并降低传输开销。",
+                    },
+                    "fishaudio-tts-mp3-bitrate": {
+                        "description": "MP3 码率 (kbps)",
+                        "type": "string",
+                        "options": ["64", "128", "192"],
+                        "hint": "仅当音频格式选择 mp3 时生效，可选 64 / 128 / 192 kbps，默认 128。",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
@@ -4449,6 +4550,13 @@ CONFIG_METADATA_3 = {
                 "description": "基本",
                 "type": "object",
                 "items": {
+                    "platform_settings.locale": {
+                        "description": "系统语言",
+                        "type": "string",
+                        "options": ["zh-CN", "en-US"],
+                        "labels": ["🇨🇳 简体中文", "🇺🇸 English"],
+                        "hint": "设置系统的语言，用于插件、错误信息回复等地方。不会改变模型回答或 WebUI 的语言。",
+                    },
                     "platform_settings.unique_session": {
                         "description": "隔离对话",
                         "type": "bool",
@@ -4469,6 +4577,7 @@ CONFIG_METADATA_3 = {
                         "description": "回复时的文本前缀",
                         "hint": "回复中附带的文本前缀。",
                         "type": "string",
+                        "collapsed": True,
                     },
                     "platform_settings.reply_with_mention": {
                         "description": "回复时 @ 发送人",
@@ -4484,16 +4593,19 @@ CONFIG_METADATA_3 = {
                         "description": "转发消息的字数阈值",
                         "hint": "在受支持的平台上，当回复消息过长时，采用 “合并消息转发” 的方式发送消息。",
                         "type": "int",
+                        "collapsed": True,
                     },
                     "platform_settings.empty_mention_waiting": {
                         "description": "只 @ 机器人是否触发等待",
                         "hint": "当发送一条只有提及机器人的消息时，是否在接下来的 1 分钟内保持唤醒状态等待用户的第二条消息。",
                         "type": "bool",
+                        "collapsed": True,
                     },
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
                         "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
+                        "collapsed": True,
                     },
                 },
             },
@@ -4639,6 +4751,19 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
+            "blacklist": {
+                "description": "黑名单",
+                "type": "object",
+                "items": {
+                    "platform_settings.id_blacklist": {
+                        "description": "黑名单 ID 列表",
+                        "type": "list",
+                        "_special": "umo",
+                        "items": {"type": "string"},
+                        "hint": "停止处理这些会话的消息。黑名单优先于白名单，管理员也不会豁免。空列表表示不拦截。",
+                    },
+                },
+            },
             "whitelist": {
                 "description": "白名单",
                 "type": "object",
@@ -4679,6 +4804,13 @@ CONFIG_METADATA_3 = {
                 "description": "插件",
                 "type": "object",
                 "items": {
+                    "disabled_plugins": {
+                        "description": "禁用的插件",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "_special": "select_plugin_set",
+                        "hint": "从可用插件中排除这些插件。空列表表示不额外禁用插件。",
+                    },
                     "plugin_set": {
                         "description": "可用插件",
                         "type": "bool",

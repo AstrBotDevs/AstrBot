@@ -42,6 +42,7 @@ from astrbot.core.utils.astrbot_path import (
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.plugin_scope import plugin_scope
 from astrbot.core.utils.requirements_utils import (
     MissingRequirementsPlan,
     plan_missing_requirements_install,
@@ -527,6 +528,14 @@ class PluginManager:
                 _PluginUpdater.validate_plugin_metadata(metadata, metadata_label)
             except ValueError as exc:
                 raise Exception(f"插件元数据校验失败：{exc!s}") from exc
+            from astrbot.core.message.interactive_ui import ViewSpec
+
+            raw_views = metadata.get("views", metadata.get("pages", []))
+            if not isinstance(raw_views, list):
+                raise ValueError("Plugin views must be a list of declarations.")
+            views = [ViewSpec.model_validate(view) for view in raw_views]
+            if len({view.name for view in views}) != len(views):
+                raise ValueError("Plugin view names must be unique.")
             metadata = StarMetadata(
                 name=metadata["name"],
                 author=metadata["author"],
@@ -553,12 +562,7 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
-                # "views" is the preferred key; "pages" stays as an alias.
-                views=metadata["views"]
-                if isinstance(metadata.get("views"), list)
-                else metadata["pages"]
-                if isinstance(metadata.get("pages"), list)
-                else [],
+                views=views,
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
@@ -1236,20 +1240,21 @@ class PluginManager:
 
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
-                        if plugin_config and metadata.star_cls_type:
-                            try:
+                        with plugin_scope(plugin_id):
+                            if plugin_config and metadata.star_cls_type:
+                                try:
+                                    metadata.star_cls = metadata.star_cls_type(
+                                        context=self.context,
+                                        config=plugin_config,
+                                    )
+                                except TypeError as _:
+                                    metadata.star_cls = metadata.star_cls_type(
+                                        context=self.context,
+                                    )
+                            elif metadata.star_cls_type:
                                 metadata.star_cls = metadata.star_cls_type(
                                     context=self.context,
-                                    config=plugin_config,
                                 )
-                            except TypeError as _:
-                                metadata.star_cls = metadata.star_cls_type(
-                                    context=self.context,
-                                )
-                        elif metadata.star_cls_type:
-                            metadata.star_cls = metadata.star_cls_type(
-                                context=self.context,
-                            )
 
                         if metadata.star_cls:
                             setattr(metadata.star_cls, "name", p_name)
@@ -1288,6 +1293,39 @@ class PluginManager:
                                 raw_handler,
                                 metadata.star_cls,
                             )
+
+                    # resolve_view() below reads `activated` to decide whether the
+                    # plugin is available, but that flag is only refreshed from
+                    # `inactivated_plugins` further down in this function. Sync it
+                    # first, otherwise the "disable then enable" path still sees the
+                    # previous False and rejects the view as unavailable.
+                    metadata.activated = not plugin_disabled
+
+                    if not plugin_disabled and metadata.star_cls is not None:
+                        from astrbot.core.platform.sources.webchat.message_parts_helper import (
+                            resolve_view,
+                        )
+                        from astrbot.core.star.filter.ui_action import UIActionFilter
+
+                        action_filters = [
+                            item
+                            for handler in related_handlers
+                            for item in handler.event_filters
+                            if isinstance(item, UIActionFilter)
+                        ]
+                        for spec in metadata.views:
+                            if spec.target == "plugin_page":
+                                resolve_view(
+                                    metadata.module_path, spec.name, target=spec.target
+                                )
+                            for action in spec.actions:
+                                if not any(
+                                    item.action_id in (None, action)
+                                    for item in action_filters
+                                ):
+                                    raise ValueError(
+                                        f"No UI handler registered for {action}."
+                                    )
 
                     # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
@@ -1436,7 +1474,8 @@ class PluginManager:
 
                 # 执行 initialize() 方法
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
-                    await metadata.star_cls.initialize()
+                    with plugin_scope(metadata.plugin_id):
+                        await metadata.star_cls.initialize()
 
                 # 触发插件加载事件
                 handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -1452,7 +1491,10 @@ class PluginManager:
                             f"hook(on_plugin_loaded) -> {handler_plugin_name} - {handler.handler_name}",
                             extra={"plugin_name": handler_plugin_name},
                         )
-                        await handler.handler(metadata)
+                        with plugin_scope(
+                            handler_plugin.plugin_id if handler_plugin else None
+                        ):
+                            await handler.handler(metadata)
                     except Exception:
                         logger.error(
                             traceback.format_exc(),
@@ -1988,7 +2030,8 @@ class PluginManager:
 
             future.add_done_callback(_log_del_exception)
         elif "terminate" in star_metadata.star_cls_type.__dict__:
-            await star_metadata.star_cls.terminate()
+            with plugin_scope(star_metadata.plugin_id):
+                await star_metadata.star_cls.terminate()
 
         # 触发插件卸载事件
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -1999,7 +2042,8 @@ class PluginManager:
                 logger.info(
                     f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
-                await handler.handler(star_metadata)
+                with plugin_scope(star_map[handler.handler_module_path].plugin_id):
+                    await handler.handler(star_metadata)
             except Exception:
                 logger.error(traceback.format_exc())
 

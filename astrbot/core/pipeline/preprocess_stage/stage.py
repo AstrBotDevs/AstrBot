@@ -28,7 +28,6 @@ class PreProcessStage(Stage):
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
 
-        self.stt_settings: dict = self.config.get("provider_stt_settings", {})
         self.platform_settings: dict = self.config.get("platform_settings", {})
 
     @staticmethod
@@ -218,7 +217,11 @@ class PreProcessStage(Stage):
                             )
 
         # STT
-        if self.stt_settings.get("enable", False):
+        if (
+            self.plugin_manager.context.get_config(umo=event.unified_msg_origin)
+            .get("provider_stt_settings", {})
+            .get("enable", False)
+        ):
             # TODO: 独立
             ctx = self.plugin_manager.context
             stt_provider = await ctx.get_using_stt_provider_async(
@@ -246,7 +249,7 @@ class PreProcessStage(Stage):
                         result = await stt_provider.get_text(audio_url=path)
                         if result:
                             suffix = " (referenced message)" if is_reply else ""
-                            logger.info(f"Speech-to-text{suffix} result: " + result)
+                            logger.info("Speech-to-text%s succeeded", suffix)
                             return Plain(result)
                         break
                     except FileNotFoundError:
@@ -256,7 +259,7 @@ class PreProcessStage(Stage):
                         )
                         await asyncio.sleep(0.5)
                         continue
-                    except BaseException as e:
+                    except Exception as e:
                         logger.error(traceback.format_exc())
                         suffix = " (referenced message)" if is_reply else ""
                         logger.error(f"Speech-to-text{suffix} failed: {e}")
@@ -280,5 +283,3 @@ class PreProcessStage(Stage):
                             plain_comp = await _stt_record(reply_comp, is_reply=True)
                             if plain_comp:
                                 component.chain[idx] = plain_comp
-                                event.message_str += plain_comp.text
-                                event.message_obj.message_str += plain_comp.text

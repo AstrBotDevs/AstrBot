@@ -19,8 +19,9 @@ class TokenCounter(Protocol):
 
         Args:
             messages: The message list.
-            trusted_token_usage: A trusted estimate of context tokens.
-                A value of 0 means no estimate was provided.
+            trusted_token_usage: The total token usage that LLM API returned.
+                For some cases, this value is more accurate.
+                But some API does not return it, so the value defaults to 0.
 
         Returns:
             The total token count.
@@ -82,6 +83,9 @@ class EstimateTokenCounter:
         return total
 
     def _estimate_tokens(self, text: str) -> int:
+        if text.isascii():
+            return int(len(text) * 0.3)
+
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
         emoji_count = len(EMOJI_PATTERN.findall(text))
         other_count = len(text) - chinese_count - emoji_count
