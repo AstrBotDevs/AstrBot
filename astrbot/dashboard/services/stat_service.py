@@ -37,6 +37,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_managed_backend,
     is_desktop_session_auth_enabled,
 )
+from astrbot.core.provider.entities import TokenUsage
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.auth_password import (
@@ -50,6 +51,7 @@ from astrbot.dashboard.password_state import (
     is_password_change_required,
     is_password_storage_upgraded,
 )
+from astrbot.dashboard.services.chat_service import build_webchat_unified_msg_origin
 
 
 class StatServiceError(Exception):
@@ -497,7 +499,7 @@ class StatService:
                 lambda: defaultdict(int)
             )
             total_by_provider: dict[str, int] = defaultdict(int)
-            total_by_umo: dict[str, int] = defaultdict(int)
+            usage_by_umo: dict[str, TokenUsage] = defaultdict(TokenUsage)
             total_by_plugin: dict[str, int] = defaultdict(int)
             calls_by_plugin: dict[str, int] = defaultdict(int)
             total_by_bucket: dict[int, int] = defaultdict(int)
@@ -521,8 +523,10 @@ class StatService:
                 created_at_utc = self._ensure_aware_utc(record.created_at)
                 created_at_local = created_at_utc.astimezone(local_tz)
                 cached_input = record.token_input_cached or 0
-                input_tokens = (record.token_input_other or 0) + cached_input
-                token_total = input_tokens + (record.token_output or 0)
+                uncached_input = record.token_input_other or 0
+                input_tokens = uncached_input + cached_input
+                output_tokens = record.token_output or 0
+                token_total = input_tokens + output_tokens
                 provider_id = record.provider_id or "unknown"
                 provider_model = record.provider_model or "Unknown"
 
@@ -534,7 +538,10 @@ class StatService:
                     trend_by_provider[provider_id][bucket_ts] += token_total
                     total_by_provider[provider_id] += token_total
                     if record.umo:
-                        total_by_umo[record.umo] += token_total
+                        usage = usage_by_umo[record.umo]
+                        usage.input_other += uncached_input
+                        usage.input_cached += cached_input
+                        usage.output += output_tokens
                     total_by_bucket[bucket_ts] += token_total
                     range_total_tokens += token_total
                     range_input_tokens += input_tokens
@@ -557,7 +564,7 @@ class StatService:
                     if record.duration > 0:
                         range_duration_total_ms += record.duration * 1000
                         range_duration_samples += 1
-                        range_total_output_tokens += record.token_output or 0
+                        range_total_output_tokens += output_tokens
 
                 if created_at_local >= today_start_local:
                     today_total_calls += 1
@@ -619,24 +626,48 @@ class StatService:
                 if platform_id and platform_type:
                     platform_type_by_id[str(platform_id)] = str(platform_type)
             alias_map = build_umo_alias_map(
-                await self.db_helper.get_umo_aliases(list(total_by_umo))
+                await self.db_helper.get_umo_aliases(list(usage_by_umo))
             )
+            webchat_session_ids = {
+                umo.rsplit("!", 1)[-1]
+                for umo in usage_by_umo
+                if umo.startswith("webchat:") and "!" in umo
+            }
+            webchat_sessions = await self.db_helper.get_platform_sessions_by_ids(
+                list(webchat_session_ids)
+            )
+            webchat_titles = {
+                build_webchat_unified_msg_origin(session): (
+                    session.display_name or ""
+                ).strip()
+                for session in webchat_sessions
+                if session.platform_id == "webchat"
+            }
             range_by_umo_data = []
-            for umo, tokens in sorted(
-                total_by_umo.items(),
-                key=lambda item: item[1],
+            for umo, usage in sorted(
+                usage_by_umo.items(),
+                key=lambda item: item[1].total,
                 reverse=True,
             ):
-                alias_info = serialize_umo_alias(alias_map.get(umo), umo)
+                platform_id = umo.split(":", 1)[0]
+                display_name = (
+                    webchat_titles.get(umo, "")
+                    if platform_id == "webchat"
+                    else serialize_umo_alias(alias_map.get(umo), umo)["display_name"]
+                )
                 range_by_umo_data.append(
                     {
                         "umo": umo,
-                        "display_name": alias_info["display_name"],
+                        "display_name": display_name,
                         "platform_type": platform_type_by_id.get(
-                            umo.split(":", 1)[0],
-                            umo.split(":", 1)[0],
+                            platform_id, platform_id
                         ),
-                        "tokens": tokens,
+                        "tokens": usage.total,
+                        "input_tokens": usage.input,
+                        "output_tokens": usage.output,
+                        "cache_hit_rate": (
+                            usage.input_cached / usage.input if usage.input else None
+                        ),
                     }
                 )
 

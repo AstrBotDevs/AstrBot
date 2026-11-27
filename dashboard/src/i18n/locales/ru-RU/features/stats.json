@@ -71,7 +71,8 @@
   },
   "sessionRanking": {
     "title": "{range} топ-10 сессий по использованию моделей",
-    "openConversation": "Открыть диалог"
+    "openConversation": "Открыть диалог",
+    "tokenBreakdown": "Ввод {input} (из кеша {cache}), вывод {output}"
   },
   "empty": {
     "platformStats": "Статистика сообщений по платформам отсутствует.",

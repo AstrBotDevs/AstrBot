@@ -1,6 +1,6 @@
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
@@ -12,6 +12,7 @@ from astrbot.core.astr_agent_runtime.computer.process_sandbox import (
     SandboxRunResult,
     SandboxTimeoutError,
 )
+from astrbot.core.db.po import ChatRequestStat
 from astrbot.dashboard.services.stat_service import StatService
 
 
@@ -230,7 +231,7 @@ async def test_get_stat_empty_window(temp_db):
 
 @pytest.mark.asyncio
 async def test_provider_token_ranking_includes_umo_display_names(temp_db):
-    """UMO token rankings should prefer aliases and fall back to raw identifiers."""
+    """Aggregate historical and request usage per session with display names."""
     aliased_umo = "qq:GroupMessage:group-1"
     raw_umo = "webchat:FriendMessage:session-2"
     await temp_db.insert_provider_stat(
@@ -260,6 +261,20 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
         auto_name="研发群",
         user_alias="产品讨论群",
     )
+    temp_db.chat_usage_writer.enqueue(
+        ChatRequestStat(
+            created_at=datetime.now(timezone.utc),
+            umo=aliased_umo,
+            provider_id="provider-1",
+            provider_model="model-1",
+            status="completed",
+            token_input_other=15,
+            token_input_cached=1,
+            token_output=4,
+            duration=0,
+        )
+    )
+    await temp_db.chat_usage_writer.flush()
 
     service = _make_service(temp_db)
     service.config = {
@@ -267,8 +282,8 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
     }
     result = await service.get_provider_token_stats(1)
 
-    assert result["range_total_calls"] == 2
-    assert result["range_success_rate"] == 0.5
+    assert result["range_total_calls"] == 3
+    assert result["range_success_rate"] == pytest.approx(2 / 3)
     assert result["range_avg_ttft_ms"] == 250
     assert result["range_avg_duration_ms"] == 3000
     assert result["range_avg_tpm"] == 60
@@ -277,12 +292,18 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
             "umo": aliased_umo,
             "display_name": "产品讨论群",
             "platform_type": "qq_official",
-            "tokens": 12,
+            "tokens": 32,
+            "input_tokens": 23,
+            "output_tokens": 9,
+            "cache_hit_rate": pytest.approx(5 / 23),
         },
         {
             "umo": raw_umo,
-            "display_name": raw_umo,
+            "display_name": "",
             "platform_type": "webchat",
             "tokens": 3,
+            "input_tokens": 2,
+            "output_tokens": 1,
+            "cache_hit_rate": 0.5,
         },
     ]

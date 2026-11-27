@@ -162,7 +162,7 @@
           </section>
         </div>
 
-        <section class="stat-card provider-list-card">
+        <section class="stat-card provider-list-card session-ranking">
           <div class="card-head compact">
             <div>
               <div class="section-title">{{ t('sessionRanking.title', { range: rangeLabel }) }}</div>
@@ -172,7 +172,7 @@
             <div
               v-for="item in rangeUmoRanking"
               :key="item.umo"
-              class="provider-row"
+              class="provider-row session-usage-row"
             >
               <div class="provider-identity provider-identity--umo">
                 <img
@@ -236,7 +236,10 @@
                   <span>{{ t('sessionRanking.openConversation') }}</span>
                 </v-tooltip>
               </div>
-              <strong>{{ formatNumber(item.tokens) }}</strong>
+              <div class="session-usage-summary">
+                <strong>{{ formatNumber(item.tokens) }}</strong>
+                <span v-if="item.tokenBreakdown" class="session-usage-breakdown">{{ item.tokenBreakdown }}</span>
+              </div>
             </div>
           </div>
           <div v-else class="empty-state">{{ t('empty.sessionCalls', { range: rangeLabel }) }}</div>
@@ -253,6 +256,7 @@ import { Check, Copy, MessageCircle, MessageSquareText } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useTheme } from 'vuetify'
+import type { StatsSessionTokenUsage } from '@/api/generated/openapi-v1'
 import { statsApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { copyToClipboard } from '@/utils/clipboard'
@@ -300,13 +304,6 @@ interface ProviderRankingItem {
   tokens: number
 }
 
-interface UmoRankingItem {
-  umo: string
-  display_name: string
-  platform_type: string
-  tokens: number
-}
-
 interface ProviderTokenStatsResponse {
   days: TokenRange
   trend: {
@@ -321,7 +318,7 @@ interface ProviderTokenStatsResponse {
   range_success_rate: number
   range_cache_hit_rate: number | null
   range_by_provider: ProviderRankingItem[]
-  range_by_umo: UmoRankingItem[]
+  range_by_umo: StatsSessionTokenUsage[]
   today_total_tokens: number
   today_total_calls: number
   today_by_provider: ProviderRankingItem[]
@@ -362,6 +359,10 @@ let isUnmounted = false
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.value).format(value)
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return value == null ? '—' : `${(value * 100).toFixed(1)}%`
 }
 
 function formatCompactNumber(value: number): string {
@@ -551,7 +552,17 @@ const rangeProviderRanking = computed(() => providerStats.value?.range_by_provid
 const rangeUmoRanking = computed(() =>
   (providerStats.value?.range_by_umo ?? []).slice(0, 10).map((item) => ({
     ...item,
-    icon: getPlatformIcon(item.platform_type)
+    display_name: item.display_name || (item.platform_type === 'webchat'
+      ? globalT('features.conversation.status.noTitle')
+      : item.umo),
+    icon: getPlatformIcon(item.platform_type),
+    tokenBreakdown: item.input_tokens == null || item.output_tokens == null
+      ? ''
+      : t('sessionRanking.tokenBreakdown', {
+        input: formatNumber(item.input_tokens),
+        cache: formatPercent(item.cache_hit_rate),
+        output: formatNumber(item.output_tokens)
+      })
   }))
 )
 
@@ -571,14 +582,10 @@ const rangeSuccessRateLabel = computed(() => {
   if (!(providerStats.value?.range_total_calls ?? 0)) {
     return '—'
   }
-  const rate = providerStats.value?.range_success_rate ?? 0
-  return `${(rate * 100).toFixed(1)}%`
+  return formatPercent(providerStats.value?.range_success_rate ?? 0)
 })
 
-const rangeCacheHitRateLabel = computed(() => {
-  const rate = providerStats.value?.range_cache_hit_rate
-  return rate == null ? '—' : `${(rate * 100).toFixed(1)}%`
-})
+const rangeCacheHitRateLabel = computed(() => formatPercent(providerStats.value?.range_cache_hit_rate))
 
 const platformRanking = computed(() =>
   [...(baseStats.value?.platform ?? [])]
@@ -1138,6 +1145,39 @@ onBeforeUnmount(() => {
 
 .provider-identity--umo {
   flex: 1 1 auto;
+}
+
+.session-ranking {
+  container-type: inline-size;
+}
+
+.session-usage-summary {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-inline-start: auto;
+  display: grid;
+  gap: 2px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-usage-breakdown {
+  color: var(--stats-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 30rem) {
+  .session-usage-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .session-usage-row .provider-identity--umo {
+    flex-basis: 100%;
+  }
 }
 
 .platform-icon {

@@ -725,6 +725,25 @@ export type StatsResourceUsage = {
     percent: number;
 };
 
+export type StatsSessionTokenUsage = {
+    umo: string;
+    display_name: string;
+    platform_type: string;
+    /**
+     * Total input and output tokens.
+     */
+    tokens: number;
+    /**
+     * Input tokens including cached tokens.
+     */
+    input_tokens: number;
+    output_tokens: number;
+    /**
+     * Cached input tokens divided by total input tokens, or null if there are no input tokens.
+     */
+    cache_hit_rate: (number) | null;
+};
+
 export type StatsSystemResources = {
     uptime_seconds: number;
     cpu_percent: number;
@@ -3562,7 +3581,15 @@ export type GetProviderTokenStatsData = {
     };
 };
 
-export type GetProviderTokenStatsResponse = (SuccessEnvelope);
+export type GetProviderTokenStatsResponse = ((SuccessEnvelope & {
+    data?: {
+        /**
+         * Session usage in descending order of total tokens.
+         */
+        range_by_umo: Array<StatsSessionTokenUsage>;
+        [key: string]: unknown | StatsSessionTokenUsage;
+    };
+}));
 
 export type GetProviderTokenStatsError = unknown;
 

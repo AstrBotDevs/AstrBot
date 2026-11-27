@@ -4657,7 +4657,24 @@ paths:
             minimum: 1
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Provider token usage and per-session totals for the selected range
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: true
+                        required: [range_by_umo]
+                        properties:
+                          range_by_umo:
+                            type: array
+                            description: Session usage in descending order of total tokens.
+                            items:
+                              $ref: "#/components/schemas/StatsSessionTokenUsage"
 
   /api/v1/stats/version:
     get:
@@ -6016,6 +6033,27 @@ components:
         active_sessions:
           type: integer
           minimum: 0
+    StatsSessionTokenUsage:
+      type: object
+      required: [umo, display_name, platform_type, tokens, input_tokens, output_tokens, cache_hit_rate]
+      properties:
+        umo:
+          type: string
+        display_name:
+          type: string
+        platform_type:
+          type: string
+        tokens:
+          type: integer
+          description: Total input and output tokens.
+        input_tokens:
+          type: integer
+          description: Input tokens including cached tokens.
+        output_tokens:
+          type: integer
+        cache_hit_rate:
+          type: [number, "null"]
+          description: Cached input tokens divided by total input tokens, or null if there are no input tokens.
     BotCleanupTarget:
       type: string
       enum: [custom_rules, preferences, routing, cron_jobs, conversations, message_history, traces, stats]

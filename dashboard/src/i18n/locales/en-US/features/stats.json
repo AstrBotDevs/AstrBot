@@ -71,7 +71,8 @@
   },
   "sessionRanking": {
     "title": "{range} Session Model Usage Top 10",
-    "openConversation": "View conversation"
+    "openConversation": "View conversation",
+    "tokenBreakdown": "{input} input ({cache} cached), {output} output"
   },
   "empty": {
     "platformStats": "No platform message statistics available.",

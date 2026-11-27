@@ -71,7 +71,8 @@
   },
   "sessionRanking": {
     "title": "{range}のセッション別モデル使用量上位 10 件",
-    "openConversation": "会話を見る"
+    "openConversation": "会話を見る",
+    "tokenBreakdown": "入力 {input}（キャッシュ {cache}）、出力 {output}"
   },
   "empty": {
     "platformStats": "プラットフォーム別メッセージ統計データはありません。",

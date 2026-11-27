@@ -71,7 +71,8 @@
   },
   "sessionRanking": {
     "title": "{range}会话模型用量 Top 10",
-    "openConversation": "查看对话"
+    "openConversation": "查看对话",
+    "tokenBreakdown": "{input} 输入（{cache} 缓存），{output} 输出"
   },
   "empty": {
     "platformStats": "当前没有平台消息统计数据。",
