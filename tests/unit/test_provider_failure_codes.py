@@ -47,6 +47,11 @@ from astrbot.core.llm_error_messages import classify_provider_failure
             "provider_error",
         ),
         ("All chat models failed: BadRequestError: Error code: 4013", "provider_error"),
+        (
+            "All chat models failed: FileNotFoundError: [Errno 2] "
+            "No such file or directory: 'data/temp/x.jpg'",
+            "provider_error",
+        ),
         ("All available chat models are unavailable.", "provider_error"),
         ("", "provider_error"),
     ],

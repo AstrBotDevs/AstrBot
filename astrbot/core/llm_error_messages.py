@@ -93,7 +93,7 @@ _PROVIDER_FAILURE_CODES = (
     ),
     (
         "providerModelNotFound",
-        re.compile(r"NotFoundError|Error code: 404\b", re.IGNORECASE),
+        re.compile(r"\bNotFoundError\b|Error code: 404\b", re.IGNORECASE),
     ),
 )
 
