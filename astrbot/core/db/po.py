@@ -61,7 +61,10 @@ class PlatformStat(SQLModel, table=True):
 
 
 class ProviderStat(TimestampMixin, SQLModel, table=True):
-    """Deprecated per-turn statistics retained for historical totals and backups."""
+    """Deprecated per-turn statistics retained for historical totals and backups.
+
+    See https://github.com/AstrBotDevs/AstrBot/issues/11400 for the migration plan.
+    """
 
     __tablename__: str = "provider_stats"
 
