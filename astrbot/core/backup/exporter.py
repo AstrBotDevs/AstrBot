@@ -400,7 +400,7 @@ class AstrBotExporter:
                             # A BaseException escaping here would otherwise jump over the
                             # partial-file removal below, leaving an unusable ZIP behind.
                             open_error = e
-                            logger.warning(f"打开备份归档失败: {e}")
+                            logger.warning(f"Failed to open backup archive: {e}")
 
                 if zf is not None:
                     # Close the archive on its own worker. The close is submitted after the
@@ -455,7 +455,9 @@ class AstrBotExporter:
                     try:
                         os.remove(zip_path)
                     except OSError as remove_error:
-                        logger.warning(f"清理残缺备份文件失败: {remove_error}")
+                        logger.warning(
+                            f"Failed to clean up partial backup file: {remove_error}"
+                        )
 
             if open_error is not None and export_error is None:
                 # The archive could not be created and no other error is propagating. This
@@ -468,7 +470,9 @@ class AstrBotExporter:
                 # The archive could not be finalised, so it is unopenable. Reporting
                 # success here would tell the caller a corrupt backup was written, which
                 # is the worst outcome for a backup feature: this is an export failure.
-                logger.error(f"备份归档收尾失败，导出按失败处理: {close_error}")
+                logger.error(
+                    f"Failed to finalize backup archive; marking export as failed: {close_error}"
+                )
                 if export_error is not None:
                     # Keep whatever was already in flight reachable as the cause.
                     raise close_error from export_error
