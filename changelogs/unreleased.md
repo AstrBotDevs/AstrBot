@@ -62,3 +62,8 @@
 - Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
 - `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
 - Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
+
+### ChatUI appearance / ChatUI 外观
+
+- 机器人回复的头像改用 AstrBot 标志；回复进行中时标志播放动画（小星环绕、金蓝交替），静止时仍是原来的标志，系统开启减少动态效果时不播放。
+- Bot replies use the AstrBot mark as their avatar. While a reply is in progress the mark animates (the small star circles the large one, gold and blue take turns); at rest it is the original mark, and it stays still when the system asks for reduced motion.

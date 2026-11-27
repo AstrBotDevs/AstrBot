@@ -17,7 +17,10 @@
           class="bot-avatar"
           :size="avatarSize"
         >
-          <span class="bot-avatar-symbol" aria-hidden="true">✦</span>
+          <ChatUILogo
+            class="bot-avatar-logo"
+            :animated="isMessageStreaming(msg, msgIndex)"
+          />
         </v-avatar>
 
         <div class="message-stack">
@@ -576,6 +579,7 @@ import type {
 } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
+import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -1154,15 +1158,10 @@ function formatDuration(seconds: number) {
   user-select: none;
 }
 
-.bot-avatar-symbol {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 30px;
-  margin-top: -2px;
-  line-height: 0;
+.bot-avatar-logo {
+  width: 30px;
+  height: 30px;
   pointer-events: none;
-  user-select: none;
 }
 
 .message-bubble {
@@ -1485,8 +1484,9 @@ function formatDuration(seconds: number) {
   max-width: 78%;
 }
 
-.variant-thread .bot-avatar-symbol {
-  font-size: 24px;
+.variant-thread .bot-avatar-logo {
+  width: 24px;
+  height: 24px;
 }
 
 .variant-thread .from-bot .bot-avatar {
