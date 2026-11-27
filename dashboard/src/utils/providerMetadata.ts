@@ -2,6 +2,8 @@ export interface ProviderModelMetadata {
   modalities?: { input?: string[] }
   tool_call?: boolean
   reasoning?: boolean
+  reasoning_efforts?: string[]
+  reasoning_off_value?: string
   limit?: { context?: number }
 }
 

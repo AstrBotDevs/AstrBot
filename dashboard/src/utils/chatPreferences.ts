@@ -17,6 +17,8 @@ export interface WorkbenchLayout {
 export interface ChatPreferences {
   global: {
     provider?: { providerId: string; modelName: string };
+    /** Reasoning effort picked manually in the chat input. */
+    reasoningEffort?: string;
     configId?: string;
     transportMode?: string;
     sttProvider?: string;

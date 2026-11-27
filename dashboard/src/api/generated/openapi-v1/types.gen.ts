@@ -92,7 +92,16 @@ export type ChatFlags = {
      * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
      */
     enable_reasoning?: boolean;
+    /**
+     * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. If omitted or invalid, WebChat leaves the provider's reasoning settings unchanged.
+     */
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 };
+
+/**
+ * Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. If omitted or invalid, WebChat leaves the provider's reasoning settings unchanged.
+ */
+export type reasoning_effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type ChatMessagePatchRequest = {
     content: {
@@ -1554,7 +1563,16 @@ export type GetChatSessionData = {
     };
 };
 
-export type GetChatSessionResponse = (SuccessEnvelope);
+export type GetChatSessionResponse = ((SuccessEnvelope & {
+    data?: {
+        agent_runner_type: string;
+        /**
+         * Effective chat provider ID, or an empty string when unavailable.
+         */
+        default_provider_id: string;
+        [key: string]: unknown | string;
+    };
+}));
 
 export type GetChatSessionError = unknown;
 
@@ -1641,7 +1659,16 @@ export type GetChatThreadData = {
     };
 };
 
-export type GetChatThreadResponse = (SuccessEnvelope);
+export type GetChatThreadResponse = ((SuccessEnvelope & {
+    data?: {
+        agent_runner_type: string;
+        /**
+         * Effective chat provider ID, or an empty string when unavailable.
+         */
+        default_provider_id: string;
+        [key: string]: unknown | string;
+    };
+}));
 
 export type GetChatThreadError = unknown;
 

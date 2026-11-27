@@ -88,12 +88,20 @@ const props = defineProps<{
   isDark: boolean;
   deleting?: boolean;
   getProviderSelection: () => { providerId: string; modelName: string };
+  getReasoningEffort?: (providerId: string) => string | null;
 }>();
 
 const emit = defineEmits<{
   configureModels: [];
   "update:modelValue": [value: boolean];
   delete: [thread: ChatThread];
+  configResolved: [
+    payload: {
+      threadId: string;
+      agentRunnerType: string;
+      defaultProviderId: string;
+    },
+  ];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -149,7 +157,21 @@ function close() {
 async function loadThread(threadId: string) {
   try {
     const response = await chatApi.getThread(threadId);
-    const history = response.data?.data?.history || [];
+    const data = response.data?.data as
+      | {
+          history?: any[];
+          agent_runner_type?: string;
+          default_provider_id?: string;
+        }
+      | undefined;
+    if (data && typeof data.default_provider_id === "string") {
+      emit("configResolved", {
+        threadId,
+        agentRunnerType: data.agent_runner_type || "astrbot",
+        defaultProviderId: data.default_provider_id,
+      });
+    }
+    const history = data?.history || [];
     messages.value = history.map(normalizeRecord);
     scrollToBottom();
   } catch (error) {
@@ -200,7 +222,11 @@ async function send() {
         },
         body: JSON.stringify({
           message: [{ type: "plain", text }],
-          flags: buildChatRequestFlags(),
+          flags: buildChatRequestFlags(
+            true,
+            true,
+            props.getReasoningEffort?.(selection.providerId),
+          ),
           locale: locale.value,
           selected_provider: selection.providerId,
           selected_model: selection.modelName,
@@ -264,7 +290,11 @@ async function handleButtonClick(payload: {
               source_message_id: payload.message.id,
             },
           ],
-          flags: buildChatRequestFlags(),
+          flags: buildChatRequestFlags(
+            true,
+            true,
+            props.getReasoningEffort?.(""),
+          ),
         }),
       },
     );
@@ -408,6 +438,13 @@ function processPayload(
   }
 
   if (type === "end") {
+    if (normalized.thread_id) {
+      emit("configResolved", {
+        threadId: normalized.thread_id,
+        agentRunnerType: normalized.agent_runner_type,
+        defaultProviderId: normalized.default_provider_id,
+      });
+    }
     markMessageStarted(botRecord);
     return;
   }

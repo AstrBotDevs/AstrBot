@@ -11,12 +11,14 @@ export type TransportMode = "sse" | "websocket";
 export function buildChatRequestFlags(
   enableStreaming = true,
   enableReasoning = true,
+  reasoningEffort?: string | null,
 ) {
   return {
     enable_inline_genui: true,
     enable_default_system_prompt: true,
     enable_streaming: enableStreaming,
     enable_reasoning: enableReasoning,
+    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
   };
 }
 
@@ -177,6 +179,8 @@ interface UseMessagesOptions {
   currentSessionId: Ref<string>;
   onSessionsChanged?: () => Promise<void> | void;
   onStreamUpdate?: (sessionId: string) => void;
+  /** Reasoning effort to send for a provider, or null when unsupported. */
+  reasoningEffortFor?: (providerId: string) => string | null;
 }
 
 export function useMessages(options: UseMessagesOptions) {
@@ -417,6 +421,7 @@ export function useMessages(options: UseMessagesOptions) {
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
       }
+      return payload;
     } catch (error) {
       if (sessionLoadEpochs[sessionId] !== epoch) return;
       console.error("Failed to load session messages:", error);
@@ -788,7 +793,11 @@ export function useMessages(options: UseMessagesOptions) {
           body: JSON.stringify({
             selected_provider: selectedProvider,
             selected_model: selectedModel,
-            flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+            flags: buildChatRequestFlags(
+              enableStreaming,
+              enableReasoning,
+              options.reasoningEffortFor?.(selectedProvider),
+            ),
             locale: locale.value,
           }),
           signal: abort.signal,
@@ -915,7 +924,11 @@ export function useMessages(options: UseMessagesOptions) {
       body: JSON.stringify({
         session_id: sessionId,
         message: parts.map(partToPayload),
-        flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+        flags: buildChatRequestFlags(
+          enableStreaming,
+          enableReasoning,
+          options.reasoningEffortFor?.(selectedProvider),
+        ),
         locale: locale.value,
         selected_provider: selectedProvider,
         selected_model: selectedModel,
@@ -1074,7 +1087,11 @@ export function useMessages(options: UseMessagesOptions) {
       session_id: sessionId,
       message_id: messageId,
       message: parts.map(partToPayload),
-      flags: buildChatRequestFlags(enableStreaming, enableReasoning),
+      flags: buildChatRequestFlags(
+        enableStreaming,
+        enableReasoning,
+        options.reasoningEffortFor?.(selectedProvider),
+      ),
       locale: locale.value,
       selected_provider: selectedProvider,
       selected_model: selectedModel,

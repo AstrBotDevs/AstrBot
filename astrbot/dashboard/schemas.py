@@ -151,6 +151,8 @@ class ChatFlags(BaseModel):
     enable_default_system_prompt: bool = True
     enable_streaming: bool = True
     enable_reasoning: bool = True
+    # Invalid values are tolerated here and ignored during flag resolution.
+    reasoning_effort: str | None = None
 
 
 class ChatMessageRegenerateRequest(OpenModel):

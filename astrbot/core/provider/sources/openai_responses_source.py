@@ -298,6 +298,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         if system_prompt:
             payloads["instructions"] = system_prompt
 
+        if effort := (kwargs.get("extra_body") or {}).get("reasoning_effort"):
+            payloads["reasoning_effort"] = effort
         return payloads, context_query
 
     async def _query(
@@ -321,6 +323,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
+        payloads = dict(payloads)
+        request_effort = payloads.pop("reasoning_effort", None)
         if tools:
             response_tools = []
             for tool in tools.openai_schema():
@@ -343,7 +347,12 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         if max_tokens is not None and "max_output_tokens" not in extra_body:
             extra_body["max_output_tokens"] = max_tokens
         reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if reasoning_effort is not None and "reasoning" not in extra_body:
+        if request_effort is not None:
+            extra_body["reasoning"] = {
+                **(extra_body.get("reasoning") or {}),
+                "effort": request_effort,
+            }
+        elif reasoning_effort is not None and "reasoning" not in extra_body:
             extra_body["reasoning"] = {"effort": reasoning_effort}
         extra_body.pop("previous_response_id", None)
         extra_body.pop("conversation", None)
@@ -399,6 +408,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
+        payloads = dict(payloads)
+        request_effort = payloads.pop("reasoning_effort", None)
         if tools:
             response_tools = []
             for tool in tools.openai_schema():
@@ -421,7 +432,12 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         if max_tokens is not None and "max_output_tokens" not in extra_body:
             extra_body["max_output_tokens"] = max_tokens
         reasoning_effort = extra_body.pop("reasoning_effort", None)
-        if reasoning_effort is not None and "reasoning" not in extra_body:
+        if request_effort is not None:
+            extra_body["reasoning"] = {
+                **(extra_body.get("reasoning") or {}),
+                "effort": request_effort,
+            }
+        elif reasoning_effort is not None and "reasoning" not in extra_body:
             extra_body["reasoning"] = {"effort": reasoning_effort}
         extra_body.pop("previous_response_id", None)
         extra_body.pop("conversation", None)

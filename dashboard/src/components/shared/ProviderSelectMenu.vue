@@ -454,9 +454,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useDisplay } from "vuetify";
 import { providerApi } from "@/api/v1";
+import { useProviderCatalog, type ProviderConfig } from "@/composables/useProviderCatalog";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import { useProviderModelConfigDialog } from "@/composables/useProviderModelConfigDialog";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -466,28 +467,14 @@ import { useToast } from "@/utils/toast";
 import {
   formatContextLimit,
   providerCapabilityBadges,
-  type ProviderModelMetadata,
-  type ProviderMetadataSource,
 } from "@/utils/providerMetadata";
-
-interface ProviderConfig extends ProviderMetadataSource {
-  id: string;
-  model?: string;
-  type?: string;
-  provider_type?: string;
-  provider_source_id?: string;
-  enable?: boolean;
-  api_base?: string;
-  embedding_api_base?: string;
-  rerank_api_base?: string;
-  gemini_tts_api_base?: string;
-}
 
 const props = withDefaults(
   defineProps<{
     modelValue?: string | string[];
     fallbackModel?: string;
     providerType?: string;
+    catalog?: ReturnType<typeof useProviderCatalog>;
     variant?: "config" | "input" | "header";
     allowEmpty?: boolean;
     multiple?: boolean;
@@ -511,8 +498,8 @@ const { tm: sharedTm } = useModuleI18n("core.shared");
 const { tm: providerTm } = useModuleI18n("features/provider");
 const { success: toastSuccess, error: toastError } = useToast();
 
-const providerConfigs = shallowRef<ProviderConfig[]>([]);
-const modelMetadata = shallowRef<Record<string, ProviderModelMetadata>>({});
+const { providers: providerConfigs, modelMetadata, load } =
+  props.catalog ?? useProviderCatalog();
 const testingProviderIds = ref<string[]>([]);
 const searchQuery = ref("");
 const menuOpen = ref(false);
@@ -681,15 +668,7 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await providerApi.listByProviderType(props.providerType);
-    if (response.data.status === "ok") {
-      modelMetadata.value = (response.data.model_metadata || {}) as Record<
-        string,
-        ProviderModelMetadata
-      >;
-      providerConfigs.value = (
-        (response.data.data || []) as unknown as ProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+    if (await load(props.providerType)) {
       providersLoaded.value = true;
       if (
         selectedSourceId.value &&
@@ -702,7 +681,6 @@ async function loadProviderConfigs(force = false) {
     }
   } catch (error) {
     console.error("Failed to load provider list:", error);
-    if (!providersLoaded.value) providerConfigs.value = [];
   } finally {
     loadingProviders.value = false;
   }

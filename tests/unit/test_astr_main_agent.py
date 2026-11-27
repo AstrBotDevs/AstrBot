@@ -2344,6 +2344,7 @@ class TestBuildMainAgent:
             prompt="describe this",
             image_urls=[valid_image_path],
             model="text-model",
+            reasoning_effort="max",
         )
         mock_context.get_provider_by_id.side_effect = lambda provider_id: (
             image_provider if provider_id == "image-provider" else None
@@ -2380,6 +2381,7 @@ class TestBuildMainAgent:
         assert result.provider is image_provider
         assert result.provider_request.image_urls == [valid_image_path]
         assert result.provider_request.model is None
+        assert result.provider_request.reasoning_effort is None
         assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
         assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
 

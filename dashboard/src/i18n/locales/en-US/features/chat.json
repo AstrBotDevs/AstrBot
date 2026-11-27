@@ -25,6 +25,19 @@
     "dropToUpload": "Drop files to upload",
     "stopGenerating": "Stop generating"
   },
+  "reasoningEffort": {
+    "label": "Reasoning effort",
+    "levels": {
+      "default": "Provider default",
+      "none": "Off",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    }
+  },
   "message": {
     "user": "User",
     "assistant": "Assistant",
@@ -286,15 +299,13 @@
     "empty": "No workbench views are registered. Enable a plugin that provides one.",
     "loadError": "Could not load workbench views.",
     "retry": "Retry",
-
     "title": "Workbench",
     "openView": "Open in workbench",
     "hide": "Hide workbench",
     "expand": "Expand workbench",
     "restore": "Restore panel size",
     "resize": "Resize workbench",
-    "closeTab": "Close {title}",
-    "resize": "Resize workbench"
+    "closeTab": "Close {title}"
   },
   "executionError": {
     "noModel": {

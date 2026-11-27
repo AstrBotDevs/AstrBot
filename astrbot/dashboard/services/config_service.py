@@ -1601,18 +1601,35 @@ class ProviderConfigService:
             for provider in self.config.get("provider", [])
             if provider.get("provider_type") != "agent_runner"
         ]
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+        from astrbot.core.utils.llm_metadata import resolve_model_metadata
 
+        provider_sources = self.config.get("provider_sources", [])
+        sources_by_id = {
+            source.get("id"): source
+            for source in provider_sources
+            if isinstance(source, dict) and source.get("id")
+        }
         model_metadata = {}
         for provider in providers:
             self._strip_legacy_reasoning_metadata(provider)
             model_id = provider.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
+            if isinstance(model_id, str):
+                source = sources_by_id.get(provider.get("provider_source_id")) or {}
+                resolved = resolve_model_metadata(
+                    model_id,
+                    provider=provider.get("provider") or source.get("provider"),
+                    adapter_type=provider.get("type") or source.get("type"),
+                    api_base=provider.get("api_base", source.get("api_base")),
+                )
+                if resolved is not None:
+                    model_metadata[model_id] = resolved
+                    provider_id = provider.get("id")
+                    if isinstance(provider_id, str) and provider_id:
+                        model_metadata[f"provider:{provider_id}"] = resolved
         return {
             "config_schema": config_schema,
             "providers": providers,
-            "provider_sources": self.config.get("provider_sources", []),
+            "provider_sources": provider_sources,
             "model_metadata": model_metadata,
         }
 
@@ -1856,7 +1873,7 @@ class ProviderConfigService:
         source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+        from astrbot.core.utils.llm_metadata import resolve_model_metadata
 
         provider_type = self._resolve_provider_type(capability)
         providers = []
@@ -1887,8 +1904,18 @@ class ProviderConfigService:
                 provider_response = copy.deepcopy(provider)
             self._strip_legacy_reasoning_metadata(provider_response)
             model_id = provider_response.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
+            if isinstance(model_id, str):
+                resolved = resolve_model_metadata(
+                    model_id,
+                    provider=provider_response.get("provider"),
+                    adapter_type=provider_response.get("type"),
+                    api_base=provider_response.get("api_base"),
+                )
+                if resolved is not None:
+                    model_metadata[model_id] = resolved
+                    provider_id = provider_response.get("id")
+                    if isinstance(provider_id, str) and provider_id:
+                        model_metadata[f"provider:{provider_id}"] = resolved
             providers.append(provider_response)
         return {"providers": providers, "model_metadata": model_metadata}
 
@@ -1922,12 +1949,28 @@ class ProviderConfigService:
             raise ValueError(f"Provider {provider_id} not found")
         provider_response = copy.deepcopy(provider)
         self._strip_legacy_reasoning_metadata(provider_response)
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+        from astrbot.core.utils.llm_metadata import resolve_model_metadata
 
         model_id = provider_response.get("model")
         model_metadata = {}
-        if isinstance(model_id, str) and model_id in LLM_METADATAS:
-            model_metadata[model_id] = LLM_METADATAS[model_id]
+        if isinstance(model_id, str):
+            source_id = provider_response.get("provider_source_id")
+            source = (
+                self._find_provider_source(source_id)
+                if isinstance(source_id, str) and source_id
+                else None
+            ) or {}
+            resolved = resolve_model_metadata(
+                model_id,
+                provider=provider_response.get("provider") or source.get("provider"),
+                adapter_type=provider_response.get("type") or source.get("type"),
+                api_base=provider_response.get("api_base", source.get("api_base")),
+            )
+            if resolved is not None:
+                model_metadata[model_id] = resolved
+                pid = provider_response.get("id")
+                if isinstance(pid, str) and pid:
+                    model_metadata[f"provider:{pid}"] = resolved
         return {"provider": provider_response, "model_metadata": model_metadata}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:

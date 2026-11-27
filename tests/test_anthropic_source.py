@@ -541,3 +541,108 @@ async def test_query_concatenates_multiple_text_blocks():
     response = await provider._query({"model": "claude-test", "messages": []}, None)
 
     assert response.completion_text == "Let me search. The answer is 42."
+
+
+@pytest.mark.asyncio
+async def test_anthropic_maps_request_level_reasoning_effort_to_output_config():
+    custom_extra_body = {
+        "output_config": {
+            "effort": "low",
+            "format": {"type": "json_schema", "schema": {"type": "object"}},
+        },
+        "thinking": {"type": "enabled", "budget_tokens": 1024},
+    }
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-opus-4-8",
+            "key": ["test-key"],
+            "anth_thinking_config": {"type": "adaptive", "effort": "low"},
+            "custom_extra_body": custom_extra_body,
+        },
+        provider_settings={},
+    )
+    captured_calls: list[dict] = []
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured_calls.append(kwargs)
+            return Message(
+                id="msg_2",
+                content=[TextBlock(text="ok", type="text")],
+                model="claude-opus-4-8",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=5, output_tokens=2),
+            )
+
+    await provider.terminate()
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    resp_high = await provider.text_chat(
+        prompt="hi",
+        extra_body={"reasoning_effort": "xhigh"},
+    )
+    assert resp_high.completion_text == "ok"
+    assert captured_calls[0]["thinking"] == {"type": "adaptive"}
+    assert captured_calls[0]["output_config"] == {
+        "effort": "xhigh",
+        "format": {"type": "json_schema", "schema": {"type": "object"}},
+    }
+    assert "reasoning_effort" not in captured_calls[0]["extra_body"]
+    assert "output_config" not in captured_calls[0]["extra_body"]
+    assert "thinking" not in captured_calls[0]["extra_body"]
+
+    resp_none = await provider.text_chat(
+        prompt="hi",
+        extra_body={"reasoning_effort": "none"},
+    )
+    assert resp_none.completion_text == "ok"
+    assert captured_calls[1]["thinking"] == {"type": "disabled"}
+    assert captured_calls[1]["output_config"] == {
+        "format": {"type": "json_schema", "schema": {"type": "object"}},
+    }
+    assert custom_extra_body["output_config"]["effort"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_opus_4_5_sets_output_config_effort_without_adaptive_thinking():
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-opus-45",
+            "type": "anthropic_chat_completion",
+            "model": "claude-opus-4-5-20251101",
+            "key": ["test-key"],
+        },
+        provider_settings={},
+    )
+    captured: dict = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return Message(
+                id="msg_opus45",
+                content=[TextBlock(text="ok", type="text")],
+                model="claude-opus-4-5-20251101",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=5, output_tokens=2),
+            )
+
+    await provider.terminate()
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    resp = await provider.text_chat(
+        prompt="hi",
+        extra_body={"reasoning_effort": "high"},
+    )
+    assert resp.completion_text == "ok"
+    assert "thinking" not in captured
+    assert captured["output_config"] == {"effort": "high"}
+    assert "reasoning_effort" not in captured["extra_body"]

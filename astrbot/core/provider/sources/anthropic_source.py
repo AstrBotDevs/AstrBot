@@ -163,7 +163,13 @@ class ProviderAnthropic(Provider):
             httpx_module=httpx_module,
         )
 
-    def _apply_thinking_config(self, payloads: dict) -> None:
+    def _apply_thinking_config(
+        self,
+        payloads: dict,
+        *,
+        extra_body: dict | None = None,
+        request_effort: str | None = None,
+    ) -> None:
         thinking_type = self.thinking_config.get("type", "")
         if thinking_type == "adaptive":
             payloads["thinking"] = {"type": "adaptive"}
@@ -178,6 +184,39 @@ class ProviderAnthropic(Provider):
                 "budget_tokens": self.thinking_config.get("budget"),
                 "type": "enabled",
             }
+
+        if not request_effort:
+            return
+
+        # Merge any custom_extra_body output_config (e.g. structured format) into
+        # payloads so request-level effort takes precedence over config-level
+        # custom_extra_body.
+        output_cfg = dict(payloads.get("output_config") or {})
+        if isinstance(extra_body, dict):
+            custom_output = extra_body.pop("output_config", None)
+            if isinstance(custom_output, dict):
+                output_cfg = {**custom_output, **output_cfg}
+
+        model = str(payloads.get("model") or "").lower().rsplit("/", 1)[-1]
+        # Claude Opus 4.5 supports output_config.effort without adaptive thinking.
+        supports_adaptive = not model.startswith("claude-opus-4-5")
+
+        if request_effort == "none":
+            if isinstance(extra_body, dict):
+                extra_body.pop("thinking", None)
+            payloads["thinking"] = {"type": "disabled"}
+            output_cfg.pop("effort", None)
+            if output_cfg:
+                payloads["output_config"] = output_cfg
+            else:
+                payloads.pop("output_config", None)
+        else:
+            if supports_adaptive:
+                if isinstance(extra_body, dict):
+                    extra_body.pop("thinking", None)
+                payloads["thinking"] = {"type": "adaptive"}
+            output_cfg["effort"] = request_effort
+            payloads["output_config"] = output_cfg
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
@@ -527,17 +566,22 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
+        request_payloads = dict(payloads)
+        request_extra_body = request_payloads.pop("extra_body", None)
+        request_effort: str | None = None
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
-                payloads["tools"] = tool_list
-                payloads["tool_choice"] = self._normalize_tool_choice(
-                    payloads.get("tool_choice", "auto")
+                request_payloads["tools"] = tool_list
+                request_payloads["tool_choice"] = self._normalize_tool_choice(
+                    request_payloads.get("tool_choice", "auto")
                 )
 
-        extra_body = self.provider_config.get("custom_extra_body") or {}
-        if not isinstance(extra_body, dict):
-            # An explicit null or malformed custom body carries nothing to merge.
-            extra_body = {}
+        custom_extra = self.provider_config.get("custom_extra_body") or {}
+        extra_body = dict(custom_extra) if isinstance(custom_extra, dict) else {}
+        if request_extra_body:
+            value = request_extra_body.get("reasoning_effort")
+            if isinstance(value, str) and value.strip():
+                request_effort = value.strip().lower()
         # Server-side tools declared in the custom body (e.g. web search on
         # Anthropic-compatible endpoints) must coexist with the registered
         # function tools: extra_body replaces same-named top-level keys,
@@ -546,19 +590,25 @@ class ProviderAnthropic(Provider):
         # the same name instead of duplicating it (the API rejects duplicate
         # tool names).
         custom_tools = extra_body.get("tools")
-        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+        if isinstance(custom_tools, list) and isinstance(
+            request_payloads.get("tools"), list
+        ):
             merged = {}
-            for tool in [*payloads["tools"], *custom_tools]:
+            for tool in [*request_payloads["tools"], *custom_tools]:
                 key = tool.get("name") if isinstance(tool, dict) else None
                 merged[key if key else ("_", id(tool))] = tool
-            payloads["tools"] = list(merged.values())
+            request_payloads["tools"] = list(merged.values())
             extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
 
-        if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
-        self._apply_thinking_config(payloads)
-        self._sanitize_assistant_messages(payloads)
+        if "max_tokens" not in request_payloads:
+            request_payloads["max_tokens"] = 65536
+        self._apply_explicit_prompt_cache_breakpoints(request_payloads)
+        self._apply_thinking_config(
+            request_payloads,
+            extra_body=extra_body,
+            request_effort=request_effort,
+        )
+        self._sanitize_assistant_messages(request_payloads)
 
         try:
             async with chat_request(
@@ -566,7 +616,7 @@ class ProviderAnthropic(Provider):
                 "Anthropic",
                 extra_body.get("model") or payloads.get("model") or self.get_model(),
                 lambda: self.client.messages.create(
-                    **payloads,
+                    **request_payloads,
                     stream=False,
                     extra_body=extra_body,
                     extra_headers=build_conversation_headers(conversation_id),
@@ -652,11 +702,14 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
+        request_payloads = dict(payloads)
+        request_extra_body = request_payloads.pop("extra_body", None)
+        request_effort: str | None = None
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
-                payloads["tools"] = tool_list
-                payloads["tool_choice"] = self._normalize_tool_choice(
-                    payloads.get("tool_choice", "auto")
+                request_payloads["tools"] = tool_list
+                request_payloads["tool_choice"] = self._normalize_tool_choice(
+                    request_payloads.get("tool_choice", "auto")
                 )
 
         # 用于累积工具调用信息
@@ -666,35 +719,44 @@ class ProviderAnthropic(Provider):
         final_tool_calls = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body") or {}
-        if not isinstance(extra_body, dict):
-            extra_body = {}
+        custom_extra = self.provider_config.get("custom_extra_body") or {}
+        extra_body = dict(custom_extra) if isinstance(custom_extra, dict) else {}
+        if request_extra_body:
+            value = request_extra_body.get("reasoning_effort")
+            if isinstance(value, str) and value.strip():
+                request_effort = value.strip().lower()
         # See _query: custom server-side tools must not replace the
         # registered function tools, and a name collision overrides
         # instead of duplicating.
         custom_tools = extra_body.get("tools")
-        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+        if isinstance(custom_tools, list) and isinstance(
+            request_payloads.get("tools"), list
+        ):
             merged = {}
-            for tool in [*payloads["tools"], *custom_tools]:
+            for tool in [*request_payloads["tools"], *custom_tools]:
                 key = tool.get("name") if isinstance(tool, dict) else None
                 merged[key if key else ("_", builtins.id(tool))] = tool
-            payloads["tools"] = list(merged.values())
+            request_payloads["tools"] = list(merged.values())
             extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
         reasoning_content = ""
         reasoning_signature = ""
 
-        if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
-        self._apply_thinking_config(payloads)
-        self._sanitize_assistant_messages(payloads)
+        if "max_tokens" not in request_payloads:
+            request_payloads["max_tokens"] = 65536
+        self._apply_explicit_prompt_cache_breakpoints(request_payloads)
+        self._apply_thinking_config(
+            request_payloads,
+            extra_body=extra_body,
+            request_effort=request_effort,
+        )
+        self._sanitize_assistant_messages(request_payloads)
 
         async with chat_request(
             self,
             "Anthropic",
             extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.messages.stream(
-                **payloads,
+                **request_payloads,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
@@ -887,6 +949,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if isinstance(extra_body := kwargs.get("extra_body"), dict) and extra_body:
+            payloads["extra_body"] = dict(extra_body)
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
@@ -964,6 +1028,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if isinstance(extra_body := kwargs.get("extra_body"), dict) and extra_body:
+            payloads["extra_body"] = dict(extra_body)
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 

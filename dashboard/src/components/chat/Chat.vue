@@ -321,11 +321,15 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :reasoning-effort="currentReasoningEffort.effort"
+            :reasoning-effort-levels="currentReasoningEffort.levels"
             :failed-uploads="failedUploadViews"
             :active-uploads="activeUploadViews"
             :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
+            @update:reasoning-effort="setReasoningEffort"
+            @config-changed="handleChatConfigChanged"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -482,6 +486,8 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :reasoning-effort="currentReasoningEffort.effort"
+            :reasoning-effort-levels="currentReasoningEffort.levels"
             :failed-uploads="failedUploadViews"
             :active-uploads="activeUploadViews"
             :placeholder="
@@ -489,6 +495,8 @@
             "
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
+            @update:reasoning-effort="setReasoningEffort"
+            @config-changed="handleChatConfigChanged"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -589,6 +597,8 @@
       :is-dark="isDark"
       :deleting="deletingThread"
       :get-provider-selection="getSelectedProviderSelection"
+      :get-reasoning-effort="getThreadReasoningEffort"
+      @config-resolved="handleThreadConfigResolved"
       @delete="deleteThread"
       @configure-models="openProviderWorkspace()"
     />
@@ -652,7 +662,7 @@ import {
   SquarePen,
   Trash2,
 } from "@lucide/vue";
-import { chatApi, providerApi } from "@/api/v1";
+import { chatApi, configProfileApi } from "@/api/v1";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ChatToolbarContext from "@/components/chat/ChatToolbarContext.vue";
 import ProjectDialog, {
@@ -669,6 +679,8 @@ import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import ChatWorkbench from "@/components/chat/ChatWorkbench.vue";
 import { workbenchChatKey } from "@/utils/chatViews";
 import { chatPreferences } from "@/utils/chatPreferences";
+import { getStoredSelectedChatConfigId } from "@/utils/chatConfigBinding";
+import { resolveReasoningEffort } from "@/utils/reasoningEffort";
 import { useChatWorkbench } from "@/composables/useChatWorkbench";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
@@ -684,6 +696,7 @@ import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useChatVoice } from "@/composables/useChatVoice";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
+import type { ProviderConfig } from "@/composables/useProviderCatalog";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
@@ -693,12 +706,7 @@ import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import {
-  contextLimit,
-  formatTokenCount,
-  type ProviderModelMetadata,
-  type ProviderMetadataSource,
-} from "@/utils/providerMetadata";
+import { contextLimit, formatTokenCount } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
 import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage";
 
@@ -779,11 +787,6 @@ const { isDragging, dragEvents } = useDragUpload((files) => {
 
 type WorkspaceView = "chat" | "providers";
 
-interface TokenProviderConfig extends ProviderMetadataSource {
-  id: string;
-  enable?: boolean;
-}
-
 const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
@@ -802,8 +805,6 @@ const projectSessionsById = ref<Record<string, Session[]>>({});
 const loadingProjectSessionIds = ref<string[]>([]);
 const loadingSessions = ref(false);
 const draft = ref(readChatDraft(currSessionId.value));
-const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
-const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarContent = ref<HTMLElement | null>(null);
@@ -855,6 +856,10 @@ const threadSelection = reactive<{
 const settingsOpen = ref(false);
 const enableStreaming = ref(true);
 const enableReasoning = ref(true);
+// Persisted manual reasoning effort; it applies only when the model supports it.
+const manualReasoningEffort = ref(
+  chatPreferences().global.reasoningEffort || "",
+);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
 const DRAFT_SAVE_DELAY_MS = 300;
 let activeDraftSessionId = currSessionId.value;
@@ -937,12 +942,19 @@ const {
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
-  onSessionsChanged: getSessions,
+  onSessionsChanged: async () => {
+    await getSessions();
+    if (currSessionId.value) {
+      // Refresh backend-resolved default provider after turns (e.g. /provider command).
+      void syncActiveSessionConfig(currSessionId.value);
+    }
+  },
   onStreamUpdate: (sessionId) => {
     if (sessionId === currSessionId.value && shouldStickToBottom.value) {
       scrollToBottom();
     }
   },
+  reasoningEffortFor: (providerId) => reasoningEffortFor(providerId).requestEffort,
 });
 
 function handleButtonClick(payload: {
@@ -1136,10 +1148,162 @@ function getSelectedProviderSelection() {
 }
 
 const {
+  providerCatalog,
   selectedProviderId: currentProviderId,
   selectedModelName: currentModelName,
   setSelection: setProviderSelection,
 } = useProviderModelSelection();
+const { providers: tokenProviderConfigs, modelMetadata: tokenModelMetadata } =
+  providerCatalog;
+
+interface ChatRunnerConfig {
+  agentRunnerType: string;
+  defaultProviderId: string;
+}
+
+const activeSessionConfig = ref<ChatRunnerConfig | null>(null);
+const threadConfig = ref<ChatRunnerConfig | null>(null);
+let sessionConfigSeq = 0;
+
+async function syncActiveSessionConfig(
+  sessionId: string | null,
+  { loadHistory = false } = {},
+) {
+  const seq = ++sessionConfigSeq;
+  try {
+    if (sessionId) {
+      const data = loadHistory
+        ? await loadSessionMessages(sessionId)
+        : (await chatApi.getSession(sessionId, { page: 1, page_size: 1 })).data?.data;
+      if (seq !== sessionConfigSeq) return;
+      activeSessionConfig.value =
+        typeof data?.default_provider_id === "string"
+          ? {
+              agentRunnerType: data.agent_runner_type || "astrbot",
+              defaultProviderId: data.default_provider_id,
+            }
+          : null;
+      return;
+    }
+
+    // Unsaved new chat: preview the stored config profile until session creation.
+    const confId = getStoredSelectedChatConfigId() || "default";
+    const res = await configProfileApi.get(confId);
+    if (seq !== sessionConfigSeq) return;
+    const config = ((res.data.data as any)?.config || {}) as any;
+    const runtime = config?.agent?.runtime || "astrbot";
+    const rawProviderId =
+      runtime === "astrbot" ? config?.agent?.config?.model?.provider_id : "";
+    activeSessionConfig.value = {
+      agentRunnerType: runtime,
+      defaultProviderId: typeof rawProviderId === "string" ? rawProviderId.trim() : "",
+    };
+  } catch (error) {
+    if (seq !== sessionConfigSeq) return;
+    console.error("Failed to resolve default provider for reasoning effort:", error);
+    activeSessionConfig.value = null;
+  }
+}
+
+function handleChatConfigChanged(payload: {
+  configId: string;
+  agentRunnerType: string;
+  defaultProviderId: string | null;
+  source: "sync" | "user";
+}) {
+  if (currSessionId.value) {
+    // Passive mounts/syncs from opening the "+" menu must not overwrite
+    // backend-resolved session providers (/provider overrides, wildcard routes).
+    if (payload.source === "user") {
+      void syncActiveSessionConfig(currSessionId.value);
+    }
+    return;
+  }
+  ++sessionConfigSeq;
+  activeSessionConfig.value =
+    payload.defaultProviderId === null
+      ? null
+      : {
+          agentRunnerType: payload.agentRunnerType,
+          defaultProviderId: payload.defaultProviderId,
+        };
+}
+
+function handleThreadConfigResolved(payload: {
+  threadId: string;
+  agentRunnerType: string;
+  defaultProviderId: string;
+}) {
+  if (payload.threadId !== activeThread.value?.thread_id) return;
+  threadConfig.value = payload;
+}
+
+function reasoningEffortFor(
+  providerId: string,
+  config = activeSessionConfig.value,
+) {
+  if (!config || !["astrbot", "internal"].includes(config.agentRunnerType.toLowerCase())) {
+    return { levels: [], effort: null, requestEffort: null };
+  }
+  let provider: ProviderConfig | undefined;
+  if (providerId) {
+    provider = tokenProviderConfigs.value.find((item) => item.id === providerId);
+  } else {
+    // Mirror ProviderManager._resolve_using_provider: use the resolved default
+    // provider first, falling back to the first enabled provider when unset.
+    provider =
+      (config.defaultProviderId
+        ? tokenProviderConfigs.value.find(
+            (item) => item.id === config.defaultProviderId,
+          )
+        : undefined) || tokenProviderConfigs.value[0];
+  }
+  const metadata =
+    (provider?.id ? tokenModelMetadata.value[`provider:${provider.id}`] : null) ||
+    (provider?.model ? tokenModelMetadata.value[provider.model] : null);
+  const selection = resolveReasoningEffort(
+    provider, metadata, manualReasoningEffort.value,
+  );
+  const requestEffort =
+    selection.effort === "none"
+      ? metadata?.reasoning_off_value ?? "none"
+      : selection.effort;
+  return { ...selection, requestEffort };
+}
+
+const currentReasoningEffort = computed(() =>
+  reasoningEffortFor(currentProviderId.value),
+);
+
+function getThreadReasoningEffort(providerId: string) {
+  return reasoningEffortFor(providerId, threadConfig.value).requestEffort;
+}
+
+watch(
+  currSessionId,
+  (sessionId) => {
+    ++sessionConfigSeq;
+    activeSessionConfig.value = null;
+    if (!sessionId) void syncActiveSessionConfig(null);
+  },
+  { immediate: true, flush: "sync" },
+);
+
+watch(
+  () => activeThread.value?.thread_id || null,
+  () => {
+    // ThreadPanel loads thread detail immediately and emits config-resolved.
+    threadConfig.value = null;
+  },
+  { flush: "sync" },
+);
+
+function setReasoningEffort(effort: string) {
+  manualReasoningEffort.value = effort;
+  chatPreferences((preferences) => {
+    preferences.global.reasoningEffort = effort;
+  });
+}
 
 function readSessionProviderSelection(sessionId: string) {
   const selection = chatPreferences().sessions[sessionId]?.provider;
@@ -1364,7 +1528,11 @@ function closeSecondaryPanels() {
 }
 
 function showChatWorkspace() {
+  const returningFromProviders = activeWorkspace.value === "providers";
   activeWorkspace.value = "chat";
+  if (returningFromProviders) {
+    void loadTokenProviders();
+  }
 }
 
 async function openProviderWorkspace(type = "chat_completion") {
@@ -1387,14 +1555,7 @@ function syncSelectedTokenProvider() {
 async function loadTokenProviders() {
   syncSelectedTokenProvider();
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
-    if (response.data.status === "ok") {
-      tokenModelMetadata.value = ((response.data as any).model_metadata ||
-        {}) as Record<string, ProviderModelMetadata>;
-      tokenProviderConfigs.value = (
-        (response.data.data || []) as unknown as TokenProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
-    }
+    await providerCatalog.load("chat_completion");
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
   }
@@ -1621,14 +1782,14 @@ async function selectSession(sessionId: string, pushRoute = true) {
   currSessionId.value = sessionId;
   replyTarget.value = null;
   // Enter the loading state before route navigation can render an empty chat.
-  const messagesReady = loadedSessions[sessionId]
-    ? Promise.resolve()
-    : loadSessionMessages(sessionId);
+  const configReady = syncActiveSessionConfig(sessionId, {
+    loadHistory: !loadedSessions[sessionId],
+  });
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
     if (currSessionId.value !== sessionId) return;
   }
-  await messagesReady;
+  await configReady;
   if (currSessionId.value !== sessionId) return;
   const storedSelection = readSessionProviderSelection(sessionId);
   setProviderSelection(
@@ -1671,6 +1832,7 @@ async function sendCurrentMessage(viewText?: string) {
       sessionId = await newSession();
       await nextTick();
       draft.value = draftText;
+      await syncActiveSessionConfig(sessionId);
       if (targetProjectId) {
         await addSessionToProject(sessionId, targetProjectId);
         sessionProjects[sessionId] = targetProject
@@ -2032,7 +2194,7 @@ async function retryCurrentSessionLoad() {
     await loadEarlierWithAnchor();
     return;
   }
-  await loadSessionMessages(sessionId, true, true);
+  await syncActiveSessionConfig(sessionId, { loadHistory: true });
 }
 
 async function deleteThread(thread: ChatThread) {

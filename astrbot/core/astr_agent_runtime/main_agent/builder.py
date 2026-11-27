@@ -202,6 +202,7 @@ async def build_main_agent(
     if selected_provider is not provider:
         provider = selected_provider
         req.model = None
+        req.reasoning_effort = None
         fallbacks = [item for item in fallbacks if item is not provider]
     await prepare_request_images(
         req,

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -53,6 +54,9 @@ async def test_dashboard_session_pages_reach_older_sessions_and_preserve_scope(
     service = object.__new__(OpenApiService)
     service.db = db
     chat_service = object.__new__(ChatService)
+    chat_service._resolve_chat_provider = AsyncMock(
+        return_value={"agent_runner_type": "astrbot", "default_provider_id": ""}
+    )
     chat_service.db = db
     chat_service.platform_history_mgr = PlatformMessageHistoryManager(db)
     chat_service.running_convs = {}

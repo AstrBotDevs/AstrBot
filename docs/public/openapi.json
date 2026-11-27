@@ -1901,7 +1901,7 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/ChatDetail"
           }
         }
       },
@@ -2141,7 +2141,7 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Ok"
+            "$ref": "#/components/responses/ChatDetail"
           }
         },
         "description": "**Required scope:** `chat`"
@@ -2201,7 +2201,7 @@
         },
         "responses": {
           "200": {
-            "description": "Server-sent chat stream or an error envelope"
+            "description": "Server-sent chat stream or an error envelope. The end event includes thread_id, agent_runner_type, and the effective default_provider_id."
           }
         },
         "description": "**Required scope:** `chat`"
@@ -7183,6 +7183,42 @@
           }
         }
       },
+      "ChatDetail": {
+        "description": "Session or thread detail with its effective runtime and default chat provider.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/SuccessEnvelope"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "agent_runner_type",
+                        "default_provider_id"
+                      ],
+                      "properties": {
+                        "agent_runner_type": {
+                          "type": "string"
+                        },
+                        "default_provider_id": {
+                          "type": "string",
+                          "description": "Effective chat provider ID, or an empty string when unavailable."
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
       "Text": {
         "description": "Text response",
         "content": {
@@ -7741,6 +7777,19 @@
             "type": "boolean",
             "default": true,
             "description": "Display reasoning content for this WebChat request independently of the global display_reasoning_text setting."
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "description": "Reasoning effort for the selected model in this WebChat request. It overrides the provider's configured reasoning_effort for supported providers and is ignored by unsupported providers. If omitted or invalid, WebChat leaves the provider's reasoning settings unchanged."
           }
         },
         "additionalProperties": false

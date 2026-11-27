@@ -301,22 +301,6 @@
             style="display: none"
             multiple
           />
-          <!-- Provider/Model Selector Menu -->
-          <ProviderModelMenu
-            v-if="
-              !recordingMode &&
-              props.showProviderSelector &&
-              providerSelectorAvailable
-            "
-            ref="providerModelMenuRef"
-          />
-          <v-progress-circular
-            v-if="!recordingMode && disabled && !mobile"
-            indeterminate
-            size="16"
-            class="mr-1"
-            width="1.5"
-          />
           <v-tooltip
             v-if="!recordingMode && tokenUsageVisible"
             location="top"
@@ -338,6 +322,30 @@
             </template>
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
+          <!-- Provider/Model Selector Menu -->
+          <ProviderModelMenu
+            v-if="
+              !recordingMode &&
+              props.showProviderSelector &&
+              providerSelectorAvailable
+            "
+            ref="providerModelMenuRef"
+          />
+          <v-progress-circular
+            v-if="!recordingMode && disabled && !mobile"
+            indeterminate
+            size="16"
+            class="mr-1"
+            width="1.5"
+          />
+          <!-- Reasoning effort, hidden when the selected model has no levels -->
+          <ReasoningEffortMenu
+            v-if="!recordingMode && reasoningEffortLevels.length"
+            :model-value="reasoningEffort || ''"
+            :levels="reasoningEffortLevels"
+            :disabled="disabled"
+            @update:model-value="emit('update:reasoningEffort', $event)"
+          />
           <v-btn
             v-if="recordingMode !== 'transcribe'"
             @click="
@@ -452,6 +460,7 @@ import { commandApi } from "@/api/v1";
 import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
+import ReasoningEffortMenu from "./ReasoningEffortMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
 import { attachmentPresentation } from "./attachmentPresentation";
@@ -502,6 +511,8 @@ interface Props {
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
   showProviderSelector?: boolean;
+  reasoningEffort?: string | null;
+  reasoningEffortLevels?: string[];
   tokenUsage?: TokenUsageInfo | null;
   placeholder?: string;
 }
@@ -516,6 +527,8 @@ const props = withDefaults(defineProps<Props>(), {
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
+  reasoningEffort: null,
+  reasoningEffortLevels: () => [],
   showSettings: false,
   tokenUsage: null,
   recordingMode: null,
@@ -525,6 +538,15 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   "update:prompt": [value: string];
+  "update:reasoningEffort": [value: string];
+  configChanged: [
+    payload: {
+      configId: string;
+      agentRunnerType: string;
+      defaultProviderId: string | null;
+      source: "sync" | "user";
+    },
+  ];
   send: [];
   stop: [];
   openSettings: [];
@@ -1019,10 +1041,13 @@ function handleFileSelect(event: Event) {
 function handleConfigChange(payload: {
   configId: string;
   agentRunnerType: string;
+  defaultProviderId: string | null;
+  source: "sync" | "user";
 }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "astrbot";
   providerSelectorAvailable.value = isInternal;
+  emit("configChanged", payload);
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
     currentConfigId.value = payload.configId;
@@ -1548,6 +1573,7 @@ defineExpose({
   }
 
   .input-right-actions {
+    min-width: 0;
     gap: 6px;
   }
 

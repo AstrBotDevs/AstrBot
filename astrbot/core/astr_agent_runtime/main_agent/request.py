@@ -282,6 +282,10 @@ async def collect_initial_request(
             if consumed_provider_prefix:
                 event.set_extra("_consumed_provider_prefix", consumed_provider_prefix)
             event.set_extra("_default_event_prompt", True)
+
+    if req.reasoning_effort is None:
+        req.reasoning_effort = event.get_extra("reasoning_effort")
+
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     quote_image_ref = None
     quote = next(

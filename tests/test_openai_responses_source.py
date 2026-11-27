@@ -400,6 +400,55 @@ async def test_parse_failed_response_raises_provider_error():
 
 
 @pytest.mark.asyncio
+async def test_responses_request_extra_body_overrides_reasoning_and_survives_retry(
+    monkeypatch,
+):
+    custom_extra_body = {
+        "reasoning": {"effort": "low", "summary": "auto"},
+        "max_tokens": 256,
+    }
+    provider = _make_provider({"custom_extra_body": custom_extra_body})
+    captured_calls: list[dict] = []
+
+    async def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    payloads, _ = await provider._prepare_chat_payload(
+        "hello",
+        model="gpt-6.1-sol",
+        extra_body={"reasoning_effort": "max"},
+    )
+    await provider._query(payloads, tools=None)
+    await provider._query(payloads, tools=None)
+
+    assert len(captured_calls) == 2
+    for call in captured_calls:
+        assert call["extra_body"] == {
+            "reasoning": {"effort": "max", "summary": "auto"},
+            "max_output_tokens": 256,
+        }
+    assert custom_extra_body == {
+        "reasoning": {"effort": "low", "summary": "auto"},
+        "max_tokens": 256,
+    }
+
+
+@pytest.mark.asyncio
 async def test_prepare_payload_sanitizes_legacy_tool_call_history():
     provider = _make_provider()
     contexts = [

@@ -408,6 +408,44 @@ class ProviderOpenAIOfficial(Provider):
             return value.strip().lower() in {"1", "true", "yes", "on"}
         return bool(value)
 
+    def _apply_request_overrides(
+        self,
+        payloads: dict[str, Any],
+        extra_body: dict[str, Any],
+        request_extra_body: dict[str, Any] | None,
+    ) -> None:
+        """Merge request overrides before applying the provider's configured rules.
+
+        Args:
+            payloads: Request parameters for the OpenAI SDK.
+            extra_body: Additional parameters for this request.
+            request_extra_body: Overrides supplied by the caller.
+        """
+        provider = self.provider_config.get("provider")
+
+        effort = (request_extra_body or {}).get("reasoning_effort")
+        if effort:
+            if payloads.get("model") == "qwen4-max" and (
+                provider in {"bailian", "dashscope"}
+                or self.client.base_url.host.endswith(".aliyuncs.com")
+            ):
+                extra_body.pop("thinking_budget", None)
+            extra_body.pop("thinking", None)
+            if provider == "deepseek" and effort == "none":
+                extra_body.pop("reasoning_effort", None)
+                extra_body["thinking"] = {"type": "disabled"}
+            elif isinstance(extra_body.get("reasoning"), dict):
+                # OpenRouter accepts either an effort or a token budget.
+                reasoning = dict(extra_body["reasoning"])
+                reasoning.pop("max_tokens", None)
+                reasoning.pop("enabled", None)
+                reasoning["effort"] = effort
+                extra_body["reasoning"] = reasoning
+            else:
+                extra_body["reasoning_effort"] = effort
+
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
+
     def _apply_provider_specific_request_overrides(
         self,
         payloads: dict[str, Any],
@@ -660,30 +698,33 @@ class ProviderOpenAIOfficial(Provider):
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
-        # 不在默认参数中的参数放在 extra_body 中
+        request_payloads = dict(payloads)
+        request_extra_body = request_payloads.pop("extra_body", None)
+
+        # Move non-default parameters into extra_body without mutating caller payloads.
         extra_body = {}
         to_del = []
-        for key in payloads:
+        for key in request_payloads:
             if key not in self.default_params:
-                extra_body[key] = payloads[key]
+                extra_body[key] = request_payloads[key]
                 to_del.append(key)
         for key in to_del:
-            del payloads[key]
+            del request_payloads[key]
 
-        # 读取并合并 custom_extra_body 配置
+        # Merge config custom_extra_body first so request-level extra_body takes precedence.
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
-        self._apply_provider_specific_request_overrides(payloads, extra_body)
+        self._apply_request_overrides(request_payloads, extra_body, request_extra_body)
 
-        self._sanitize_assistant_messages(payloads)
+        self._sanitize_assistant_messages(request_payloads)
 
         async with chat_request(
             self,
             "OpenAI",
             extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.chat.completions.create(
-                **payloads,
+                **request_payloads,
                 stream=False,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
@@ -728,24 +769,27 @@ class ProviderOpenAIOfficial(Provider):
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
-        # 不在默认参数中的参数放在 extra_body 中
+        request_payloads = dict(payloads)
+        request_extra_body = request_payloads.pop("extra_body", None)
+
+        # Move non-default parameters into extra_body without mutating caller payloads.
         extra_body = {}
 
-        # 读取并合并 custom_extra_body 配置
+        # Merge config custom_extra_body first so request-level extra_body takes precedence.
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
 
         to_del = []
-        for key in payloads:
+        for key in request_payloads:
             if key not in self.default_params:
-                extra_body[key] = payloads[key]
+                extra_body[key] = request_payloads[key]
                 to_del.append(key)
         for key in to_del:
-            del payloads[key]
-        self._apply_provider_specific_request_overrides(payloads, extra_body)
+            del request_payloads[key]
+        self._apply_request_overrides(request_payloads, extra_body, request_extra_body)
 
-        self._sanitize_assistant_messages(payloads)
+        self._sanitize_assistant_messages(request_payloads)
 
         llm_response = LLMResponse("assistant", is_chunk=True)
 
@@ -769,7 +813,7 @@ class ProviderOpenAIOfficial(Provider):
             "OpenAI",
             extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.chat.completions.create(
-                **payloads,
+                **request_payloads,
                 stream=True,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
@@ -1193,6 +1237,8 @@ class ProviderOpenAIOfficial(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if isinstance(extra_body := kwargs.get("extra_body"), dict) and extra_body:
+            payloads["extra_body"] = dict(extra_body)
 
         self._finally_convert_payload(payloads)
 
