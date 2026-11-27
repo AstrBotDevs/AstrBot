@@ -104,13 +104,18 @@ class AstrBotConfigManager:
                 continue
 
     def _load_conf_mapping(
-        self, umo: str | MessageSession, *, follow_route: bool = False
+        self,
+        umo: str | MessageSession,
+        *,
+        follow_route: bool = False,
+        binding: dict | None = None,
     ) -> ConfInfo:
         """Resolve one base profile, with explicit session selection taking priority.
 
         Args:
             umo: Session origin used for exact selection and ordered route matching.
             follow_route: Ignore explicit session selection when previewing routing.
+            binding: Optional preloaded session binding to avoid a duplicate read.
 
         Returns:
             Selected profile metadata, falling back to the default profile.
@@ -126,12 +131,12 @@ class AstrBotConfigManager:
             except Exception:
                 return DEFAULT_CONFIG_CONF_INFO
 
-        binding = (
-            {}
-            if follow_route
-            else self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
-        )
-        conf_id = None if follow_route else binding.get("profile_id")
+        if follow_route:
+            conf_id = None
+        else:
+            if binding is None:
+                binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+            conf_id = binding.get("profile_id")
         if conf_id is None:
             conf_id = self.ucr.get_conf_id_for_umop(umo)
         if conf_id:
@@ -188,9 +193,10 @@ class AstrBotConfigManager:
         ):
             return scope.config
 
-        conf_id = self._load_conf_mapping(umo)["id"]
-        conf = self.confs.get(conf_id) or self.confs["default"]
+        self._get_abconf_data()
         binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
         overrides = binding.get("overrides", {})
         if overrides:
             return AstrBotConfigSnapshot(conf, overrides)
@@ -207,9 +213,10 @@ class AstrBotConfigManager:
         Returns:
             A fresh runtime configuration and its explicit override paths.
         """
-        conf_id = self._load_conf_mapping(umo)["id"]
-        conf = self.confs.get(conf_id) or self.confs["default"]
+        self._get_abconf_data()
         binding = self.sp.get(BINDING_KEY, {}, scope="umo", scope_id=umo) or {}
+        conf_id = self._load_conf_mapping(umo, binding=binding)["id"]
+        conf = self.confs.get(conf_id) or self.confs["default"]
         overrides = binding.get("overrides", {})
         return AstrBotConfigSnapshot(conf, overrides), frozenset(overrides)
 

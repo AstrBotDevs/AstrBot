@@ -50,6 +50,8 @@ export interface ToolCall {
   result?: unknown;
   ts?: number;
   finished_ts?: number;
+  // "unknown": the turn ended before this call returned.
+  phase?: "unknown";
   [key: string]: unknown;
 }
 
@@ -116,7 +118,6 @@ interface ActiveChatRun {
   status?: string;
   revision?: number;
   content?: ChatContent;
-  messages?: ChatRecord[];
 }
 
 interface ActiveConnection {
@@ -127,7 +128,6 @@ interface ActiveConnection {
   abort?: AbortController;
   ws?: WebSocket;
   botRecord?: ChatRecord;
-  messageSaved?: boolean;
   userRecord?: ChatRecord;
   completed?: boolean;
   errorShown?: boolean;
@@ -277,7 +277,6 @@ export function useMessages(options: UseMessagesOptions) {
       (connection) =>
         connection.sessionId === sessionId &&
         connection.botVisible !== false &&
-        !connection.messageSaved &&
         (connection.botRecord === msg ||
           (connection.botRecord?.id != null &&
             String(connection.botRecord.id) === String(msg.id))),
@@ -505,24 +504,18 @@ export function useMessages(options: UseMessagesOptions) {
         messageContent(record).type === "bot"
       );
     });
-    const runMessages = run.messages?.length
-      ? run.messages
-      : [{ content: run.content || { type: "bot", message: [] } }];
-    const restored = runMessages.map((record: ChatRecord, index: number) =>
-      normalizeHistoryRecord({
-        ...record,
-        id: record.id ?? `active-run-${run.run_id}-${index}`,
-        turn_id: turnId,
-        created_at: record.created_at || new Date().toISOString(),
-      }),
-    );
-    const botRecord = restored[restored.length - 1];
+    const botRecord = normalizeHistoryRecord({
+      id: `active-run-${run.run_id}`,
+      content: run.content || { type: "bot", message: [] },
+      turn_id: turnId,
+      created_at: new Date().toISOString(),
+    });
     botRecord.content.isLoading = botRecord.content.message.length === 0;
-    records.push(...restored);
+    records.push(botRecord);
     messagesBySession[sessionId] = records;
-    const restoredRecords = messagesBySession[sessionId].slice(-restored.length);
+    const restoredRecords = messagesBySession[sessionId];
     const reactiveBotRecord = restoredRecords[restoredRecords.length - 1];
-    await resolveRecordMedia(restoredRecords);
+    await resolveRecordMedia([reactiveBotRecord]);
     startResumeStream(sessionId, run.run_id, reactiveBotRecord);
   }
 
@@ -754,19 +747,28 @@ export function useMessages(options: UseMessagesOptions) {
     enableStreaming = true,
     enableReasoning = true,
   ) {
-    if (!sessionId || botRecord.id == null || botRecord.can_retry === false) return;
+    if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
-    const turnId = botRecord.turn_id;
     const records = messagesBySession[sessionId] || [];
     const targetIndex = records.indexOf(botRecord);
     const userRecord = records.slice(0, targetIndex).reverse().find(
-      (record) => record.content.type === "user" && record.turn_id === turnId,
+      (record) => record.content.type === "user" && record.turn_id === botRecord.turn_id,
     );
+    if (targetIndex >= 0) messagesBySession[sessionId] = records.slice(0, targetIndex + 1);
+
+    botRecord.id = `local-regenerate-${Date.now()}`;
+    botRecord.created_at = new Date().toISOString();
+    botRecord.content = {
+      type: "bot",
+      message: [],
+      reasoning: "",
+      isLoading: true,
+    };
 
     const abort = new AbortController();
     const connection: ActiveConnection = {
       sessionId,
-      messageId: `local-regenerate-${Date.now()}`,
+      messageId: String(botRecord.id),
       transport: "sse",
       abort,
       botRecord,
@@ -775,7 +777,6 @@ export function useMessages(options: UseMessagesOptions) {
     };
     activeConnections[connection.messageId] = connection;
 
-    let requestAccepted = false;
     try {
       const response = await fetchWithAuth(
         chatApi.regenerateMessageUrl(sessionId, targetMessageId),
@@ -801,42 +802,19 @@ export function useMessages(options: UseMessagesOptions) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.message || "Regenerate failed.");
       }
-      requestAccepted = true;
-      // Replace the retried turn only after the backend accepts the request.
-      if (targetIndex >= 0) {
-        messagesBySession[sessionId] = records.slice(0, targetIndex + 1);
-      }
-      if (turnId) {
-        messagesBySession[sessionId] = (messagesBySession[sessionId] || []).filter(
-          (record) =>
-            record === botRecord ||
-            record.content.type !== "bot" ||
-            record.turn_id !== turnId,
-        );
-      }
-      botRecord.id = connection.messageId;
-      botRecord.created_at = new Date().toISOString();
-      botRecord.threads = [];
-      botRecord.content = {
-        type: "bot",
-        message: [],
-        reasoning: "",
-        isLoading: true,
-      };
       await readSseStream(response.body, (payload) => {
         processStreamPayload(botRecord, payload, undefined, connection);
         options.onStreamUpdate?.(sessionId);
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendError(connection.botRecord || botRecord, error, "connection_error");
+        appendError(botRecord, error, "connection_error");
         console.error("Regenerate failed:", error);
       }
     } finally {
       if (activeConnections[connection.messageId]?.abort === abort) {
         delete activeConnections[connection.messageId];
         if (
-          requestAccepted &&
           !abort.signal.aborted &&
           !connection.completed &&
           !isSessionRunning(sessionId)
@@ -958,7 +936,7 @@ export function useMessages(options: UseMessagesOptions) {
       .catch((error) => {
         if (abort.signal.aborted) return;
         ensureBotRecordVisible(connection);
-        appendError(connection.botRecord || botRecord, error, "connection_error");
+        appendError(botRecord, error, "connection_error");
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
@@ -1204,14 +1182,14 @@ export function useMessages(options: UseMessagesOptions) {
       const payload = JSON.parse(event.data);
       const payloadMessageId =
         payload?.message_id == null ? "" : String(payload.message_id);
-      let connection = payloadMessageId
+      const connection = payloadMessageId
         ? activeConnections[payloadMessageId]
-        : undefined;
-      if (!connection) {
-        const candidates = getWebSocketConnections(sessionId);
-        connection = candidates[0];
-      }
-      if (connection?.transport !== "websocket" || !connection.botRecord) {
+        : getWebSocketConnections(sessionId)[0];
+      if (
+        connection?.transport !== "websocket" ||
+        connection.sessionId !== sessionId ||
+        !connection.botRecord
+      ) {
         return;
       }
       processStreamPayload(
@@ -1301,43 +1279,13 @@ export function useMessages(options: UseMessagesOptions) {
     userRecord?: ChatRecord,
     connection?: ActiveConnection,
   ) {
-    const msgType = payload?.type || payload?.t;
-    const chainType = payload?.chain_type;
-    const data = payload?.data ?? "";
-    botRecord = connection?.botRecord || botRecord;
-
-    if (
-      connection?.messageSaved &&
-      ["plain", "image", "record", "file", "video", "actionrow", "view"].includes(msgType) &&
-      chainType !== "agent_stats" &&
-      (msgType !== "plain" || payloadText(data))
-    ) {
-      const records = messagesBySession[connection.sessionId] || [];
-      const previousIndex = records.indexOf(botRecord);
-      botRecord = reactive<ChatRecord>({
-        id: `local-bot-${connection.messageId}-${botRecord.id}`,
-        created_at: new Date().toISOString(),
-        turn_id: botRecord.turn_id,
-        content: { type: "bot", message: [], isLoading: true },
-      });
-      records.splice(
-        previousIndex < 0 ? records.length : previousIndex + 1,
-        0,
-        botRecord,
-      );
-      // Queued replies must follow the latest segment of this run.
-      for (const candidate of Object.values(activeConnections)) {
-        if (
-          candidate.sessionId === connection.sessionId &&
-          candidate.deferredBeforeBot === connection.botRecord
-        ) {
-          candidate.deferredBeforeBot = botRecord;
-        }
-      }
-      connection.botRecord = botRecord;
-      connection.messageSaved = false;
-      connection.botVisible = true;
-    }
+    const normalized =
+      payload?.ct === "chat"
+        ? { ...payload, type: payload.type || payload.t }
+        : payload;
+    const msgType = normalized?.type || normalized?.t;
+    const chainType = normalized?.chain_type;
+    const data = normalized?.data ?? "";
 
     if (msgType === "follow_up_captured") {
       if (connection) {
@@ -1381,53 +1329,6 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "run_snapshot") {
       const snapshot = data && typeof data === "object" ? data : {};
-      if (connection && Array.isArray(snapshot.messages)) {
-        const records = messagesBySession[connection.sessionId] || [];
-        const turnId = snapshot.turn_id;
-        const belongsToRun = (record: ChatRecord) =>
-          record === botRecord ||
-          (turnId &&
-            record.turn_id === turnId &&
-            record.content.type === "bot");
-        const firstIndex = records.findIndex(belongsToRun);
-        const remaining = records.filter((record) => !belongsToRun(record));
-        const snapshotMessages = snapshot.messages.length
-          ? snapshot.messages
-          : [{ content: { type: "bot", message: [] } }];
-        const restored = snapshotMessages.map(
-          (record: ChatRecord, index: number) =>
-            normalizeHistoryRecord({
-              ...record,
-              id: record.id ?? `active-run-${snapshot.run_id}-${index}`,
-              turn_id: turnId || null,
-              created_at: record.created_at || new Date().toISOString(),
-            }),
-        );
-        const insertIndex = firstIndex < 0 ? remaining.length : firstIndex;
-        remaining.splice(insertIndex, 0, ...restored);
-        messagesBySession[connection.sessionId] = remaining;
-        const currentRecords = messagesBySession[connection.sessionId];
-        const lastRecord = currentRecords[insertIndex + restored.length - 1];
-        for (const candidate of Object.values(activeConnections)) {
-          if (
-            candidate.sessionId === connection.sessionId &&
-            candidate.deferredBeforeBot &&
-            belongsToRun(candidate.deferredBeforeBot)
-          ) {
-            candidate.deferredBeforeBot = lastRecord;
-          }
-        }
-        connection.botRecord = lastRecord;
-        connection.messageSaved =
-          snapshotMessages[snapshotMessages.length - 1].id != null;
-        connection.botVisible = true;
-        lastRecord.content.isLoading =
-          snapshot.status === "running" && !lastRecord.content.message.length;
-        void resolveRecordMedia(
-          currentRecords.slice(insertIndex, insertIndex + restored.length),
-        );
-        return;
-      }
       const snapshotRecord = normalizeHistoryRecord({
         id: `active-run-${snapshot.run_id || "unknown"}`,
         content: snapshot.content || { type: "bot", message: [] },
@@ -1459,7 +1360,6 @@ export function useMessages(options: UseMessagesOptions) {
       if (data?.refs) {
         messageContent(botRecord).refs = data.refs;
       }
-      if (connection) connection.messageSaved = true;
       return;
     }
     if (msgType === "agent_stats" || chainType === "agent_stats") {
@@ -1470,6 +1370,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "error") {
       markMessageStarted(botRecord);
       appendError(botRecord, data);
+      // A failed run may send no "end", so mark unreturned calls here too; a
+      // late result clears the mark.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1494,6 +1401,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (msgType === "end") {
       if (connection) connection.completed = true;
       markMessageStarted(botRecord);
+      // Calls still without a result when the turn ends never returned; the
+      // backend stores them the same way.
+      for (const part of botRecord.content.message) {
+        for (const tool of part.tool_calls || []) {
+          if (!tool.finished_ts) tool.phase = "unknown";
+        }
+      }
       return;
     }
 
@@ -1511,12 +1425,7 @@ export function useMessages(options: UseMessagesOptions) {
         finishToolCall(botRecord, parseJsonSafe(data));
         return;
       }
-      const text = payloadText(data);
-      if (payload.streaming === false) {
-        if (text) botRecord.content.message.push({ type: "plain", text });
-      } else {
-        appendPlain(botRecord, text);
-      }
+      appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
       return;
     }
 
@@ -1863,15 +1772,18 @@ export function appendError(record: ChatRecord, error: unknown, code = "agent_er
   });
 }
 
-export function appendPlain(record: ChatRecord, text: string, append = true) {
+export function appendPlain(record: ChatRecord, text: string, streaming = true) {
   markMessageStarted(record);
+  if (!text) return;
   const content = record.content;
-  let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain") {
-    last = { type: "plain", text: "" };
-    content.message.push(last);
+  const last = content.message[content.message.length - 1];
+  if (last?.type !== "plain") {
+    content.message.push({ type: "plain", text });
+    return;
   }
-  last.text = append ? `${last.text || ""}${text}` : text;
+  const previousText = last.text || "";
+  const separator = !streaming && previousText ? "\n\n" : "";
+  last.text = `${previousText}${separator}${text}`;
 }
 
 export function appendReasoningPart(record: ChatRecord, text: string) {
@@ -1916,6 +1828,8 @@ export function finishToolCall(record: ChatRecord, result: any) {
     if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
+      // A late result supersedes an earlier "unknown" mark.
+      delete tool.phase;
       tool.result = result.result;
       tool.finished_ts = result.ts || Date.now() / 1000;
       return;

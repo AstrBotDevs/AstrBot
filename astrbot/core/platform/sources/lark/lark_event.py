@@ -723,7 +723,8 @@ class LarkMessageEvent(AstrMessageEvent):
                 for comp in other_components
                 if not isinstance(comp, (Plain, ActionRow))
             ]
-            card_json = LarkMessageEvent._build_button_card(
+            card_json = await asyncio.to_thread(
+                LarkMessageEvent._build_button_card,
                 button_components,
                 message_type,
             )

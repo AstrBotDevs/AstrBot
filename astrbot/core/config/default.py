@@ -10,6 +10,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent import get_runtime_config_default
 
+PLUGIN_DEFAULT_REGISTRY_URL = "https://cloud.astrbot.app/api/v1/market/plugins.json"
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults shared by all operating systems.
@@ -344,7 +346,6 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
-                        "use_markdown": True,
                     },
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
@@ -352,7 +353,6 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "appid": "",
                         "secret": "",
-                        "use_markdown": True,
                         "is_sandbox": False,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
@@ -944,11 +944,6 @@ CONFIG_METADATA_2 = {
                         "description": "启用频道私聊",
                         "type": "bool",
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
-                    },
-                    "use_markdown": {
-                        "description": "主动消息使用 Markdown",
-                        "type": "bool",
-                        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
                     },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",
@@ -1727,7 +1722,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
-                        "model": "whisper-1",
+                        "model": "gpt-transcribe",
                         "proxy": "",
                     },
                     "MiMo STT(API)": {
@@ -1783,6 +1778,19 @@ CONFIG_METADATA_2 = {
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
+                        "proxy": "",
+                    },
+                    "StepFun TTS(API)": {
+                        "id": "stepfun_tts",
+                        "type": "stepfun_tts_api",
+                        "provider": "stepfun",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.stepfun.com/v1",
+                        "model": "stepaudio-3-tts",
+                        "stepfun-tts-voice": "wenrounvsheng",
+                        "timeout": "60",
                         "proxy": "",
                     },
                     "DeepSeek TTS(API)": {
@@ -1899,6 +1907,8 @@ CONFIG_METADATA_2 = {
                         "model": "s2-pro",
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
+                        "fishaudio-tts-format": "wav",
+                        "fishaudio-tts-mp3-bitrate": "128",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -2970,6 +2980,10 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
                     },
+                    "stepfun-tts-voice": {
+                        "description": "音色 ID",
+                        "type": "string",
+                    },
                     "deepseek-tts-voice": {
                         "description": "音色",
                         "type": "string",
@@ -3016,6 +3030,18 @@ CONFIG_METADATA_2 = {
                         "description": "reference_id",
                         "type": "string",
                         "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID",
+                    },
+                    "fishaudio-tts-format": {
+                        "description": "音频格式",
+                        "type": "string",
+                        "options": ["wav", "mp3"],
+                        "hint": "FishAudio TTS 返回的音频格式。默认 wav 保持兼容；长语音场景推荐选择 mp3 以显著减小音频体积并降低传输开销。",
+                    },
+                    "fishaudio-tts-mp3-bitrate": {
+                        "description": "MP3 码率 (kbps)",
+                        "type": "string",
+                        "options": ["64", "128", "192"],
+                        "hint": "仅当音频格式选择 mp3 时生效，可选 64 / 128 / 192 kbps，默认 128。",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",

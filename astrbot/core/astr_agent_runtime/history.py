@@ -1,18 +1,16 @@
-"""Native history commits and execution statistics; never called by Pipeline."""
+"""Commit history for the native agent runtime."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from astrbot.core import db_helper, logger
+from astrbot.core import logger
 from astrbot.core.agent.message import (
     Message,
     dump_messages,
 )
 from astrbot.core.agent.response import AgentStats
-from astrbot.core.astr_agent_runtime.runner import AgentRunner
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 
 if TYPE_CHECKING:
@@ -137,46 +135,3 @@ async def save_agent_history(
     else:
         await writer.save_history(message_to_save, token_usage=token_usage)
     return True
-
-
-async def record_agent_stats(
-    event: AstrMessageEvent,
-    req: ProviderRequest | None,
-    agent_runner: AgentRunner | None,
-    final_resp: LLMResponse | None,
-) -> None:
-    """Persist internal agent stats without affecting the user response flow."""
-    if agent_runner is None:
-        return
-
-    provider = agent_runner.provider
-    stats = agent_runner.stats
-    if provider is None or stats is None:
-        return
-
-    try:
-        provider_config = getattr(provider, "provider_config", {}) or {}
-        conversation_id = (
-            req.conversation.cid
-            if req is not None and req.conversation is not None
-            else None
-        )
-
-        if agent_runner.was_aborted():
-            status = "aborted"
-        elif final_resp is not None and final_resp.role == "err":
-            status = "error"
-        else:
-            status = "completed"
-
-        await db_helper.insert_provider_stat(
-            umo=event.unified_msg_origin,
-            conversation_id=conversation_id,
-            provider_id=provider_config.get("id", "") or provider.meta().id,
-            provider_model=provider.get_model(),
-            status=status,
-            stats=stats.to_dict(),
-            agent_type="internal",
-        )
-    except Exception as e:
-        logger.warning("Persist provider stats failed: %s", e, exc_info=True)

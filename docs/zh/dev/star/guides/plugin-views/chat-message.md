@@ -1,7 +1,7 @@
 # 消息交互组件
 
 > [!NOTE]
-> 目前仅支持 AstrBot ChatUI。
+> AstrBot 内置的卡片渲染端是 ChatUI。
 
 插件可以在聊天消息里创建自定义 HTML 卡片。命令、消息事件处理器、UI 回调和本地 LLM 工具都可以返回同一种 `event.view_result()`，不要求先经过 tool call。
 
@@ -115,7 +115,11 @@ async def open_counter(self, event: AstrMessageEvent):
     )
 ```
 
-工具的 `text` 进入模型上下文，`data` 默认不进入。普通事件创建卡片时不会因此调用模型。是否支持视图由 `event.platform_meta.support_ui_interaction` 决定，不再判断平台名称。默认值为 `False`，WebChat 显式启用；未启用的平台按文字回复处理。自定义适配器须先实现 ChatUI 视图的事件与投递协议，再在注册参数和事件元数据中启用该标记。
+工具的 `text` 进入模型上下文，`data` 默认不进入。普通事件创建卡片时不会因此调用模型。需要在 Python 中引用声明和结果类型时，从 `astrbot.api.interactive_ui` 导入 `ViewSpec` 和 `ViewResult`。
+
+核心把新卡片转为出站 `InteractiveView`，用户操作由适配器转换为入站 `UIInteraction`。两个消息组件都从 `astrbot.api.message_components` 导入。自定义适配器实现本平台的卡片渲染和通过认证的操作转换后，可在注册参数和事件元数据中启用 `support_ui_interaction`。未启用的平台使用文字回退。
+
+适配器处理点击时，先用卡片 ID 读取快照，核对平台实例、会话、用户和允许的动作，再通过共享存储登记本次操作。提交事件时，用已保存的快照填充 `UIInteraction.view`，并把卡片所属的插件模块写入事件的 `ui_plugin_module`。
 
 ## 显示数据并提交操作 {#前端}
 
@@ -199,6 +203,7 @@ button { color: var(--astrbot-color-primary); border-color: var(--astrbot-color-
 ## 历史、并发与限制
 
 - 主聊天、独立聊天和 thread 使用同一渲染组件。重开消息读取已保存的数据，不重跑命令、tool 或回调。
+- 卡片实例绑定到第一条保存它的消息，发到其他会话时显示文字回退。AstrBot 备份会保存卡片状态和操作回执。
 - `version` 表示数据和动作契约，兼容样式修改不用递增；不兼容升级后，旧卡片回退到文字，不自动迁移。`revision` 在成功更新数据后自动递增。
 - 仅会话所有者可以操作，后端同时检查来源消息、插件状态、会话插件配置与动作白名单。插件仍须检查自己的业务权限。
 - 同实例的后端操作串行保留执行权；旧 revision 返回 `REVISION_CONFLICT`，SDK 先同步最新快照，再报告错误。

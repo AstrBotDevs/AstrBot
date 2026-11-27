@@ -205,7 +205,6 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(
         internal, "try_capture_follow_up", lambda event, runtime=None: None
     )
-    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None)

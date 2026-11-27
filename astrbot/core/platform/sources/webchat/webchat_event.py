@@ -12,18 +12,21 @@ from astrbot.api.message_components import (
     Button,
     File,
     Image,
+    InteractiveView,
     Json,
     Plain,
     Record,
 )
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
+    detect_audio_mime_type,
     detect_image_mime_type_async,
 )
 
+from .message_parts_helper import serialize_webchat_view
 from .webchat_queue_mgr import webchat_queue_mgr
 
 attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
@@ -41,6 +44,8 @@ class WebChatMessageEvent(AstrMessageEvent):
         session_id: str,
         streaming: bool = False,
         emit_complete: bool = False,
+        *,
+        history_platform_id: str = "webchat",
     ) -> str | None:
         request_id = str(message_id)
         if not message:
@@ -71,18 +76,34 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
                 if not accepted:
                     return None
+            elif isinstance(comp, InteractiveView):
+                part = await serialize_webchat_view(
+                    comp, session_id, history_platform_id
+                )
+                part_type = part.pop("type")
+                if part_type == "plain":
+                    data = part["text"]
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
+                    {
+                        "type": part_type,
+                        "data": part if part_type == "view" else data,
+                        "streaming": streaming,
+                        "message_id": message_id,
+                    },
+                )
+                if not accepted:
+                    return None
             elif isinstance(comp, Json):
                 accepted = await webchat_queue_mgr.put_back_queue(
                     request_id,
                     {
                         "type": {
-                            "chatui_view": "view",
                             "chatui_error": "error",
                             "ui_action_result": "ui_action_result",
                         }.get(message.type, "plain"),
                         "data": comp.data
-                        if message.type
-                        in {"chatui_view", "ui_action_result", "chatui_error"}
+                        if message.type in {"ui_action_result", "chatui_error"}
                         else json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,
@@ -99,12 +120,12 @@ class WebChatMessageEvent(AstrMessageEvent):
                     strict=True,
                 ):
                     if isinstance(button.action, Button.CallbackAction):
-                        serialized_button["action"]["callback_data"] = (
-                            encode_button_callback(
-                                button.id,
-                                button.action.data,
-                                expires_at=comp.action_expires_at,
-                            )
+                        serialized_button["action"][
+                            "callback_data"
+                        ] = await encode_button_callback_async(
+                            button.id,
+                            button.action.data,
+                            expires_at=comp.action_expires_at,
                         )
                         serialized_button["action"].pop("data", None)
                 accepted = await webchat_queue_mgr.put_back_queue(
@@ -144,10 +165,15 @@ class WebChatMessageEvent(AstrMessageEvent):
                     return None
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{generate_timestamp_id()}.wav"
-                path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
                 record_bytes = base64.b64decode(record_base64)
+                # The payload keeps its original container (MP3 passthrough), so
+                # derive the extension from the real bytes; the dashboard serves
+                # the file with a Content-Type matching that extension.
+                record_mime_type = detect_audio_mime_type(record_bytes)
+                suffix = MEDIA_MIME_EXTENSIONS.get(record_mime_type, ".mp3")
+                filename = f"{generate_timestamp_id()}{suffix}"
+                path = os.path.join(attachments_dir, filename)
                 await asyncio.to_thread(Path(path).write_bytes, record_bytes)
                 data = f"[RECORD]{filename}"
                 accepted = await webchat_queue_mgr.put_back_queue(
@@ -191,24 +217,12 @@ class WebChatMessageEvent(AstrMessageEvent):
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
 
-        if emit_complete or (
-            not streaming
-            and message.type
-            not in (
-                "reasoning",
-                "tool_call",
-                "tool_call_result",
-                "agent_stats",
-                "chatui_view",
-                "ui_action_result",
-            )
-        ):
-            # A non-streaming send is one message, even with multiple components.
+        if emit_complete:
             await webchat_queue_mgr.put_back_queue(
                 request_id,
                 {
                     "type": "complete",
-                    "data": data if streaming else "",
+                    "data": data,
                     "streaming": streaming,
                     "chain_type": message.type,
                     "message_id": message_id,
@@ -219,12 +233,13 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
-        if message and (reasoning := self.get_extra("_webchat_pending_reasoning")):
-            self.set_extra("_webchat_pending_reasoning", None)
-            await WebChatMessageEvent._send(
+        session_id = self.get_extra("view_session_id", self.session_id)
+        reasoning = self._extras.pop("_webchat_pending_reasoning", None)
+        if message is not None and reasoning:
+            await self._send(
                 message_id,
                 MessageChain(type="reasoning").message(reasoning),
-                session_id=self.session_id,
+                session_id,
             )
         follow_up_capture = self.get_extra("_follow_up_captured")
         if message is None and isinstance(follow_up_capture, dict):
@@ -238,7 +253,12 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },
             )
-        await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
+        await WebChatMessageEvent._send(
+            message_id,
+            message,
+            session_id=session_id,
+            history_platform_id=self.get_extra("view_history_platform_id", "webchat"),
+        )
         await super().send(message if message is not None else MessageChain([]))
 
     async def send_typing(self) -> None:
@@ -302,8 +322,11 @@ class WebChatMessageEvent(AstrMessageEvent):
             r = await WebChatMessageEvent._send(
                 message_id=message_id,
                 message=chain,
-                session_id=self.session_id,
+                session_id=self.get_extra("view_session_id", self.session_id),
                 streaming=True,
+                history_platform_id=self.get_extra(
+                    "view_history_platform_id", "webchat"
+                ),
             )
             if not r:
                 continue

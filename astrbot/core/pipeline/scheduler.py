@@ -116,8 +116,8 @@ class PipelineScheduler:
                     if isinstance(interaction, UIInteraction):
                         import asyncio
 
-                        from astrbot.core.chatui import view_store
                         from astrbot.core.message.components import Json
+                        from astrbot.core.message.interactive_ui import view_store
                         from astrbot.core.message.message_event_result import (
                             MessageChain,
                         )

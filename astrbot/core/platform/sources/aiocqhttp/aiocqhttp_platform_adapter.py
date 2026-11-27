@@ -397,6 +397,12 @@ class AiocqhttpAdapter(Platform):
                 message_str += "".join(at_parts)
             elif t == "mface":
                 continue
+            elif t == "inline_keyboard":
+                logger.debug(
+                    f"Ignoring unsupported aiocqhttp message segment type: {t}, "
+                    f"count={sum(1 for _ in m_group)}"
+                )
+                continue
             elif t == "markdown":
                 for m in m_group:
                     text = m["data"].get("markdown") or m["data"].get("content", "")

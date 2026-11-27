@@ -1886,6 +1886,7 @@ async function handleRegenerateMessage(
     message.can_retry === false
   )
     return;
+  message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
   writeSessionProviderSelection(currSessionId.value, effectiveSelection);
   await regenerateMessage(

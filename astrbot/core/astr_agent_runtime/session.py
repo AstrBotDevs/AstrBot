@@ -27,7 +27,7 @@ from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
 from .execution import execute_native_loop
-from .history import record_agent_stats, save_agent_history
+from .history import save_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
@@ -243,7 +243,6 @@ class NativeAgentSession(AgentSession):
                     raise RuntimeExecutionError(
                         "history_save_failed", str(exc)
                     ) from exc
-            await record_agent_stats(event, req, runner, response)
             event.trace.record(
                 "astr_agent_complete",
                 stats=runner.stats.to_dict(),
