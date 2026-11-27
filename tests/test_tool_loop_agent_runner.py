@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.message import ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import ImageURLPart, Message, TextPart, ThinkPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -524,6 +524,54 @@ def provider_request(tool_set):
 def runner():
     """创建ToolLoopAgentRunner实例"""
     return ToolLoopAgentRunner()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_tool_call_history_preserves_multiple_reasoning_parts(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+):
+    reasoning_parts = [
+        ThinkPart(think="think-A", encrypted="sig-A"),
+        ThinkPart(think="think-B", encrypted="sig-B"),
+    ]
+
+    class ReasoningProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            return LLMResponse(
+                role="assistant",
+                completion_text="I will check.",
+                tools_call_name=["test_tool"],
+                tools_call_args=[{"query": "test"}],
+                tools_call_ids=["call_123"],
+                reasoning_content="think-Athink-B",
+                reasoning_signature="sig-B",
+                reasoning_parts=reasoning_parts,
+            )
+
+    await runner.reset(
+        provider=ReasoningProvider(),
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+    await collect_events(runner.step())
+
+    assistant = next(
+        message
+        for message in runner.run_context.messages
+        if message.role == "assistant" and message.tool_calls
+    )
+    assert assistant.content == [
+        *reasoning_parts,
+        TextPart(text="I will check."),
+    ]
 
 
 def _make_large_tool_result_text() -> str:

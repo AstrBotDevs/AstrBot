@@ -14,7 +14,13 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ContentPart,
+    ImageURLPart,
+    TextPart,
+    ThinkPart,
+)
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -196,28 +202,21 @@ class ProviderAnthropic(Provider):
                 system_prompt = message["content"] or "<empty system prompt>"
             elif message["role"] == "assistant":
                 blocks = []
-                reasoning_content = ""
-                thinking_signature = ""
                 if isinstance(message["content"], str) and message["content"].strip():
                     blocks.append({"type": "text", "text": message["content"]})
                 elif isinstance(message["content"], list):
                     for part in message["content"]:
                         if part.get("type") == "think":
-                            # only pick the last think part for now
-                            reasoning_content = part.get("think")
-                            thinking_signature = part.get("encrypted")
+                            if part.get("encrypted"):
+                                blocks.append(
+                                    {
+                                        "type": "thinking",
+                                        "thinking": part.get("think", ""),
+                                        "signature": part["encrypted"],
+                                    }
+                                )
                         else:
                             blocks.append(part)
-
-                if reasoning_content and thinking_signature:
-                    blocks.insert(
-                        0,
-                        {
-                            "type": "thinking",
-                            "thinking": reasoning_content,
-                            "signature": thinking_signature,
-                        },
-                    )
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
@@ -597,6 +596,7 @@ class ProviderAnthropic(Provider):
         llm_response = LLMResponse(role="assistant")
 
         text_parts: list[str] = []
+        reasoning_parts: list[ThinkPart] = []
         for content_block in completion.content:
             if content_block.type == "text":
                 # Responses with web search/citations carry several text blocks;
@@ -604,9 +604,12 @@ class ProviderAnthropic(Provider):
                 text_parts.append(str(content_block.text))
 
             if content_block.type == "thinking":
-                reasoning_content = str(content_block.thinking).strip()
-                llm_response.reasoning_content = reasoning_content
-                llm_response.reasoning_signature = content_block.signature
+                reasoning_parts.append(
+                    ThinkPart(
+                        think=str(content_block.thinking),
+                        encrypted=content_block.signature,
+                    )
+                )
 
             if content_block.type == "tool_use":
                 llm_response.tools_call_args.append(content_block.input)
@@ -615,6 +618,13 @@ class ProviderAnthropic(Provider):
 
         if text_parts:
             llm_response.completion_text = "".join(text_parts).strip()
+
+        if reasoning_parts:
+            llm_response.reasoning_parts = reasoning_parts
+            llm_response.reasoning_content = "".join(
+                part.think for part in reasoning_parts
+            )
+            llm_response.reasoning_signature = reasoning_parts[-1].encrypted
 
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)
@@ -680,7 +690,6 @@ class ProviderAnthropic(Provider):
                 merged[key if key else ("_", builtins.id(tool))] = tool
             payloads["tools"] = list(merged.values())
             extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
-        reasoning_content = ""
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
@@ -757,7 +766,6 @@ class ProviderAnthropic(Provider):
                                 id=id,
                                 reasoning_signature=reasoning_signature or None,
                             )
-                            reasoning_content += reasoning
                     elif event.delta.type == "signature_delta":
                         reasoning_signature = event.delta.signature
                     elif event.delta.type == "input_json_delta":
@@ -811,6 +819,18 @@ class ProviderAnthropic(Provider):
                         self._update_usage(usage, event.usage)
                         request.usage = usage
 
+            # The SDK preserves each thinking block and its corresponding signature.
+            final_message = await stream.get_final_message()
+
+        reasoning_parts = [
+            ThinkPart(think=block.thinking, encrypted=block.signature)
+            for block in final_message.content
+            if block.type == "thinking"
+        ]
+        reasoning_content = "".join(part.think for part in reasoning_parts)
+        if reasoning_parts:
+            reasoning_signature = reasoning_parts[-1].encrypted or ""
+
         # 返回最终的完整结果
         final_response = LLMResponse(
             role="assistant",
@@ -820,6 +840,7 @@ class ProviderAnthropic(Provider):
             id=id,
             reasoning_content=reasoning_content,
             reasoning_signature=reasoning_signature or None,
+            reasoning_parts=reasoning_parts,
         )
 
         if final_tool_calls:
