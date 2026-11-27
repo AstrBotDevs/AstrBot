@@ -119,6 +119,7 @@
     "llmService": "LLM サービス",
     "speechToText": "音声認識",
     "editDisplayName": "セッション名を編集",
+    "renameByDoubleClick": "ダブルクリックで名前を変更",
     "displayName": "セッション名",
     "displayNameUpdated": "セッション名を更新しました",
     "displayNameUpdateFailed": "セッション名の更新に失敗しました",

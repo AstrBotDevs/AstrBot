@@ -119,6 +119,7 @@
     "llmService": "LLM Service",
     "speechToText": "Speech to Text",
     "editDisplayName": "Edit Session Name",
+    "renameByDoubleClick": "Double-click to rename",
     "displayName": "Session Name",
     "displayNameUpdated": "Session name updated",
     "displayNameUpdateFailed": "Failed to update session name",

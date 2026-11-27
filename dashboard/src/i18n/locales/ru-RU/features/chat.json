@@ -119,6 +119,7 @@
     "llmService": "Сервис LLM",
     "speechToText": "Преобразование речи",
     "editDisplayName": "Изменить имя чата",
+    "renameByDoubleClick": "Дважды щёлкните, чтобы переименовать",
     "displayName": "Имя чата",
     "displayNameUpdated": "Имя чата обновлено",
     "displayNameUpdateFailed": "Не удалось обновить имя чата",
