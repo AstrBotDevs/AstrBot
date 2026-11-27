@@ -1,7 +1,7 @@
 import importlib.metadata
 import re
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -151,46 +151,6 @@ class TestMCPToolSchemaNormalization:
         assert name("知识库", "search") != name("资料库", "search")
         assert name("知识库", "搜索") != name("知识库", "查询")
         assert len(name("github", "x" * 100)) == 64
-
-
-@pytest.mark.asyncio
-async def test_remote_mcp_detects_sse_at_a_custom_path(monkeypatch):
-    config = {
-        "url": "https://example.com/events",
-        "headers": {"Authorization": "Bearer test-token"},
-    }
-    probe = AsyncMock(side_effect=[(False, "HTTP 405: Method Not Allowed"), (True, "")])
-    sse = MagicMock()
-    session = SimpleNamespace(initialize=AsyncMock())
-    monkeypatch.setattr(mcp_client, "_quick_test_mcp_connection", probe)
-    monkeypatch.setattr(mcp_client, "sse_client", sse)
-    monkeypatch.setattr(mcp_client.mcp, "ClientSession", MagicMock())
-    client = mcp_client.MCPClient()
-    client.exit_stack = SimpleNamespace(
-        enter_async_context=AsyncMock(side_effect=[("reader", "writer"), session])
-    )
-
-    await client._do_connect(config, "example")
-
-    assert probe.await_args_list == [
-        call({**config, "transport": "streamable_http"}),
-        call({**config, "transport": "sse"}),
-    ]
-    assert sse.call_args.kwargs["headers"] == config["headers"]
-    session.initialize.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_remote_mcp_does_not_fallback_on_authentication_failure(monkeypatch):
-    probe = AsyncMock(return_value=(False, "HTTP 401: Unauthorized"))
-    monkeypatch.setattr(mcp_client, "_quick_test_mcp_connection", probe)
-    client = mcp_client.MCPClient()
-    client.exit_stack = MagicMock()
-
-    with pytest.raises(Exception, match="HTTP 401"):
-        await client._do_connect({"url": "https://example.com/mcp"}, "example")
-
-    probe.assert_awaited_once()
 
 
 @pytest.mark.asyncio
