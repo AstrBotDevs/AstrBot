@@ -60,7 +60,6 @@
   "modelTotal": {
     "title": "{range}のモデル呼び出し合計",
     "callCount": "合計 {count} 回",
-    "unknownUsage": "{count} 件のリクエストでトークン使用量が報告されませんでした",
     "avgTtft": "最初のトークンまでの平均時間（TTFT）",
     "avgDuration": "平均応答時間",
     "avgTpm": "平均出力速度（TPM）",

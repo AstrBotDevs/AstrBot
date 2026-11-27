@@ -123,9 +123,6 @@
               <div class="card-label">{{ t('modelTotal.title', { range: rangeLabel }) }}</div>
               <div class="token-total-value">{{ formatNumber(providerStats?.range_total_tokens ?? 0) }} <span style="font-size: 18px;">{{ t('units.tokens') }}</span></div>
               <div class="card-note">{{ t('modelTotal.callCount', { count: formatNumber(providerStats?.range_total_calls ?? 0) }) }}</div>
-              <div v-if="providerStats?.range_unknown_usage_calls" class="card-note">
-                {{ t('modelTotal.unknownUsage', { count: formatNumber(providerStats.range_unknown_usage_calls) }) }}
-              </div>
               <div class="token-meta-list">
                 <div class="token-meta-item">
                   <span>{{ t('modelTotal.avgTtft') }}</span>
@@ -318,7 +315,6 @@ interface ProviderTokenStatsResponse {
   }
   range_total_tokens: number
   range_total_calls: number
-  range_unknown_usage_calls: number
   range_avg_ttft_ms: number
   range_avg_duration_ms: number
   range_avg_tpm: number

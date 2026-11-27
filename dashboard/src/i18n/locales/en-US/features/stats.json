@@ -60,7 +60,6 @@
   "modelTotal": {
     "title": "{range} total model calls",
     "callCount": "{count} calls",
-    "unknownUsage": "{count} requests did not report token usage",
     "avgTtft": "Average TTFT",
     "avgDuration": "Average Response Time",
     "avgTpm": "Average Output TPM",

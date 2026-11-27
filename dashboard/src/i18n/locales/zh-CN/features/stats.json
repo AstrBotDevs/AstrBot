@@ -60,7 +60,6 @@
   "modelTotal": {
     "title": "{range}模型调用总量",
     "callCount": "共 {count} 次调用",
-    "unknownUsage": "{count} 次请求未返回 Token 用量",
     "avgTtft": "平均首字延迟（TTFT）",
     "avgDuration": "平均响应时间",
     "avgTpm": "平均每分钟输出（TPM）",

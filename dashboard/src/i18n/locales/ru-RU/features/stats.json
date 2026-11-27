@@ -60,7 +60,6 @@
   "modelTotal": {
     "title": "{range} всего вызовов моделей",
     "callCount": "{count} вызовов",
-    "unknownUsage": "Запросы без данных о токенах: {count}",
     "avgTtft": "Средний TTFT",
     "avgDuration": "Среднее время ответа",
     "avgTpm": "Средний Output TPM",
