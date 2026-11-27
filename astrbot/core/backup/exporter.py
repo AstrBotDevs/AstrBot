@@ -35,23 +35,32 @@ if TYPE_CHECKING:
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 
-# 可重建的通用缓存目录（在所有备份目录中均可安全跳过）
+# Rebuildable cache directories that can always be skipped during backup
 EXCLUDED_CACHE_DIR_NAMES = frozenset(
     {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
 )
-# 插件及插件数据目录下的临时/媒体缓存目录名
+# Temporary/media cache directory names under plugins and plugin_data
 EXCLUDED_PLUGIN_CACHE_DIR_NAMES = frozenset({"cache", ".cache"})
-# 跳过无法读取的文件时，汇总告警最多附带的样例条数
+# Maximum number of skipped-file samples included in the summary warning
 SKIPPED_FILE_SAMPLE_LIMIT = 5
 
 
 def _should_skip_backup_dir(dir_name: str, parent_dir: Path, subdir_name: str) -> bool:
-    """判断备份目录遍历时是否应跳过某个子目录。
+    """Determine whether a subdirectory should be skipped during backup traversal.
 
-    - ``__pycache__`` / ``.pytest_cache`` / ``.ruff_cache`` / ``.mypy_cache`` 始终跳过；
-    - ``plugin_data`` 下的 ``cache`` / ``.cache`` 属于可重建运行缓存，始终跳过；
-    - ``plugins`` 下的 ``.cache`` 始终跳过；名为 ``cache`` 的目录仅在不包含
-      ``__init__.py`` 时视为运行缓存跳过（避免误跳插件自身的 Python ``cache`` 包）。
+    Always skips common rebuildable cache directories (``__pycache__``,
+    ``.pytest_cache``, ``.ruff_cache``, ``.mypy_cache``), skips ``cache`` and
+    ``.cache`` under ``plugin_data``, and skips ``.cache`` under ``plugins`` as well
+    as ``cache`` directories under ``plugins`` that do not contain ``__init__.py``
+    (to avoid skipping a plugin's Python ``cache`` package).
+
+    Args:
+        dir_name: Top-level backup directory key (e.g., ``"plugins"``, ``"plugin_data"``).
+        parent_dir: Parent directory currently being traversed.
+        subdir_name: Immediate subdirectory name to evaluate.
+
+    Returns:
+        True if the subdirectory should be excluded from the backup archive.
     """
     lowered = subdir_name.lower()
     if lowered in EXCLUDED_CACHE_DIR_NAMES:
@@ -364,7 +373,7 @@ class AstrBotExporter:
             try:
                 for root, dirs, files in os.walk(full_path):
                     root_path = Path(root)
-                    # 跳过编译缓存与插件可重建缓存目录
+                    # Skip bytecode and rebuildable plugin cache directories
                     dirs[:] = [
                         d
                         for d in dirs
@@ -372,28 +381,24 @@ class AstrBotExporter:
                     ]
 
                     for file in files:
-                        # 跳过 .pyc / .pyo 字节码文件
+                        # Skip .pyc / .pyo bytecode files
                         if file.endswith((".pyc", ".pyo")):
                             continue
 
                         file_path = root_path / file
                         try:
-                            # 计算相对路径；先取大小再写入，确保失败时统计与归档一致
+                            # Compute relative path and stat before writing so stats match archived files on error
                             rel_path = file_path.relative_to(full_path)
                             archive_path = f"directories/{dir_name}/{rel_path}"
                             file_size = file_path.stat().st_size
                             zf.write(str(file_path), archive_path)
-                        except OSError as e:
-                            skipped_files += 1
-                            if len(skipped_samples) < SKIPPED_FILE_SAMPLE_LIMIT:
-                                skipped_samples.append(f"{file_path} ({e})")
-                            logger.debug(f"备份导出跳过无法读取的文件 {file_path}: {e}")
-                            continue
                         except Exception as e:
                             skipped_files += 1
                             if len(skipped_samples) < SKIPPED_FILE_SAMPLE_LIMIT:
                                 skipped_samples.append(f"{file_path} ({e})")
-                            logger.debug(f"备份导出跳过异常文件 {file_path}: {e}")
+                            logger.debug(
+                                f"Skipped unreadable or inaccessible file during backup export {file_path}: {e}"
+                            )
                             continue
                         file_count += 1
                         total_size += file_size
@@ -409,7 +414,7 @@ class AstrBotExporter:
         if skipped_files:
             samples_str = ", ".join(skipped_samples)
             logger.warning(
-                f"备份导出跳过 {skipped_files} 个无法读取或被占用的文件；样例: {samples_str}"
+                f"Backup export skipped {skipped_files} unreadable or locked file(s); samples: {samples_str}"
             )
 
         return stats
