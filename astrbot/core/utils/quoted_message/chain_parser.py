@@ -13,6 +13,7 @@ from astrbot.core.message.components import (
     Node,
     Nodes,
     Plain,
+    Record,
     Reply,
     Video,
 )
@@ -137,6 +138,8 @@ def _extract_text_from_component_chain(
             parts.append("[Image]")
         elif isinstance(seg, Video):
             parts.append("[Video]")
+        elif isinstance(seg, Record):
+            parts.append("[Audio]")
         elif isinstance(seg, File):
             file_name = seg.name or "file"
             parts.append(f"[File:{file_name}]")
