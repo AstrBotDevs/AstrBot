@@ -414,7 +414,9 @@ async def test_parse_failed_response_raises_provider_error():
 async def test_native_xai_tools_in_serialized_request(
     source, enabled, streaming, monkeypatch
 ):
-    httpx = _base_client.httpx
+    httpx = (
+        _base_client.httpx2 if hasattr(_base_client, "httpx2") else _base_client.httpx
+    )
     configured = [{"type": "x_search"}]
     if streaming:
         configured.append(
