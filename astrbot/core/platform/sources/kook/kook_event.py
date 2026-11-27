@@ -1,7 +1,8 @@
 import asyncio
 import json
-from collections.abc import Coroutine
+from collections.abc import AsyncGenerator, Coroutine
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from astrbot import logger
@@ -288,6 +289,84 @@ class KookEvent(AstrMessageEvent):
             logger.error(f"[kook] {err_msg}")
 
         await super().send(message)
+
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ) -> None:
+        """Stream cumulative KMarkdown text into editable KOOK messages.
+
+        Args:
+            generator: Incremental message chains from the response pipeline.
+            use_fallback: Framework flag for platforms without native streaming.
+
+        Raises:
+            RuntimeError: If a message cannot be created or updated.
+        """
+        # KOOK recommends at most 8,000 characters per message.
+        max_length = 8000
+        msg_id = None
+        content = sent = ""
+        next_edit = 0.0
+
+        async def publish() -> None:
+            nonlocal msg_id, sent, next_edit
+            if content == sent:
+                return
+            if msg_id is None:
+                msg_id = await self.client.send_text(
+                    self.channel_id,
+                    content,
+                    self.astrbot_message_type,
+                    KookMessageType.KMARKDOWN,
+                )
+                if msg_id is None:
+                    raise RuntimeError("KOOK streaming message creation failed")
+            else:
+                await self.client.update_text(
+                    msg_id, content, self.astrbot_message_type
+                )
+            sent = content
+            # Batch rapid deltas since each edit counts towards the message quota.
+            next_edit = monotonic() + 1
+
+        iterator = aiter(generator)
+        while True:
+            try:
+                chain = await anext(iterator)
+            except StopAsyncIteration:
+                break
+            except Exception:
+                # Deliver text already received while preserving the generation error.
+                try:
+                    await publish()
+                except Exception:
+                    logger.exception("Failed to flush buffered KOOK text")
+                raise
+
+            if chain.type == "break" or any(
+                not isinstance(component, Plain) for component in chain.chain
+            ):
+                await publish()
+                msg_id = None
+                content = sent = ""
+                if chain.type != "break":
+                    await self.send(chain)
+                continue
+
+            delta = "".join(component.text for component in chain.chain)
+            while delta:
+                available = max_length - len(content)
+                content += delta[:available]
+                delta = delta[available:]
+                if len(content) == max_length:
+                    await publish()
+                    msg_id = None
+                    content = sent = ""
+                elif msg_id is None or monotonic() >= next_edit:
+                    await publish()
+
+        await publish()
+        await super().send_streaming(generator, use_fallback)
 
     async def get_group(self, group_id=None, **kwargs):
         """Gets KOOK channel and guild member information.

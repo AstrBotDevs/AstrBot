@@ -27,8 +27,10 @@ class KookApiPaths:
     ASSET_VOICE_TOKEN = f"{BASE_URL}{API_VERSION_PATH}/asset/voice-token"
     ## 频道消息
     CHANNEL_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/message/create"
+    CHANNEL_MESSAGE_UPDATE = f"{BASE_URL}{API_VERSION_PATH}/message/update"
     ## 私聊消息
     DIRECT_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/create"
+    DIRECT_MESSAGE_UPDATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/update"
 
 
 class KookMentionTagName(str, Enum):

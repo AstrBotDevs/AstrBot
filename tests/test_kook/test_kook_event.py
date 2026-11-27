@@ -1,8 +1,10 @@
 import json
-from unittest.mock import AsyncMock
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -23,6 +25,8 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.platform.button_interaction import decode_button_callback
+from astrbot.core.platform.sources.kook.kook_client import KookClient
+from astrbot.core.platform.sources.kook.kook_config import KookConfig
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
 from tests.test_kook.shared import (
@@ -360,3 +364,80 @@ async def test_kook_get_group_returns_basic_group_when_lookup_fails():
     group = await event.get_group()
 
     assert group == Group(group_id="channel-1", group_name="cached-channel")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message_type", "endpoint"),
+    [
+        (MessageType.GROUP_MESSAGE, "message"),
+        (MessageType.FRIEND_MESSAGE, "direct-message"),
+    ],
+)
+async def test_streaming_edits_created_message(monkeypatch, message_type, endpoint):
+    monkeypatch.setenv("ASTRBOT_DISABLE_METRICS", "1")
+    now = 0.0
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_event.monotonic", lambda: now
+    )
+    requests = []
+    base = f"https://www.kookapp.cn/api/v3/{endpoint}"
+
+    @asynccontextmanager
+    async def post(url, *, json):
+        requests.append((url, json))
+        data = {"msg_id": "created-id"} if url.endswith("/create") else []
+        yield Mock(status=200, json=AsyncMock(return_value={"code": 0, "data": data}))
+
+    client = KookClient(KookConfig(token="test"), None)
+    monkeypatch.setattr(client.http_client, "post", post)
+    message = mock_astrbot_message()
+    message.type = message_type
+    message.group_id = "channel" if message_type == MessageType.GROUP_MESSAGE else ""
+    message.session_id = "user"
+    target = message.group_id or message.session_id
+    event = KookEvent("", message, PlatformMetadata("kook", "", "kook"), target, client)
+
+    async def chunks():
+        nonlocal now
+        yield MessageChain().message("Hello")
+        assert requests == [
+            (f"{base}/create", {"target_id": target, "type": 9, "content": "Hello"})
+        ]
+        now += 2
+        yield MessageChain().message(" world")
+        assert requests[1:] == [
+            (f"{base}/update", {"msg_id": "created-id", "content": "Hello world"})
+        ]
+        yield MessageChain().message("!")
+
+    try:
+        await event.send_streaming(chunks())
+    finally:
+        await client.http_client.close()
+    assert requests[2:] == [
+        (f"{base}/update", {"msg_id": "created-id", "content": "Hello world!"})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_streaming_flushes_pending_text_on_generator_error(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_event.monotonic", lambda: 0.0
+    )
+    client = AsyncMock(spec=KookClient)
+    client.send_text.return_value = "created-id"
+    message = mock_astrbot_message()
+    event = KookEvent("", message, PlatformMetadata("kook", "", "kook"), "test", client)
+
+    async def chunks():
+        yield MessageChain().message("Hello")
+        yield MessageChain().message(" world")
+        raise ValueError("generation failed")
+
+    with pytest.raises(ValueError, match="generation failed"):
+        await event.send_streaming(chunks())
+
+    client.update_text.assert_awaited_once_with(
+        "created-id", "Hello world", message.type
+    )
