@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 
@@ -52,8 +53,12 @@ class FaissVecDB(BaseVecDB):
         # 使用 DocumentStorage 的方法插入文档
         int_id = await self.document_storage.insert_document(str_id, content, metadata)
 
-        # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
+        # 插入向量到 FAISS，并在失败或取消时回滚文档记录
+        try:
+            await self.embedding_storage.insert(vector, int_id)
+        except BaseException:
+            await self._rollback_partial_insert(ids=[str_id], int_ids=[int_id])
+            raise
         return int_id
 
     async def insert_batch(
@@ -207,7 +212,7 @@ class FaissVecDB(BaseVecDB):
                     },
                 )
             await self.embedding_storage.insert_batch(vectors_array, int_ids)
-        except Exception:
+        except BaseException:
             await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
             raise
         return int_ids
@@ -348,4 +353,6 @@ class FaissVecDB(BaseVecDB):
         )
         doc_ids: list[int] = [doc["id"] for doc in docs]
         await self.embedding_storage.delete(doc_ids)
-        await self.document_storage.delete_documents(metadata_filters=metadata_filters)
+        await asyncio.shield(
+            self.document_storage.delete_documents(metadata_filters=metadata_filters)
+        )

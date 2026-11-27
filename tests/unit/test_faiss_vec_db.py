@@ -182,7 +182,9 @@ def test_embedding_storage_write_index_is_atomic_on_failure(
     )
     baseline_bytes = index_path.read_bytes()
 
-    def failing_write(_index, _path):
+    def failing_write(_index, path):
+        with open(path, "wb") as f:
+            f.write(b"corrupted-partial-bytes")
         raise OSError("disk full")
 
     monkeypatch.setattr(faiss, "write_index", failing_write)
@@ -278,5 +280,54 @@ async def test_faiss_retrieve_handles_more_than_100_candidates_and_empty_ids(
             ids=[-1, -1],
         )
         assert no_match == []
+    finally:
+        await vec_db.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_embedding_storage_instances_preserve_all_writes(
+    tmp_path,
+) -> None:
+    """Two EmbeddingStorage instances targeting the same file coordinate updates."""
+    import numpy as np
+
+    index_path = tmp_path / "shared.faiss"
+    storage_a = EmbeddingStorage(2, str(index_path))
+    storage_b = EmbeddingStorage(2, str(index_path))
+
+    await asyncio.gather(
+        storage_a.insert_batch(np.array([[1.0, 0.0]], dtype=np.float32), [1]),
+        storage_b.insert_batch(np.array([[0.0, 1.0]], dtype=np.float32), [2]),
+    )
+
+    reloaded = EmbeddingStorage(2, str(index_path))
+    assert reloaded.index.ntotal == 2
+
+
+@pytest.mark.asyncio
+async def test_single_insert_rolls_back_doc_and_vector_on_save_failure(
+    tmp_path, monkeypatch
+) -> None:
+    """FaissVecDB.insert rolls back document row and vector when FAISS save fails."""
+    import faiss
+
+    provider = DelayedEmbeddingProvider()
+    vec_db = FaissVecDB(
+        doc_store_path=str(tmp_path / "docs_rollback.db"),
+        index_store_path=str(tmp_path / "vec_rollback.faiss"),
+        embedding_provider=provider,
+    )
+    await vec_db.initialize()
+    try:
+
+        def failing_write(_index, _path):
+            raise OSError("save error")
+
+        monkeypatch.setattr(faiss, "write_index", failing_write)
+        with pytest.raises(OSError, match="save error"):
+            await vec_db.insert("chunk-1", {"kb_id": "kb1"}, id="single-doc-1")
+
+        assert await vec_db.count_documents() == 0
+        assert vec_db.embedding_storage.index.ntotal == 0
     finally:
         await vec_db.close()
