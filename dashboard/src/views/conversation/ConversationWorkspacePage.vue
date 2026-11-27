@@ -65,7 +65,8 @@ type BotOption = {
 };
 
 type SessionGroup = {
-  userId: string;
+  key: string;
+  isWebChat: boolean;
   sample: Conversation;
   items: Conversation[];
   selectedCount: number;
@@ -114,6 +115,9 @@ const listRequestId = ref(0);
 
 const selectedByKey = ref<Record<string, Conversation>>({});
 const activeConversation = ref<Conversation | null>(null);
+const activeSessionKey = computed(() =>
+  activeConversation.value ? sessionGroupKey(activeConversation.value) : null,
+);
 const conversationHistory = ref<unknown[]>([]);
 const previewLoading = ref(false);
 const previewRequestId = ref(0);
@@ -155,12 +159,14 @@ const somePageSelected = computed(
 const sessionGroups = computed<SessionGroup[]>(() => {
   const groups = new Map<string, Conversation[]>();
   for (const item of conversations.value) {
-    const items = groups.get(item.user_id);
+    const key = sessionGroupKey(item);
+    const items = groups.get(key);
     if (items) items.push(item);
-    else groups.set(item.user_id, [item]);
+    else groups.set(key, [item]);
   }
-  return Array.from(groups, ([userId, items]) => ({
-    userId,
+  return Array.from(groups, ([key, items]) => ({
+    key,
+    isWebChat: key === "webchat",
     sample: items[0],
     items,
     selectedCount: items.filter(
@@ -180,16 +186,16 @@ const conversationListEntries = computed<ConversationListEntry[]>(() => {
 
   const entries: ConversationListEntry[] = [];
   for (const group of sessionGroups.value) {
-    entries.push({ kind: "session", key: `session:${group.userId}`, group });
-    if (expandedSessions.value[group.userId]) {
-      entries.push(
-        ...group.items.map((item) => ({
-          kind: "conversation" as const,
+    entries.push({ kind: "session", key: `session:${group.key}`, group });
+    if (expandedSessions.value[group.key]) {
+      for (const item of group.items) {
+        entries.push({
+          kind: "conversation",
           key: conversationKey(item),
           item,
           grouped: true,
-        })),
-      );
+        });
+      }
     }
   }
   return entries;
@@ -228,10 +234,9 @@ watch([keyword, umoQuery], () => {
 watch([selectedBotIds, selectedTypes, sortValue, groupBySession], () => {
   cancelScheduledFetch();
   page.value = 1;
+  const key = activeSessionKey.value;
   expandedSessions.value =
-    groupBySession.value && activeConversation.value
-      ? { [activeConversation.value.user_id]: true }
-      : {};
+    groupBySession.value && key ? { [key]: true } : {};
   void fetchConversations();
 });
 
@@ -283,6 +288,10 @@ function getUmoInfo(item: Conversation | null): Required<UmoInfo> {
 function conversationIdentity(item: Conversation) {
   const info = getUmoInfo(item);
   return info.user_alias || info.auto_name || info.session_id || info.umo;
+}
+
+function sessionGroupKey(item: Conversation) {
+  return item.platform_id === "webchat" ? "webchat" : `umo:${item.user_id}`;
 }
 
 function hasReadableIdentity(item: Conversation) {
@@ -355,6 +364,7 @@ async function fetchConversations() {
     sort_order: sortOrder,
     group_by_session: groupBySession.value,
   };
+  if (groupBySession.value) params.group_webchat = true;
   if (keyword.value.trim()) params.keyword = keyword.value.trim();
   if (umoQuery.value.trim()) params.umo = umoQuery.value.trim();
   if (selectedBotIds.value.length) {
@@ -457,10 +467,10 @@ function toggleSessionSelection(group: SessionGroup) {
   selectedByKey.value = next;
 }
 
-function toggleSessionExpanded(userId: string) {
+function toggleSessionExpanded(key: string) {
   expandedSessions.value = {
     ...expandedSessions.value,
-    [userId]: !expandedSessions.value[userId],
+    [key]: !expandedSessions.value[key],
   };
 }
 
@@ -997,8 +1007,7 @@ function changePage(nextPage: number) {
               v-if="entry.kind === 'session'"
               class="session-group-row"
               :class="{
-                'session-group-row--active':
-                  activeConversation?.user_id === entry.group.userId,
+                'session-group-row--active': activeSessionKey === entry.group.key,
               }"
             >
               <span class="row-select" @click.stop>
@@ -1029,26 +1038,34 @@ function changePage(nextPage: number) {
               <button
                 type="button"
                 class="session-group-main"
-                :aria-expanded="Boolean(expandedSessions[entry.group.userId])"
-                @click="toggleSessionExpanded(entry.group.userId)"
+                :aria-expanded="Boolean(expandedSessions[entry.group.key])"
+                @click="toggleSessionExpanded(entry.group.key)"
               >
                 <span class="row-content">
                   <span
                     class="session-group-name"
                     :class="{
-                      'row-identity--named': hasReadableIdentity(
-                        entry.group.sample,
-                      ),
+                      'row-identity--named':
+                        !entry.group.isWebChat &&
+                        hasReadableIdentity(entry.group.sample),
                     }"
-                    :title="entry.group.userId"
+                    :title="
+                      entry.group.isWebChat ? undefined : entry.group.sample.user_id
+                    "
                   >
-                    {{ conversationIdentity(entry.group.sample) }}
+                    {{
+                      entry.group.isWebChat
+                        ? "WebChat"
+                        : conversationIdentity(entry.group.sample)
+                    }}
                   </span>
                   <span class="row-meta">
-                    <span>{{ entry.group.sample.platform_id }}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ messageTypeLabel(entry.group.sample) }}</span>
-                    <span aria-hidden="true">·</span>
+                    <template v-if="!entry.group.isWebChat">
+                      <span>{{ entry.group.sample.platform_id }}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{{ messageTypeLabel(entry.group.sample) }}</span>
+                      <span aria-hidden="true">·</span>
+                    </template>
                     <span>
                       {{
                         tm("workspace.list.conversationCount", {
@@ -1059,7 +1076,7 @@ function changePage(nextPage: number) {
                   </span>
                 </span>
                 <ChevronDown
-                  v-if="expandedSessions[entry.group.userId]"
+                  v-if="expandedSessions[entry.group.key]"
                   :size="16"
                   aria-hidden="true"
                 />
