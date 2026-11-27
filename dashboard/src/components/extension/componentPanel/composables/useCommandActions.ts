@@ -3,6 +3,7 @@
  */
 import { reactive } from 'vue';
 import { commandApi } from '@/api/v1';
+import { resolveErrorMessage } from '@/utils/errorUtils';
 import type { CommandPermission, CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
 
 export function useCommandActions(
@@ -43,7 +44,7 @@ export function useCommandActions(
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+      toast(resolveErrorMessage(err, errorMessage), 'error');
     }
   };
 
@@ -77,7 +78,7 @@ export function useCommandActions(
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+      toast(resolveErrorMessage(err, errorMessage), 'error');
     } finally {
       renameDialog.loading = false;
     }
@@ -158,7 +159,7 @@ export function useCommandActions(
         toast(res.data.message || errorMessage, 'error');
       }
     } catch (err: any) {
-      toast(err?.message || errorMessage, 'error');
+      toast(resolveErrorMessage(err, errorMessage), 'error');
     }
   };
 

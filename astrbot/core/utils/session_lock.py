@@ -14,14 +14,20 @@ class _PerLoopSessionLockManager:
         self._access_lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def acquire_lock(self, session_id: str):
+    async def acquire_lock(self, session_id: str, timeout: float | None):
         async with self._access_lock:
             lock = self._locks[session_id]
             self._lock_count[session_id] += 1
 
         try:
-            async with lock:
+            try:
+                await asyncio.wait_for(lock.acquire(), timeout)
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError("Session is busy. Please retry.") from exc
+            try:
                 yield
+            finally:
+                lock.release()
         finally:
             async with self._access_lock:
                 self._lock_count[session_id] -= 1
@@ -33,7 +39,8 @@ class _PerLoopSessionLockManager:
 class SessionLockManager:
     """Thread-safe session lock manager with per-event-loop isolation."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, acquisition_timeout: float | None = None) -> None:
+        self._acquisition_timeout = acquisition_timeout
         self._state_guard = threading.Lock()
         self._loop_managers: weakref.WeakKeyDictionary[
             asyncio.AbstractEventLoop, _PerLoopSessionLockManager
@@ -48,7 +55,7 @@ class SessionLockManager:
     @asynccontextmanager
     async def acquire_lock(self, session_id: str):
         manager = self._get_loop_manager()
-        async with manager.acquire_lock(session_id):
+        async with manager.acquire_lock(session_id, self._acquisition_timeout):
             yield
 
 

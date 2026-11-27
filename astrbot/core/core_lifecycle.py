@@ -162,7 +162,9 @@ class AstrBotCoreLifecycle:
         await self.db.initialize()
         button_callback_db_path = getattr(self.db, "db_path", None)
         if isinstance(button_callback_db_path, (str, Path)):
-            configure_button_callback_registry(button_callback_db_path)
+            await asyncio.to_thread(
+                configure_button_callback_registry, button_callback_db_path
+            )
         if sp.db_helper is self.db:
             await sp.initialize()
 
@@ -395,6 +397,9 @@ class AstrBotCoreLifecycle:
         for task in self.curr_tasks:
             task.cancel()
 
+        if event_bus := getattr(self, "event_bus", None):
+            await event_bus.close()
+
         if self.cron_manager:
             await self.cron_manager.shutdown()
 
@@ -433,6 +438,7 @@ class AstrBotCoreLifecycle:
         from astrbot.core.utils.trace_store import close_trace_store
 
         await asyncio.to_thread(close_trace_store)
+        await self.db.chat_usage_writer.close()
         try:
             await self.db.engine.dispose()
         except Exception as e:
@@ -440,6 +446,8 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        if event_bus := getattr(self, "event_bus", None):
+            await event_bus.close()
         context = getattr(self, "star_context", None)
         if isinstance(context, Context):
             await context.agent.close()
@@ -454,6 +462,7 @@ class AstrBotCoreLifecycle:
         if sp.db_helper is self.db:
             await sp.close()
         self.dashboard_shutdown_event.set()
+        await self.db.chat_usage_writer.close()
         threading.Thread(
             target=restart_process,
             name="restart",

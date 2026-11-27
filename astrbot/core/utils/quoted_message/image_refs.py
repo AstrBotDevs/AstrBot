@@ -40,8 +40,7 @@ def convert_data_image_to_base64_ref(image_ref: str) -> str | None:
     value = image_ref.strip()
     if not value:
         return None
-    lower_value = value.lower()
-    if not lower_value.startswith("data:image/"):
+    if value[: len("data:image/")].lower() != "data:image/":
         return None
 
     comma_index = value.find(",")
@@ -71,11 +70,8 @@ def normalize_image_ref(image_ref: str) -> str | None:
     value = image_ref.strip()
     if not value:
         return None
-    lower_value = value.lower()
-
-    if lower_value.startswith(("http://", "https://")):
-        return value
-    if lower_value.startswith("base64://"):
+    prefix = value[: len("base64://")].lower()
+    if prefix.startswith(("http://", "https://", "base64://")):
         return value
 
     data_image_ref = convert_data_image_to_base64_ref(value)

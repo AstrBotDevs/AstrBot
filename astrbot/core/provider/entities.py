@@ -220,6 +220,7 @@ class ProviderRequest:
     """模型名称，为 None 时使用提供商的默认模型"""
     extra_body: dict[str, Any] = field(default_factory=dict)
     """请求级额外请求体参数覆盖，合并时优先于提供商配置中的 custom_extra_body"""
+    _plugin_id: str | None = field(default=None, init=False, repr=False)
 
     def __repr__(self) -> str:
         return (

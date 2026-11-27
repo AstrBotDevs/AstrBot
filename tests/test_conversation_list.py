@@ -235,20 +235,25 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
         timestamp = datetime(2026, 1, day, tzinfo=timezone.utc)
         return ConversationV2(
             conversation_id=cid,
-            platform_id="qq",
+            platform_id=user_id.split(":", 1)[0],
             user_id=user_id,
             content=[{"role": "user", "content": cid}],
             created_at=timestamp,
             updated_at=timestamp,
         )
 
-    await seed_conversations(db, [
-                    conversation("a-old", "qq:FriendMessage:a", 1),
-                    conversation("a-new", "qq:FriendMessage:a", 2),
-                    conversation("b-old", "qq:FriendMessage:b", 3),
-                    conversation("b-new", "qq:FriendMessage:b", 4),
-                    conversation("c-only", "qq:FriendMessage:c", 5),
-                ])
+    await seed_conversations(
+        db,
+        [
+            conversation("a-old", "qq:FriendMessage:a", 1),
+            conversation("a-new", "qq:FriendMessage:a", 2),
+            conversation("b-old", "qq:FriendMessage:b", 3),
+            conversation("b-new", "qq:FriendMessage:b", 4),
+            conversation("c-only", "qq:FriendMessage:c", 5),
+            conversation("web-old", "webchat:FriendMessage:webchat!user!session-1", 2),
+            conversation("web-new", "webchat:FriendMessage:webchat!user!session-2", 6),
+        ],
+    )
 
     first_page, total_sessions = await db.get_filtered_conversations(
         page=1,
@@ -256,6 +261,7 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
         sort_by="updated_at",
         sort_order="desc",
         group_by_session=True,
+        group_webchat=True,
         include_history=False,
     )
     second_page, second_total = await db.get_filtered_conversations(
@@ -264,17 +270,38 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
         sort_by="updated_at",
         sort_order="desc",
         group_by_session=True,
+        group_webchat=True,
         include_history=False,
     )
 
-    assert total_sessions == second_total == 3
+    assert total_sessions == second_total == 4
     assert [item.conversation_id for item in first_page] == [
+        "web-new",
+        "web-old",
         "c-only",
+    ]
+    assert [item.conversation_id for item in second_page] == [
         "b-new",
         "b-old",
+        "a-new",
+        "a-old",
     ]
-    assert [item.conversation_id for item in second_page] == ["a-new", "a-old"]
     assert all(item.content is None for item in first_page)
+
+    default_groups, default_total = await db.get_filtered_conversations(
+        page=1, page_size=2, group_by_session=True, include_history=False
+    )
+    assert default_total == 5
+    assert [item.conversation_id for item in default_groups] == ["web-new", "c-only"]
+
+    filtered, filtered_total = await db.get_filtered_conversations(
+        group_by_session=True,
+        group_webchat=True,
+        umo_query="session-2",
+        include_history=False,
+    )
+    assert filtered_total == 1
+    assert [item.conversation_id for item in filtered] == ["web-new"]
 
 
 @pytest.mark.asyncio

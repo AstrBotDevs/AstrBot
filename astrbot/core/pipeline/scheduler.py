@@ -74,7 +74,8 @@ class PipelineScheduler:
                             logger.debug(
                                 f"Stage {stage.__class__.__name__} stopped event propagation.",
                             )
-                            break
+                            # The downstream stages already handled this result.
+                            return
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
@@ -115,8 +116,8 @@ class PipelineScheduler:
                     if isinstance(interaction, UIInteraction):
                         import asyncio
 
-                        from astrbot.core.chatui import view_store
                         from astrbot.core.message.components import Json
+                        from astrbot.core.message.interactive_ui import view_store
                         from astrbot.core.message.message_event_result import (
                             MessageChain,
                         )

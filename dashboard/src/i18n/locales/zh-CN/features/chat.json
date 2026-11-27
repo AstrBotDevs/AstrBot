@@ -108,6 +108,8 @@
     "output": "输出"
   },
   "toolStatus": {
+    "interrupted": "已中断，结果未知",
+    "interruptedDetail": "执行被中断（停止、超时或出错），没有收到结果。这个操作可能已经生效，重试前请先检查。",
     "done": "已完成",
     "running": "运行中"
   },

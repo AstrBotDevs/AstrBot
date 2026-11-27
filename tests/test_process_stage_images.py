@@ -185,9 +185,9 @@ def harness(tmp_path, monkeypatch):
     provider.text_chat_stream = stream
     context.get_using_provider_async = AsyncMock(return_value=provider)
     context.get_provider_by_id.return_value = provider
-    runtime = AstrAgentRuntime(
-        context, agent_configs=MagicMock(), subagents=MagicMock()
-    )
+    subagents = MagicMock()
+    subagents.store.find_native_conversation.return_value = None
+    runtime = AstrAgentRuntime(context, agent_configs=MagicMock(), subagents=subagents)
     ctx = SimpleNamespace(
         astrbot_config=config,
         plugin_manager=SimpleNamespace(context=context),
@@ -205,7 +205,6 @@ def harness(tmp_path, monkeypatch):
     monkeypatch.setattr(
         internal, "try_capture_follow_up", lambda event, runtime=None: None
     )
-    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     monkeypatch.setattr(
         knowledge_base_build, "retrieve_knowledge_base", AsyncMock(return_value=None)

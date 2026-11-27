@@ -41,6 +41,10 @@
         },
         "deepseekSttHints": {
             "apiBase": "Базовый URL DeepSeek STT API, по умолчанию https://api.deepseek.com/v1. Путь /tools/asr добавляется автоматически; не добавляйте ещё один /v1."
+        },
+        "stepfunTtsHints": {
+            "model": "ID модели StepFun TTS. По умолчанию используется stepaudio-3-tts.",
+            "apiBase": "Для API в Китае используется https://api.stepfun.com/v1 (по умолчанию), за пределами Китая — https://api.stepfun.ai/v1. Для Step Plan используйте https://api.stepfun.com/step_plan/v1 в Китае или https://api.stepfun.ai/step_plan/v1 за его пределами. AstrBot автоматически добавляет /audio/speech."
         }
     },
     "availability": {

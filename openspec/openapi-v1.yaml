@@ -4457,6 +4457,12 @@ paths:
             type: boolean
             default: false
           description: Paginate by UMO and return all conversation summaries for each selected session.
+        - name: group_webchat
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Combine matching WebChat conversations into one group when group_by_session is enabled.
         - name: include_history
           in: query
           schema:

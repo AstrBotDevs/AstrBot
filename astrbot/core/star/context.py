@@ -680,17 +680,22 @@ class Context:
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
 
-    def locale(self, umo: str | None = None) -> str:
+    async def get_locale(self, umo: str | None = None) -> str:
         """Resolve the bot reply language for a session.
 
         Args:
-            umo: Unified message origin. Omit to use the default profile.
+            umo: Unified message origin. Omit to use the active message's
+                session, or the default profile if there is no active message.
 
         Returns:
             ``zh-CN`` or ``en-US`` from the effective configuration, falling
             back to ``zh-CN`` when missing or unsupported. This is independent
             of the WebUI display language.
         """
+        if umo is None:
+            event = current_message_event.get()
+            if event is not None and event._execution_active:
+                umo = event.unified_msg_origin
         return get_config_locale(self.get_config(umo=umo))
 
     async def send_message(

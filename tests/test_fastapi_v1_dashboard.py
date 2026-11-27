@@ -324,6 +324,7 @@ class FakeConversationManager:
         self.last_umo_query = ""
         self.last_sort = ("created_at", "desc")
         self.last_group_by_session = False
+        self.last_group_webchat = False
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -346,6 +347,7 @@ class FakeConversationManager:
         sort_by: str = "created_at",
         sort_order: str = "desc",
         group_by_session: bool = False,
+        group_webchat: bool = False,
         include_history: bool = True,
     ):
         self.last_include_history = include_history
@@ -353,6 +355,7 @@ class FakeConversationManager:
         self.last_umo_query = umo_query
         self.last_sort = (sort_by, sort_order)
         self.last_group_by_session = group_by_session
+        self.last_group_webchat = group_webchat
         self.last_filter_args = {
             "platforms": platforms,
             "message_types": message_types,
@@ -1484,6 +1487,7 @@ async def test_conversation_workspace_filters_and_options(
             "sort_by": "updated_at",
             "sort_order": "asc",
             "group_by_session": "true",
+            "group_webchat": "true",
         },
         headers=_jwt_headers(),
     )
@@ -1493,6 +1497,7 @@ async def test_conversation_workspace_filters_and_options(
     assert manager.last_umo_query == "session-1"
     assert manager.last_sort == ("updated_at", "asc")
     assert manager.last_group_by_session is True
+    assert manager.last_group_webchat is True
 
 
 @pytest.mark.asyncio
@@ -2536,12 +2541,23 @@ async def test_v1_plugin_repository_install_uses_transport_route(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("has_definitions", "category_id"),
+    [(True, "utility"), (True, "unknown"), (False, "utility"), (True, None)],
+)
 async def test_plugin_service_market_install_uses_registry_entry(
     asgi_app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
+    has_definitions: bool,
+    category_id: str | None,
 ):
     plugin_service = asgi_app.state.services.plugins
     captured = {}
+    category = {
+        "id": "utility",
+        "display_name": "Utilities",
+        "i18n": {"zh-CN": {"display_name": "实用工具"}},
+    }
 
     async def fake_get_online_plugins(*, custom_registry, force_refresh):
         captured["registry_url"] = custom_registry
@@ -2551,11 +2567,13 @@ async def test_plugin_service_market_install_uses_registry_entry(
                 "schema_version": 1,
                 "name": "Test Market",
                 "version": "2026.06.27",
+                **({"categories": [category]} if has_definitions else {}),
             },
             "astrbot-plugin-demo": {
                 "author": "AstrBotDevs",
                 "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
                 "download_url": "https://cdn.example/market-plugin.zip",
+                "category": category_id,
             },
         }, None
 
@@ -2571,23 +2589,21 @@ async def test_plugin_service_market_install_uses_registry_entry(
         captured["download_url"] = download_url
         return {"name": "astrbot_plugin_demo"}
 
-    async def fake_persist_plugin_install_source(
-        plugin_info,
-        payload,
-        *,
-        fallback_method,
-        repo_url,
-        download_url,
-    ):
-        captured["persist_payload"] = payload
-        captured["persist_fallback_method"] = fallback_method
-        captured["persist_repo_url"] = repo_url
-        captured["persist_download_url"] = download_url
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        captured["records"] = records
 
     async def fake_sync_skills_after_plugin_change():
         captured["synced"] = True
 
     monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        plugin_service,
+        "find_plugin_by_name",
+        lambda name: SimpleNamespace(root_dir_name=name),
+    )
     monkeypatch.setattr(
         plugin_service.plugin_manager,
         "install_plugin",
@@ -2596,8 +2612,13 @@ async def test_plugin_service_market_install_uses_registry_entry(
     )
     monkeypatch.setattr(
         plugin_service,
-        "persist_plugin_install_source",
-        fake_persist_plugin_install_source,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
     )
     monkeypatch.setattr(
         plugin_service,
@@ -2612,6 +2633,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
             "install_method": "market",
             "registry_url": "https://example.com/plugins.json",
             "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+            "category": {"id": "client_supplied"},
             "proxy": "https://proxy.example",
             "ignore_version_check": True,
         }
@@ -2625,20 +2647,16 @@ async def test_plugin_service_market_install_uses_registry_entry(
     assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
     assert captured["proxy"] == "https://proxy.example"
     assert captured["ignore_version_check"] is True
-    assert captured["persist_fallback_method"] == "repository"
-    assert (
-        captured["persist_repo_url"]
-        == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-    )
-    assert captured["persist_download_url"] == "https://cdn.example/market-plugin.zip"
-    assert (
-        captured["persist_payload"]["registry_url"]
-        == "https://example.com/plugins.json"
-    )
-    assert (
-        captured["persist_payload"]["market_plugin_id"]
-        == "AstrBotDevs/astrbot-plugin-demo"
-    )
+    record = captured["records"]["astrbot_plugin_demo"]
+    assert record["install_method"] == "market"
+    assert record["repo"] == captured["repo_url"]
+    assert record["download_url"] == captured["download_url"]
+    assert record["registry_url"] == captured["registry_url"]
+    assert record["market_plugin_id"] == "AstrBotDevs/astrbot-plugin-demo"
+    if has_definitions and category_id == category["id"]:
+        assert record["category"] == category
+    else:
+        assert "category" not in record
     assert captured["synced"] is True
 
 
@@ -3611,6 +3629,44 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
         "name": plugin_id,
         "key": "assets/path",
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_source_add_is_idempotent_for_concurrent_requests(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    sources = [{"name": "existing", "url": "https://market.example/other.json"}]
+    writes = []
+
+    async def fake_global_get(_key, _default=None):
+        return list(sources)
+
+    async def fake_global_put(_key, value):
+        await asyncio.sleep(0)
+        sources[:] = value
+        writes.append(value)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.sp.global_get", fake_global_get
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.sp.global_put", fake_global_put
+    )
+    new_source = {"name": "Cloud", "url": "https://market.example/plugins.json"}
+    responses = await asyncio.gather(
+        *(
+            asgi_client.post(
+                "/api/v1/plugin-sources", json=new_source, headers=_jwt_headers()
+            )
+            for _ in range(2)
+        )
+    )
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["data"]["sources"] == sources for response in responses)
+    assert sources[1:] == [new_source]
+    assert len(writes) == 1
 
 
 @pytest.mark.asyncio

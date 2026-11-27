@@ -2,17 +2,20 @@
 
 import traceback
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.utils.plugin_scope import plugin_scope
 
 from ...context import PipelineContext, call_event_hook, call_handler
 from ...stage import Stage
@@ -73,8 +76,16 @@ class StarRequestSubStage(Stage):
             )
             try:
                 wrapper = call_handler(event, handler.handler, **params)
-                async for ret in wrapper:
-                    yield ret
+                async with aclosing(wrapper):
+                    while True:
+                        with plugin_scope(md.plugin_id):
+                            try:
+                                ret = await anext(wrapper)
+                            except StopAsyncIteration:
+                                break
+                            if isinstance(ret, ProviderRequest):
+                                ret._plugin_id = md.plugin_id
+                        yield ret
                 event.trace.record(
                     "handler_end",
                     kind="plugin_handler",

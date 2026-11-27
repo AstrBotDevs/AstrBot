@@ -5,10 +5,10 @@ from astrbot.api.message_components import (
     BaseMessageComponent,
     Button,
 )
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 
 
-def action_rows_to_discord_view(
+async def action_rows_to_discord_view(
     action_rows: list[ActionRow],
 ) -> discord.ui.View:
     """Convert common action rows to a Discord view.
@@ -46,7 +46,7 @@ def action_rows_to_discord_view(
                     row=row_index,
                 )
             elif isinstance(button.action, Button.CallbackAction):
-                custom_id = encode_button_callback(
+                custom_id = await encode_button_callback_async(
                     button.id,
                     button.action.data,
                     expires_at=action_row.action_expires_at,

@@ -176,14 +176,16 @@ Select `Data & Logs` in the left sidebar to switch between `Statistics`, `Conver
 
 ### Statistics
 
-The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, model usage rankings, and conversation model usage rankings. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, and token usage by provider and conversation. The call count includes historical Agent turns and individual Chat Provider request attempts, including retries and fallbacks. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+
+Average cache hit rate is the share of input tokens served from cache in the selected range.
 
 ### Conversations
 
 Use the `Conversations` tab to find and manage saved conversation records:
 
 - Filter by keyword, bot ID, private/group conversation type, or UMO, and sort by creation or update time.
-- By default, the list loads 30 records per page from the server. When **Group by session** is enabled, pagination switches to UMO sessions and expanding a session reveals all of its conversations. Full message history is loaded only after you select a conversation and is then shown in the preview on the right.
+- The list shows 30 records per page by default. With **Group by session** enabled, each group counts as one entry. Matching WebChat conversations share a single group, and other platforms group by UMO. Expand a group to see its conversations, then select one to load its full message history in the preview on the right.
 - Edit titles, export multiple selected conversations, or delete multiple selected conversations.
 - Use the `{}` button in the preview header to inspect the raw `history` JSON in a read-only, word-wrapped Monaco editor.
 - Select `Back to legacy` in the upper-right corner if you still need the original table-based view.

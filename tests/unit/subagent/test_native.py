@@ -8,9 +8,108 @@ import pytest
 from PIL import Image as PILImage
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_runtime.subagents.caller import DelegatedAgentInput
 from astrbot.core.astr_agent_runtime.subagents.store import AgentState
 from astrbot.core.message.components import Image
 from astrbot.core.provider.entities import LLMResponse
+
+
+@pytest.mark.asyncio
+async def test_native_followup_preserves_internal_turn_boundaries_after_restore(
+    environment,
+):
+    """Reloading delegated history must not promote an internal notice to a turn."""
+    env = environment
+    selected = await env.save_agent("worker", config={"compression": {"max_turns": 2}})
+    agent = await env.service.spawn(
+        env.root, [{"type": "plain", "text": "Initial"}], config_id=selected.config_id
+    )
+    await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    record = env.store.get(agent["agent_id"], env.scope)
+    session = await env.native.open_session(
+        env.scope.umo,
+        session_id=record.conversation_id,
+        options={"profile": "subagent"},
+    )
+    history = [
+        {"role": "user", "content": "Original request"},
+        {"role": "user", "content": "Internal notice", "_turn_continuation": True},
+        {"role": "assistant", "content": "Done"},
+    ]
+    await session._commit_history(history, None)
+    await session.close()
+
+    await env.service.send(
+        env.root, record.agent_id, [{"type": "plain", "text": "Continue"}]
+    )
+    result = await env.service.wait(env.root, [record.agent_id], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    restored = await env.native.open_session(
+        env.scope.umo,
+        session_id=record.conversation_id,
+        options={"profile": "subagent"},
+    )
+    saved = await restored.history()
+    assert saved[: len(history)] == history
+    assert len(saved) == len(history) + 2
+
+
+@pytest.mark.asyncio
+async def test_native_subagent_journal_is_scoped_to_umo(environment):
+    """Allow delegated restores within the UMO and keep them out of main listings."""
+    env = environment
+    store = env.db.conversation_store
+    main = await store.create(umo=env.scope.umo, platform_id="test")
+    agent = await env.service.spawn(
+        env.root, [{"type": "plain", "text": "Private input"}]
+    )
+    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    cid = agent["conversation_id"]
+
+    assert await env.db.get_conversation_by_id(cid) is None
+    assert [
+        conv.conversation_id for conv in await env.db.get_conversations(env.scope.umo)
+    ] == [main.conversation_id]
+    snapshot = await store.read(cid)
+    assert "Private input" in str(snapshot.messages)
+    events = await store.events(cid)
+    assert events[0].type == "conversation.created"
+    assert "parent_conversation_id" not in events[0].payload
+    assert "kind" not in events[0].payload
+    assert any(event.type == "message.appended" for event in events)
+
+    options = {"profile": "subagent"}
+    with pytest.raises(ValueError, match="missing or belongs to another UMO"):
+        await env.native.open_session(env.scope.umo, session_id=cid)
+    session = await env.native.open_session(
+        env.scope.umo, session_id=cid, options=options
+    )
+    with pytest.raises(ValueError, match="another UMO"):
+        await env.native.open_session(
+            "test:FriendMessage:bob", session_id=cid, options=options
+        )
+    await session.close()
+    env.native._sessions.pop(("subagent", cid))
+    caller = env.service._caller(env.root)
+    request = DelegatedAgentInput(
+        event=env.event, permissions=env.root.permissions, caller=caller
+    )
+    with pytest.raises(ValueError, match="owning caller"):
+        await env.native.open_session(
+            "test:FriendMessage:bob", session_id=cid, options=options, input=request
+        )
+    profile = env.context.get_config()
+    profile["agent"]["config"]["persona"] = {"system_prompt": "Updated parent instructions"}
+    env.context.get_config = lambda **kwargs: profile
+    await env.service.send(
+        env.root, agent["agent_id"], [{"type": "plain", "text": "After reopening"}]
+    )
+    result = await env.service.wait(env.root, [agent["agent_id"]], 2000, "all")
+    assert result["agents"][0]["state"] == "completed"
+    contexts = str(env.provider.text_chat.call_args.kwargs["contexts"])
+    assert "Private input" in contexts
+    assert "Updated parent instructions" in contexts
 
 
 @pytest.mark.asyncio

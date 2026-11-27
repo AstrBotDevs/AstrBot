@@ -87,7 +87,7 @@ class HelpCommand:
             pass
 
         dashboard_version = await get_dashboard_version()
-        locale = self.context.locale(event.unified_msg_origin)
+        locale = await self.context.get_locale(event.unified_msg_origin)
         command_lines = await self._build_reserved_command_lines(locale)
         commands_section = (
             "\n".join(command_lines)

@@ -20,6 +20,7 @@ from astrbot.core.db.po import (
     ConversationRevision,
     ConversationV3,
     PlatformMessageHistory,
+    Preference,
 )
 from astrbot.core.db.webchat_projection import project_webchat_event_links
 from astrbot.core.sentinels import NOT_GIVEN
@@ -43,6 +44,26 @@ class ContextUnavailableError(ValueError):
 
 class ConversationConflictError(RuntimeError):
     """The conversation changed after a caller read its revision."""
+
+
+def main_conversation_filter():
+    """Exclude conversations registered to a native subagent.
+
+    Returns:
+        A correlated SQL predicate for main conversation queries.
+    """
+    return ~(
+        select(1)
+        .where(
+            Preference.scope == "subagent_session",
+            Preference.scope_id == ConversationV3.umo,
+            col(Preference.value)["runtime"].as_string() == "astrbot",
+            col(Preference.value)["conversation_id"].as_string()
+            == ConversationV3.conversation_id,
+        )
+        .correlate(ConversationV3)
+        .exists()
+    )
 
 
 def same_conversation_owner(source: str, target: str) -> bool:
@@ -346,7 +367,12 @@ class ConversationStore:
                     )
                 ).scalar_one_or_none()
                 owner = (
-                    await session.get(ConversationV3, source.conversation_ref)
+                    await session.scalar(
+                        select(ConversationV3).where(
+                            ConversationV3.id == source.conversation_ref,
+                            main_conversation_filter(),
+                        )
+                    )
                     if source
                     else None
                 )
@@ -1511,12 +1537,28 @@ class ConversationStore:
             await session.commit()
             return replacement
 
+    async def has_records(self, *, umo: str, cid: str | None = None) -> bool:
+        """Check whether a deletion target still exists without loading history.
+
+        Args:
+            umo: Exact owner of the target records.
+            cid: Optional single conversation ID within this origin.
+
+        Returns:
+            Whether at least one matching row remains.
+        """
+        query = select(ConversationV3.id).where(ConversationV3.umo == umo).limit(1)
+        if cid is not None:
+            query = query.where(ConversationV3.conversation_id == cid)
+        async with self.db.get_db() as session:
+            return await session.scalar(query) is not None
+
     async def delete(self, *, cid=None, umo=None) -> None:
         """Delete conversations; independent forks retain their own contexts.
 
         Args:
             cid: Optional single public identity.
-            umo: Optional owner whose conversations are deleted together.
+            umo: Optional owner filter, or owner whose conversations are deleted together.
 
         Raises:
             ValueError: The conversation selection is invalid.
@@ -1528,6 +1570,8 @@ class ConversationStore:
                 if cid
                 else select(ConversationV3.id).where(ConversationV3.umo == umo)
             )
+            if cid and umo is not None:
+                query = query.where(ConversationV3.umo == umo)
             ids = list((await session.execute(query)).scalars())
             if ids:
                 await session.execute(

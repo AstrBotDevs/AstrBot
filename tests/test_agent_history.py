@@ -48,6 +48,30 @@ def test_working_messages_round_trip_preserves_temporary_markers():
     ]
 
 
+@pytest.mark.parametrize("include_temporary", [False, True])
+def test_turn_continuation_survives_history_without_provider_metadata(
+    include_temporary,
+):
+    """Retain internal turn boundaries in storage but omit them from API messages."""
+    history = [
+        {"role": "user", "content": "Actual request"},
+        {"role": "user", "content": "Internal notice", "_turn_continuation": True},
+        {"role": "assistant", "content": "Done"},
+    ]
+    messages = load_messages(history)
+
+    assert messages[0]._turn_continuation is False
+    assert messages[1]._turn_continuation is True
+    assert dump_messages(messages, include_temporary=include_temporary) == history
+    expected = [
+        {key: value for key, value in item.items() if key != "_turn_continuation"}
+        for item in history
+    ]
+    assert Provider._ensure_message_to_dicts(object(), messages) == expected
+    assert Provider._ensure_message_to_dicts(object(), history) == expected
+    assert history[1]["_turn_continuation"] is True
+
+
 def test_dump_messages_filters_temp_content_parts():
     messages = [
         Message(

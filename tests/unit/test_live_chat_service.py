@@ -325,7 +325,11 @@ async def test_websocket_refresh_preserves_run_and_final_history(
         records.append(record)
         return SimpleNamespace(id=len(records), created_at=datetime.now(UTC))
 
+    async def update(message_id, *, content):
+        records[message_id - 1]["content"] = content
+
     service.platform_history_mgr.insert = insert
+    service.platform_history_mgr.update = update
     monkeypatch.setattr(service, "authenticate_token", lambda _token: "alice")
     request_sent = False
 
@@ -433,16 +437,12 @@ async def test_websocket_refresh_preserves_run_and_final_history(
             assert any(
                 event.get("data") == "Final answer after refresh" for event in events
             )
-            assert any(event.get("type") == "end" for event in events)
+            assert [event["type"] for event in events[-2:]] == ["message_saved", "end"]
         else:
             with pytest.raises(ChatServiceError):
                 await chat.build_chat_run_stream("alice", run.run_id)
-        bot_parts = [
-            part
-            for record in records
-            if record["sender_id"] == "bot"
-            for part in record["content"]["message"]
-        ]
+        (bot_record,) = [record for record in records if record["sender_id"] == "bot"]
+        bot_parts = bot_record["content"]["message"]
         assert {"type": "plain", "text": "Final answer after refresh"} in bot_parts
         tool = next(part for part in bot_parts if part["type"] == "tool_call")
         assert tool["tool_calls"][0]["result"] == "tool finished"

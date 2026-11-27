@@ -3435,6 +3435,10 @@ export type ListConversationsData = {
          */
         group_by_session?: boolean;
         /**
+         * Combine matching WebChat conversations into one group when group_by_session is enabled.
+         */
+        group_webchat?: boolean;
+        /**
          * Include full message history in each conversation.
          */
         include_history?: boolean;
