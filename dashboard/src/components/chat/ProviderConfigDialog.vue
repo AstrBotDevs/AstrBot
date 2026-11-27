@@ -1,9 +1,9 @@
 <template>
   <v-dialog
     v-model="dialog"
-    max-width="1600"
+    max-width="1280"
   >
-    <v-card class="provider-config-dialog">
+    <v-card class="provider-config-dialog" rounded="xl">
       <div class="provider-config-dialog__body">
         <ProviderChatCompletionPanel
           class="provider-config-dialog__page"
@@ -40,7 +40,9 @@ const dialog = computed({
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 28px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 24px !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
 }
 
 .provider-config-dialog__body {
@@ -59,16 +61,16 @@ const dialog = computed({
 }
 
 :deep(.v-overlay__content) {
-  width: min(1600px, 70vw);
-  height: min(920px, 70dvh);
-  max-width: 70vw;
-  max-height: 70dvh;
+  width: min(1280px, calc(100dvw - 64px));
+  height: min(860px, calc(100dvh - 80px));
+  max-width: calc(100dvw - 64px);
+  max-height: calc(100dvh - 80px);
   margin: 0;
 }
 
 @media (max-width: 960px) {
   .provider-config-dialog {
-    border-radius: 20px;
+    border-radius: 20px !important;
   }
 
   :deep(.v-overlay__content) {
@@ -81,7 +83,8 @@ const dialog = computed({
 
 @media (max-width: 600px) {
   .provider-config-dialog {
-    border-radius: 0;
+    border: 0;
+    border-radius: 0 !important;
   }
 
   .provider-config-dialog__body {

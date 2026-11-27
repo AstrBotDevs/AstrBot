@@ -6,7 +6,10 @@ from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.session_overrides import PROVIDER_PATHS, update_overrides
 from astrbot.core.utils.error_redaction import safe_error
+
+from ..i18n import translate
 
 
 class ProviderCommands:
@@ -116,11 +119,12 @@ class ProviderCommands:
     ) -> None:
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
+        locale = await self.context.get_locale(umo)
         cfg = self.context.get_config(umo).get("provider_settings", {})
         reachability_check_enabled = cfg.get("reachability_check", True)
 
         if idx is None:
-            parts = ["## LLM Providers\n"]
+            parts = [translate("provider_llm", locale)]
 
             llms = list(self.context.get_all_providers())
             ttss = self.context.get_all_tts_providers()
@@ -128,7 +132,7 @@ class ProviderCommands:
 
             if reachability_check_enabled and (llms or ttss or stts):
                 await event.send(
-                    MessageEventResult().message("👀 Testing provider reachability...")
+                    MessageEventResult().message(translate("provider_testing", locale))
                 )
 
             llm_data, tts_data, stt_data = await asyncio.gather(
@@ -160,7 +164,7 @@ class ProviderCommands:
                 parts.append(line + "\n")
 
             if tts_data:
-                parts.append("\n## TTS Providers\n")
+                parts.append(translate("provider_tts", locale))
                 tts_using = await self.context.get_using_tts_provider_async(umo=umo)
                 for i, d in enumerate(tts_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
@@ -169,7 +173,7 @@ class ProviderCommands:
                     parts.append(line + "\n")
 
             if stt_data:
-                parts.append("\n## STT Providers\n")
+                parts.append(translate("provider_stt", locale))
                 stt_using = await self.context.get_using_stt_provider_async(umo=umo)
                 for i, d in enumerate(stt_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
@@ -177,24 +181,33 @@ class ProviderCommands:
                         line += " 👈"
                     parts.append(line + "\n")
 
-            parts.append("\nUse /provider <idx> to switch LLM providers.")
+            parts.append(translate("provider_switch_llm", locale))
             ret = "".join(parts)
 
             if ttss:
-                ret += "\nUse /provider tts <idx> to switch TTS providers."
+                ret += translate("provider_switch_tts", locale)
             if stts:
-                ret += "\nUse /provider stt <idx> to switch STT providers."
+                ret += translate("provider_switch_stt", locale)
 
             event.set_result(MessageEventResult().message(ret))
+        elif idx == "--inherit":
+            await update_overrides(umo, dict.fromkeys(PROVIDER_PATHS.values(), None))
+            event.set_result(
+                MessageEventResult().message(translate("provider_inherit", locale))
+            )
         elif idx == "tts":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message(
+                        translate("provider_index_required", locale)
+                    )
                 )
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message(
+                        translate("provider_index_invalid", locale)
+                    )
                 )
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
@@ -205,17 +218,23 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(
+                    translate("provider_switched", locale, id=id_)
+                )
             )
         elif idx == "stt":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message(
+                        translate("provider_index_required", locale)
+                    )
                 )
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message(
+                        translate("provider_index_invalid", locale)
+                    )
                 )
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
@@ -226,12 +245,16 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(
+                    translate("provider_switched", locale, id=id_)
+                )
             )
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message(
+                        translate("provider_index_invalid", locale)
+                    )
                 )
                 return
             provider = self.context.get_all_providers()[idx - 1]
@@ -242,7 +265,11 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(
+                    translate("provider_switched", locale, id=id_)
+                )
             )
         else:
-            event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+            event.set_result(
+                MessageEventResult().message(translate("provider_invalid", locale))
+            )

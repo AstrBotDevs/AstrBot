@@ -1,5 +1,6 @@
 """Session waiters are dispatched by the core pipeline after access checks."""
 
+import asyncio
 import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -16,13 +17,48 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.utils.session_waiter import (
     USER_SESSIONS,
     DefaultSessionFilter,
+    SessionController,
     SessionFilter,
     SessionWaiter,
 )
+
+
+@pytest.mark.asyncio
+async def test_stopping_session_waiter_wakes_timeout_task():
+    controller = SessionController()
+    holding_started = asyncio.Event()
+    holding_finished = asyncio.Event()
+    original_holding = controller._holding
+
+    async def track_holding(event, timeout):
+        holding_started.set()
+        try:
+            await original_holding(event, timeout)
+        finally:
+            holding_finished.set()
+
+    controller._holding = track_holding
+    controller.keep(timeout=60, reset_timeout=True)
+    await holding_started.wait()
+    controller.stop()
+
+    await asyncio.wait_for(holding_finished.wait(), timeout=1)
+    assert controller.future.done()
+
+
+@pytest.mark.asyncio
+async def test_keep_after_stop_does_not_start_timeout_task():
+    controller = SessionController()
+    controller.stop()
+
+    try:
+        controller.keep(timeout=60, reset_timeout=True)
+        assert controller.current_event is None
+    finally:
+        controller.stop()
 
 
 @pytest.mark.asyncio
@@ -57,6 +93,9 @@ async def test_session_waiter_pipeline(monkeypatch, private, state):
     context = SimpleNamespace(
         astrbot_config=config, astrbot_config_id="test", db_helper=None
     )
+    context.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_config=lambda **_: config)
+    )
     message = AstrBotMessage()
     message.type = MessageType.FRIEND_MESSAGE if private else MessageType.GROUP_MESSAGE
     message.sender = MessageMember(user_id="user", nickname="User")
@@ -84,9 +123,6 @@ async def test_session_waiter_pipeline(monkeypatch, private, state):
         monkeypatch.setattr(module, "FILTERS", [session_filter, session_filter])
     monkeypatch.setattr(
         waking.star_handlers_registry, "get_handlers_by_event_type", lambda *a, **kw: []
-    )
-    monkeypatch.setattr(
-        SessionPluginManager, "filter_handlers_by_session", AsyncMock(return_value=[])
     )
 
     wake = waking.WakingCheckStage()

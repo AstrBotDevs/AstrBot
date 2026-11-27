@@ -36,16 +36,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message,
-            MessageType.GROUP_MESSAGE,
-            force_group_mention=True,
-            bot=self,
-        )
-        abm.group_id = cast(str, message.group_openid)
-        abm.session_id = abm.group_id
-        self.platform.remember_session_scene(abm.session_id, "group")
-        self._commit(abm)
+        await self.on_group_message_create(message)
 
     async def on_group_message_create(
         self, message: botpy.message.GroupMessage
@@ -119,9 +110,6 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
-        # 与 QQOfficialPlatformAdapter 相同：旧存档配置缺键时视为启用 Markdown
-        self.use_markdown_default = platform_config.get("use_markdown", True)
-
         intents = botpy.Intents(
             public_messages=True,
             public_guild_messages=True,

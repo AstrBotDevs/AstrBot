@@ -1,4 +1,7 @@
+import asyncio
 import sqlite3
+import threading
+from contextlib import closing
 
 import pytest
 
@@ -220,6 +223,45 @@ def test_callback_registry_migrates_existing_tokens(tmp_path, monkeypatch):
     )
     button_interaction.configure_button_callback_registry(db_path)
     assert decode_button_callback(payload) == ("approve", {"item": 42})
+
+
+@pytest.mark.asyncio
+async def test_async_button_registration_waits_for_sqlite_commit(tmp_path, monkeypatch):
+    db_path = tmp_path / "callbacks.db"
+    registry = button_interaction._ButtonCallbackRegistry()
+    registry.configure(db_path)
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", registry)
+
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    write_started = asyncio.Event()
+    connect = sqlite3.connect
+
+    def connect_on_worker(path, *, timeout):
+        assert threading.get_ident() != loop_thread
+        loop.call_soon_threadsafe(write_started.set)
+        return connect(path, timeout=min(timeout, 5))
+
+    monkeypatch.setattr(button_interaction.sqlite3, "connect", connect_on_worker)
+    with closing(connect(db_path)) as locked_db:
+        locked_db.execute("BEGIN EXCLUSIVE")
+        registration = asyncio.create_task(
+            button_interaction.encode_button_callback_async("approve", {"item": 42})
+        )
+        try:
+            await asyncio.wait_for(write_started.wait(), timeout=2)
+            assert not registration.done()
+        finally:
+            locked_db.rollback()
+            token = await registration
+
+    restarted = button_interaction._ButtonCallbackRegistry()
+    await asyncio.to_thread(restarted.configure, db_path)
+    monkeypatch.setattr(button_interaction, "_button_callback_registry", restarted)
+    assert await button_interaction.decode_button_callback_async(token) == (
+        "approve",
+        {"item": 42},
+    )
 
 
 @pytest.mark.parametrize("payload", ["approve", "astrbot:{}", "astrbot:not-json"])

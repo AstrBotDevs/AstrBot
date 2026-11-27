@@ -26,6 +26,7 @@ from ..filter.platform_adapter_type import (
     PlatformAdapterTypeFilter,
 )
 from ..filter.regex import RegexFilter
+from ..filter.ui_action import UIActionFilter
 from ..star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 
@@ -298,6 +299,27 @@ def register_button_action(action_id: str | None = None, **kwargs):
     return decorator
 
 
+def register_ui_action(action_id: str | None = None, **kwargs):
+    """Register a handler for the owning plugin's chat view actions.
+
+    Args:
+        action_id: Action to match, or None for all of this plugin's actions.
+        **kwargs: Standard handler metadata, including priority.
+
+    Returns:
+        A decorator using the existing adapter message event pipeline.
+    """
+
+    def decorator(awaitable):
+        metadata = get_handler_or_create(
+            awaitable, EventType.AdapterMessageEvent, **kwargs
+        )
+        metadata.event_filters.append(UIActionFilter(action_id))
+        return awaitable
+
+    return decorator
+
+
 def register_platform_adapter_type(
     platform_adapter_type: PlatformAdapterType,
     **kwargs,
@@ -529,7 +551,10 @@ def register_on_agent_begin(**kwargs):
 
 
 def register_on_agent_done(**kwargs):
-    """当 Agent 运行完成后的事件
+    """Register an Agent exit handler, including errors and cancellation.
+
+    The response can be None when execution exits without a final response.
+    Inspect run_context.run_end_reason and run_context.run_error for details.
 
     Examples:
     ```py
@@ -542,7 +567,7 @@ def register_on_agent_done(**kwargs):
         self,
         event: AstrMessageEvent,
         run_context: ContextWrapper[AstrAgentContext],
-        response: LLMResponse,
+        response: LLMResponse | None,
     ) -> None:
         ...
     ```

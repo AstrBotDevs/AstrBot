@@ -63,7 +63,8 @@
     "avgTtft": "平均首字延迟（TTFT）",
     "avgDuration": "平均响应时间",
     "avgTpm": "平均每分钟输出（TPM）",
-    "successRate": "调用成功率"
+    "successRate": "调用成功率",
+    "avgCacheHitRate": "平均缓存命中率"
   },
   "modelRanking": {
     "title": "模型用量排名"

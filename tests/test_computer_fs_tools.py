@@ -15,10 +15,10 @@ from mcp.types import CallToolResult, ImageContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer import file_read_utils, local_file_security
-from astrbot.core.computer.booters.local import LocalBooter
-from astrbot.core.tools.computer_tools import fs as fs_tools
-from astrbot.core.tools.computer_tools import util as computer_util
+from astrbot.core.astr_agent_runtime.computer import file_read_utils
+from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+from astrbot.core.astr_agent_runtime.tools.computer_tools import fs as fs_tools
+from astrbot.core.astr_agent_runtime.tools.computer_tools import util as computer_util
 
 
 def _make_context(
@@ -65,7 +65,9 @@ def _make_sandbox_context(
         unified_msg_origin=umo,
         send=AsyncMock(),
     )
-    astr_ctx = SimpleNamespace(context=config_holder, event=event)
+    astr_ctx = SimpleNamespace(
+        context=config_holder, event=event, send_to_user=True, _output_turn=None
+    )
     return ContextWrapper(context=astr_ctx)
 
 

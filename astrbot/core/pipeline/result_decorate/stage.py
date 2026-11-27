@@ -5,14 +5,15 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.plugin_scope import plugin_scope
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
@@ -170,7 +171,8 @@ class ResultDecorateStage(Stage):
                         "Plugins that depend on the pre-send event hook may not work "
                         "correctly when streaming output is enabled.",
                     )
-                await handler.handler(event)
+                with plugin_scope(star_map[handler.handler_module_path].plugin_id):
+                    await handler.handler(event)
 
                 if (result := event.get_result()) is None or not result.chain:
                     logger.debug(
@@ -274,9 +276,12 @@ class ResultDecorateStage(Stage):
             )
 
             should_tts = (
-                bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
+                bool(
+                    self.ctx.plugin_manager.context.get_config(
+                        umo=event.unified_msg_origin
+                    )["provider_tts_settings"]["enable"]
+                )
                 and result.is_llm_result()
-                and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= self.tts_trigger_probability
                 and tts_provider
             )
@@ -311,7 +316,14 @@ class ResultDecorateStage(Stage):
                     )
                 else:
                     result.chain.insert(
-                        0, Plain(f"🤔 思考: {reasoning_content}\n\n────\n")
+                        0,
+                        Plain(
+                            translate(
+                                "reasoning",
+                                get_config_locale(self.ctx.astrbot_config),
+                                content=reasoning_content,
+                            )
+                        ),
                     )
 
             if should_tts and tts_provider:

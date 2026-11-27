@@ -21,7 +21,7 @@ wget -qO- https://raw.githubusercontent.com/zhende1113/Antlia/refs/heads/main/Sc
 
 ## Linux 一键部署脚本（基于Docker）
 
-支持 AstrBot / NapCat
+支持 AstrBot
 
 > [!TIP]
 > 权限不足时请使用 `sudo` 提权

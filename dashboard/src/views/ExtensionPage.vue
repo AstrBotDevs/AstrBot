@@ -66,6 +66,9 @@ const {
   dangerConfirmDialog,
   selectedDangerPlugin,
   selectedMarketInstallPlugin,
+  marketInstallLink,
+  installSubmitting,
+  resolveMarketInstallLink,
   installSupport,
   installUrlValidation,
   versionSupportDialog,
@@ -429,6 +432,7 @@ const updateDialogPluginLogo = computed(() => {
           :pluginName="curr_namespace"
           :pluginI18n="extension_config.i18n"
           enable-default-reset
+          foldable
         />
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>
@@ -655,21 +659,49 @@ const updateDialogPluginLogo = computed(() => {
   </v-dialog>
 
   <!-- 上传插件对话框 -->
-  <v-dialog v-model="dialog" width="500">
+  <v-dialog
+    :model-value="dialog"
+    :persistent="installSubmitting || marketInstallLink?.saving"
+    width="500"
+    @update:model-value="!$event && closeInstallDialog()"
+  >
     <div
       class="v-card v-card--density-default rounded-lg v-card--variant-elevated"
     >
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-        {{ tm("dialogs.install.title") }}
+        {{ tm(marketInstallLink?.needsSource ? "market.addSource" : "dialogs.install.title") }}
       </v-card-title>
 
       <div class="v-card-text">
-        <div v-if="selectedMarketInstallPlugin" class="market-install-confirm">
+        <div v-if="marketInstallLink && !selectedMarketInstallPlugin">
+          <template v-if="marketInstallLink.needsSource">
+            <p>{{ tm("dialogs.install.sourceRequired") }}</p>
+            <p class="market-install-source__url text-medium-emphasis mt-2">
+              {{ marketInstallLink.registryUrl }}
+            </p>
+          </template>
+          <div
+            v-if="marketInstallLink.loading"
+            class="d-flex align-center ga-3 mt-4"
+            role="status"
+          >
+            <v-progress-circular indeterminate color="primary" size="24" />
+            <span v-if="marketInstallLink.saving">{{ tm("dialogs.install.savingSource") }}</span>
+            <span v-else-if="marketInstallLink.needsSource">{{ tm("dialogs.install.validatingSource") }}</span>
+            <span v-else>{{ tm("dialogs.install.loadingPlugin") }}</span>
+          </div>
+          <v-alert v-if="marketInstallLink.error" type="error" variant="tonal" class="mt-4">
+            {{ marketInstallLink.error }}
+          </v-alert>
+        </div>
+
+        <div v-else-if="selectedMarketInstallPlugin" class="market-install-confirm">
           <div class="market-install-confirm__header">
             <img
               :src="installDialogPluginLogo"
               :alt="installDialogPluginName"
               class="market-install-confirm__logo"
+              @error="$event.target.getAttribute('src') !== defaultPluginIcon && ($event.target.src = defaultPluginIcon)"
             />
             <div class="market-install-confirm__meta">
               <div class="market-install-confirm__name">
@@ -699,6 +731,14 @@ const updateDialogPluginLogo = computed(() => {
           </div>
 
           <div v-if="selectedInstallPlugin" class="mt-4">
+            <v-chip
+              v-if="selectedInstallPlugin.version"
+              size="small"
+              variant="outlined"
+              class="mr-2 mb-2"
+            >
+              {{ tm("table.headers.version") }} {{ selectedInstallPlugin.version }}
+            </v-chip>
             <v-chip
               v-if="selectedInstallPlugin.astrbot_version"
               size="small"
@@ -756,6 +796,15 @@ const updateDialogPluginLogo = computed(() => {
               {{ selectedInstallSourceUrl }}
             </div>
           </div>
+
+          <v-alert
+            v-if="marketInstallLink && selectedMarketInstallPlugin.tags?.includes('danger')"
+            type="warning"
+            variant="tonal"
+            class="mt-4"
+          >
+            {{ tm("dialogs.danger_warning.message") }}
+          </v-alert>
 
           <v-alert
             v-if="installUsesRepositorySource"
@@ -956,14 +1005,27 @@ const updateDialogPluginLogo = computed(() => {
 
       <div class="v-card-actions">
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
-          tm("buttons.cancel")
-        }}</v-btn>
         <v-btn
+          color="grey"
+          variant="text"
+          :disabled="installSubmitting || marketInstallLink?.saving"
+          @click="closeInstallDialog"
+        >{{ tm("buttons.cancel") }}</v-btn>
+        <v-btn
+          v-if="marketInstallLink && !selectedMarketInstallPlugin"
+          v-show="!marketInstallLink.loading && (marketInstallLink.needsSource || marketInstallLink.error)"
+          color="primary"
+          variant="tonal"
+          @click="resolveMarketInstallLink(marketInstallLink.needsSource)"
+        >
+          {{ tm(marketInstallLink.needsSource ? "dialogs.install.addSourceAndContinue" : "dialogs.install.retryPreview") }}
+        </v-btn>
+        <v-btn
+          v-else
           color="primary"
           variant="text"
-          :loading="loading_ || installUrlValidation.validating"
-          :disabled="loading_ || installUrlValidation.validating"
+          :loading="installSubmitting"
+          :disabled="loading_ || installSubmitting"
           @click="newExtension()"
           >{{ tm("buttons.install") }}</v-btn
         >
@@ -1275,6 +1337,12 @@ const updateDialogPluginLogo = computed(() => {
 </template>
 
 <style scoped>
+.plugin-config-form {
+  /* v-card-text padding, published for the fold headers so their hover highlight
+     reaches the card edges. */
+  --config-group-inset: 16px;
+}
+
 .plugin-config-form > :deep(.config-section) {
   display: none;
 }

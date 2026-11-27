@@ -8,6 +8,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 
 | Previous entry point or name | Current entry point |
 | --- | --- |
+| Welcome / Welcome page | Overview (the `/welcome` URL remains available) |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
 | Providers → Decision (after Chat Completion) | Providers → Decision (balance-scale icon, between Text to Speech and Embedding) |
 | Data / Dashboard | Data & Logs → Statistics |
@@ -20,7 +21,8 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
 | System Settings → General → Cache → Export diagnostics | System Settings → Maintenance → Diagnostics → Export diagnostics |
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
-| Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
+| Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
+| Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
@@ -78,6 +80,12 @@ To replace the TOTP secret, you can do so in the TOTP management window, where y
 
 AstrBot includes a built-in ChatUI for talking to configured models directly in your browser.
 
+With the sidebar chat entry enabled under **System Settings → Appearance**, selecting **Chat** on desktop smoothly narrows the main navigation: labels fade out while icons and the logo move into the left rail, with the chat sidebar alongside it. The Chat icon becomes a **left arrow (Back to navigation)**. Select it to return to the previous page and restore the previous navigation width, or select any rail icon to navigate directly. The system settings button at the bottom of the rail is hidden in this mode; chat settings remain in the chat sidebar. Reduced-motion preferences disable the animation; narrow screens keep a single drawer.
+
+Entry mapping: **Chat sidebar → Back to navigation** moves to **Left navigation rail → Left arrow**. Disabling this appearance option keeps the existing chat switcher.
+
+![Chat dual sidebars: navigation rail and conversation list (Chinese interface)](images/chat-dual-sidebar.jpg)
+
 ChatUI supports these common workflows:
 
 - The sidebar initially loads the 30 most recent conversations. Scroll near the bottom to automatically load older conversations, with a progress bar while loading. Automatic requests pause after a failure; select **Retry** to continue.
@@ -100,6 +108,7 @@ To return to the model configured in the selected profile, open the model select
 Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Sections appear in this order: `AI`, `Platforms & Messages`, `Access Control`, `Plugin`, and `Ext.`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
+- In `AI → Capabilities`, settings appear in this order: Web Search, Agent Computer Use, Subagents, Knowledge Base, and Proactive Agent.
 - `Access Control` contains administrator IDs and the session whitelist, including whitelist logs and administrator exemptions.
 - `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
@@ -122,6 +131,14 @@ After selecting an explicit model, click the gear beside the selector to open it
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 
 Use the `{}` icon labeled `Edit Configuration File` to edit the current profile as JSON. Select `Apply This Configuration` to stage the changes in the visual editor, close the editor, and then select `Save Configuration`.
+
+### System Language
+
+In a configuration profile, open **Platforms & Messages → General → System language**, select **🇨🇳 简体中文** or **🇺🇸 English**, and save. The configuration key is `platform_settings.locale`: `zh-CN` by default, or `en-US` for English.
+
+This controls Core tool activity messages, tool result labels, model response errors, reasoning prefixes, permission notices, command validation and group help, and plugin filter and handler error messages. Built-in plugin replies and command descriptions in `/help` also use this language. Third-party plugin error details, command descriptions, and reply bodies keep their original text unless the plugin adopts the system language. Model-generated content and the WebUI display language are unaffected.
+
+Use existing profile routing or session configuration overrides to select different languages for different sessions. Missing or unsupported values fall back to Simplified Chinese.
 
 ### System Settings
 
@@ -158,14 +175,16 @@ Select `Data & Logs` in the left sidebar to switch between `Statistics`, `Conver
 
 ### Statistics
 
-The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, model usage rankings, and conversation model usage rankings. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, and token usage by provider and conversation. The call count includes historical Agent turns and individual Chat Provider request attempts, including retries and fallbacks. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+
+Average cache hit rate is the share of input tokens served from cache in the selected range.
 
 ### Conversations
 
 Use the `Conversations` tab to find and manage saved conversation records:
 
 - Filter by keyword, bot ID, private/group conversation type, or UMO, and sort by creation or update time.
-- By default, the list loads 30 records per page from the server. When **Group by session** is enabled, pagination switches to UMO sessions and expanding a session reveals all of its conversations. Full message history is loaded only after you select a conversation and is then shown in the preview on the right.
+- The list shows 30 records per page by default. With **Group by session** enabled, each group counts as one entry. Matching WebChat conversations share a single group, and other platforms group by UMO. Expand a group to see its conversations, then select one to load its full message history in the preview on the right.
 - Edit titles, export multiple selected conversations, or delete multiple selected conversations.
 - Use the `{}` button in the preview header to inspect the raw `history` JSON in a read-only, word-wrapped Monaco editor.
 - Select `Back to legacy` in the upper-right corner if you still need the original table-based view.
@@ -180,7 +199,7 @@ The export dialog offers `Last hour`, `Last 12 hours`, `Last day`, `Last 3 days`
 
 In the diagnostic bundle, cached logs are stored in `logs/astrbot.in-memory.log`, cached traces in `traces/history.in-memory.jsonl`, and persisted trace history in `traces/history.jsonl`. The `webui_version` field in `environment.json` records the version declared by the WebUI assets being served, or `null` when unavailable.
 
-Open `Filters` next to the search box to filter by level, source (System/Plugin), individual plugin, and bot platform, or exclude user-chat logs. Combine these conditions with `Search logs`. The plugin dropdown lists only plugins that appear in the current logs, not every installed plugin, so installed plugins that have not logged anything are absent. Plugin menus prefer display names and show plugin IDs as subtitles; `System` replaces the former Core source label.
+Use `Filters` beside the search box to filter by level, source, plugin, or bot platform, or exclude user-chat logs. Filters work with text search. The plugin list includes plugins named in the current logs, including loading failures; entries show display names and plugin IDs.
 
 The toolbar contains search, fullscreen, font-size controls, and `Install Pip packages`. The default font size is 12px, adjustable from 8–16px in 2px steps. The former auto-scroll switch is replaced by bottom-following behavior: new logs follow when you are at the bottom, without interrupting reading older entries. Top-row filters move into the `Filters` sidebar; closing it preserves selections. Logs remain in memory, without new file-reading or database persistence.
 
@@ -261,3 +280,18 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 > [!TIP]
 > For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).
+
+## ChatUI workbench
+
+The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
+
+Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
+
+See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
+
+
+The workbench remembers open tabs, the active tab, visibility, and width. Closed tabs stay closed after a reload; use the compact entry in a chat message to reopen one. New tool results can still open new tabs, while loading older messages does not expand the workbench.
+
+![Compact workbench entries (sample files, Chinese interface)](images/chat-workbench-entry.jpg)
+
+ChatUI uses one `astrbot.chat.preferences` localStorage record, containing global and per-session preferences for each account. Model selections, configuration, speech recognition, expanded projects, drafts, and workbench layouts share this record. Existing scattered keys migrate automatically and are removed only after a successful write. Preferences apply to the current browser.

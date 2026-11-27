@@ -1,5 +1,4 @@
-from sqlalchemy import case, func, select
-from sqlmodel import col
+from sqlalchemy import func, select
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -9,8 +8,10 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_THREAD_ID_KEY,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.chat_usage import chat_usage
 from astrbot.core.utils.active_event_registry import active_event_registry
+
+from ..i18n import translate
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
@@ -36,8 +37,8 @@ async def _cleanup_deerflow_thread_if_present(
             return
 
         cfg = context.get_config(umo=umo)
-        agent_runner = cfg.get("agent_runner", {})
-        if agent_runner.get("runner_type") != DEERFLOW_PROVIDER_TYPE:
+        agent_runner = cfg.get("agent", {})
+        if agent_runner.get("runtime") != DEERFLOW_PROVIDER_TYPE:
             return
         runner_config = agent_runner.get("config", {})
         if not isinstance(runner_config, dict):
@@ -115,7 +116,7 @@ class ConversationCommands:
         """
         umo = message.unified_msg_origin
         cfg = self.context.get_config(umo=umo)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
+        agent_runner_type = cfg["agent"]["runtime"]
 
         active_event_registry.stop_all(umo, exclude=message)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
@@ -136,35 +137,30 @@ class ConversationCommands:
         message.set_extra("_clean_group_context_session", True)
         message.set_result(
             MessageEventResult().message(
-                "✅ The current conversation context has been cleared."
+                translate("reset", await self.context.get_locale(umo))
             )
         )
 
     async def stop(self, message: AstrMessageEvent) -> None:
-        """停止当前会话正在运行的 Agent"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
-        umo = message.unified_msg_origin
+        """Request a stop for the current message origin's registered work.
 
-        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            stopped_count = active_event_registry.stop_all(umo, exclude=message)
-        else:
-            stopped_count = active_event_registry.request_agent_stop_all(
-                umo,
-                exclude=message,
-            )
+        Args:
+            message: Stop command event, excluded from the request.
+        """
+        locale = await self.context.get_locale(message.unified_msg_origin)
+        stopped_count = active_event_registry.request_agent_stop_all(
+            message.unified_msg_origin, exclude=message
+        )
 
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    translate("stopping", locale, count=stopped_count)
                 )
             )
             return
 
-        message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
-        )
+        message.set_result(MessageEventResult().message(translate("no_tasks", locale)))
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """Start a new conversation without clearing the previous history.
@@ -173,7 +169,7 @@ class ConversationCommands:
             message: Command event identifying the session and sender.
         """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
+        agent_runner_type = cfg["agent"]["runtime"]
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             await _clear_third_party_agent_runner_state(
@@ -193,20 +189,23 @@ class ConversationCommands:
 
         message.set_result(
             MessageEventResult().message(
-                f"✅ Switched to new conversation: {cid[:4]}."
+                translate(
+                    "new_conversation",
+                    await self.context.get_locale(message.unified_msg_origin),
+                    cid=cid[:4],
+                )
             ),
         )
 
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation."""
         umo = message.unified_msg_origin
+        locale = await self.context.get_locale(umo)
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
 
         if not cid:
             message.set_result(
-                MessageEventResult().message(
-                    "❌ You are not in a conversation. Use /new to create one."
-                ),
+                MessageEventResult().message(translate("no_conversation", locale)),
             )
             return
 
@@ -214,30 +213,23 @@ class ConversationCommands:
         async with db.get_db() as session:
             result = await session.execute(
                 select(
-                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
-                        "record_count",
-                    ),
-                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                    func.count().label("record_count"),
+                    func.coalesce(func.sum(chat_usage.c.token_input_other), 0).label(
                         "total_input_other",
                     ),
-                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                    func.coalesce(func.sum(chat_usage.c.token_input_cached), 0).label(
                         "total_input_cached",
                     ),
-                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                    func.coalesce(func.sum(chat_usage.c.token_output), 0).label(
                         "total_output",
                     ),
-                ).where(
-                    col(ProviderStat.agent_type) == "internal",
-                    col(ProviderStat.conversation_id) == cid,
-                )
+                ).where(chat_usage.c.conversation_id == cid)
             )
             stats = result.one()
 
         if stats.record_count == 0:
             message.set_result(
-                MessageEventResult().message(
-                    "📊 No stats available for this conversation yet."
-                ),
+                MessageEventResult().message(translate("no_stats", locale)),
             )
             return
 
@@ -246,12 +238,14 @@ class ConversationCommands:
         total_output = stats.total_output
         total_tokens = total_input_other + total_input_cached + total_output
 
-        ret = (
-            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
-            f"Total:          {total_tokens:,}\n"
-            f"Input (cached): {total_input_cached:,}\n"
-            f"Input (other):  {total_input_other:,}\n"
-            f"Output:         {total_output:,}\n"
+        ret = translate(
+            "stats",
+            locale,
+            cid=cid[:8],
+            total=total_tokens,
+            cached=total_input_cached,
+            other=total_input_other,
+            output=total_output,
         )
 
         message.set_result(MessageEventResult().message(ret))

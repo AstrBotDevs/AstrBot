@@ -2,16 +2,20 @@
 
 import traceback
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from typing import Any
 
 from astrbot.core import logger
+from astrbot.core.i18n import get_config_locale, translate
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.utils.plugin_scope import plugin_scope
 
 from ...context import PipelineContext, call_event_hook, call_handler
 from ...stage import Stage
@@ -72,8 +76,16 @@ class StarRequestSubStage(Stage):
             )
             try:
                 wrapper = call_handler(event, handler.handler, **params)
-                async for ret in wrapper:
-                    yield ret
+                async with aclosing(wrapper):
+                    while True:
+                        with plugin_scope(md.plugin_id):
+                            try:
+                                ret = await anext(wrapper)
+                            except StopAsyncIteration:
+                                break
+                            if isinstance(ret, ProviderRequest):
+                                ret._plugin_id = md.plugin_id
+                        yield ret
                 event.trace.record(
                     "handler_end",
                     kind="plugin_handler",
@@ -89,9 +101,29 @@ class StarRequestSubStage(Stage):
                     break
                 event.clear_result()  # 清除上一个 handler 的结果
             except Exception as e:
+                if event.get_ui_interaction() is not None:
+                    event.set_extra(
+                        "ui_action_error",
+                        {
+                            "code": "INVALID_INPUT"
+                            if type(e).__name__ == "ValidationError"
+                            else "ACTION_FAILED",
+                            "message": "Invalid action input."
+                            if type(e).__name__ == "ValidationError"
+                            else "The plugin action failed.",
+                        },
+                    )
                 traceback_text = traceback.format_exc()
-                logger.error(traceback_text)
-                logger.error(f"Star {handler.handler_full_name} handle error: {e}")
+                plugin_name = md.name or handler.handler_module_path
+                # Keep handler failures on the plugin's side of the log filter.
+                logger.error(
+                    traceback_text,
+                    extra={"plugin_name": plugin_name},
+                )
+                logger.error(
+                    f"Star {handler.handler_full_name} handle error: {e}",
+                    extra={"plugin_name": plugin_name},
+                )
                 event.trace.record(
                     "handler_end",
                     kind="plugin_handler",
@@ -115,7 +147,13 @@ class StarRequestSubStage(Stage):
                 )
 
                 if not event.is_stopped() and event.is_at_or_wake_command:
-                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
+                    ret = translate(
+                        "plugin_handler_error",
+                        get_config_locale(self.ctx.astrbot_config),
+                        plugin=md.name,
+                        handler=handler.handler_name,
+                        detail=str(e),
+                    )
                     event.set_result(MessageEventResult().message(ret))
                     yield
                     event.clear_result()

@@ -1,18 +1,43 @@
 {
   "ai_group": {
     "name": "AI",
-    "agent_runner": {
-      "description": "Agent Runner",
-      "hint": "Select the runner for AI conversations. Switching runners resets the configuration to the new type's defaults.",
+    "subagents": {
+      "description": "Subagents",
+      "agent": {
+        "config": {
+          "subagents": {
+            "enabled": {
+              "description": "Enable Subagents",
+              "hint": "Allow AstrBot to create generic or specialized subagents when appropriate to complete tasks."
+            },
+            "config_ids": {
+              "hint": "Configure specialized subagents with their own personas, toolsets, and other settings. Even without configuring any, AstrBot dynamically creates generic subagents when needed to complete tasks.",
+              "description": "Specialized Agent Configurations"
+            },
+            "max_concurrent_agents": {
+              "description": "Concurrent Agents per Conversation",
+              "hint": "Other tasks queue. Default: 3."
+            },
+            "task_timeout": {
+              "description": "Task Timeout (seconds)",
+              "hint": "Includes queue time. Default: 600 seconds."
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "description": "Agent Configuration",
+      "hint": "Choose an Agent Runtime. Switching runtimes resets its configuration to the new defaults.",
       "provider_settings": {
         "enable": {
           "description": "Enable",
           "hint": "Master switch for AI conversations"
         }
       },
-      "agent_runner": {
-        "runner_type": {
-          "description": "Runner",
+      "agent": {
+        "runtime": {
+          "description": "Agent Runtime",
           "labels": [
             "Built-in Agent",
             "Dify",
@@ -25,7 +50,7 @@
     },
     "dify_runner": {
       "description": "Dify Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "dify_api_type": { "description": "Application Type" },
         "dify_api_key": { "description": "API Key" },
         "dify_api_base": { "description": "API Base URL" },
@@ -38,7 +63,7 @@
     },
     "coze_runner": {
       "description": "Coze Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "coze_api_key": { "description": "API Key" },
         "bot_id": { "description": "Bot ID" },
         "coze_api_base": { "description": "API Base URL" },
@@ -49,7 +74,7 @@
     },
     "dashscope_runner": {
       "description": "Alibaba Cloud Bailian Application Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "dashscope_app_type": { "description": "Application Type" },
         "dashscope_api_key": { "description": "API Key" },
         "dashscope_app_id": { "description": "Application ID" },
@@ -65,7 +90,7 @@
     },
     "deerflow_runner": {
       "description": "DeerFlow Configuration",
-      "agent_runner": { "config": {
+      "agent": { "config": {
         "deerflow_api_base": { "description": "API Base URL" },
         "deerflow_api_key": { "description": "API Key" },
         "deerflow_auth_header": { "description": "Authorization Header" },
@@ -83,7 +108,7 @@
     "ai": {
       "description": "Model",
       "hint": "Configure the built-in Agent's chat models and shared image caption and speech models.",
-      "agent_runner": { "config": { "model": {
+      "agent": { "config": { "model": {
         "provider_id": {
           "description": "Chat Model",
           "hint": "Uses the first model when left empty"
@@ -135,7 +160,7 @@
     "persona": {
       "description": "Persona",
       "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
-      "agent_runner": { "config": { "persona": {
+      "agent": { "config": { "persona": {
         "persona_id": { "description": "Default Persona" },
         "safety_mode": {
           "description": "Safety Mode",
@@ -360,6 +385,8 @@
         "modes": {
           "none": "Disabled"
         },
+        "networkAlwaysOn": "Always on",
+        "windowsHostNetworkHint": "Windows cannot disable networking while executing code with entire-environment access. Switch to workspace access to disable networking.",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
         "executionInactive": "Inactive",
@@ -369,6 +396,9 @@
           "os": "OS",
           "arch": "Architecture",
           "sandbox": "Local isolation",
+          "windowsUnavailable": "{backend} · Not ready",
+          "windowsSetupHint": "Save the configuration and restart AstrBot. If prompted for administrator approval, allow it to initialize the sandbox.",
+          "errorDetails": "View diagnostic details",
           "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
           "dialog": {
             "intro": "Using Seatbelt on macOS or bubblewrap (bwrap) on Linux, AstrBot provides security isolation for Agent execution, restricting file access scope and network permissions for different users of AstrBot Agent to improve security.",
@@ -415,7 +445,7 @@
     "truncate_and_compress": {
       "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
       "description": "Context Management Strategy",
-      "agent_runner": { "config": { "compression": {
+      "agent": { "config": { "compression": {
         "max_turns": {
           "description": "Max Turns Before Compression",
           "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
@@ -452,7 +482,7 @@
     },
     "others": {
       "description": "Other Settings",
-      "agent_runner": { "config": { "misc": {
+      "agent": { "config": { "misc": {
         "max_steps": { "description": "Maximum Tool Call Rounds" },
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
@@ -838,10 +868,6 @@
         "description": "Unified Webhook Mode",
         "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
-      "use_markdown": {
-        "description": "Use Markdown for Proactive Messages",
-        "hint": "When enabled, proactive messages are sent in Markdown mode by default; an explicit use_markdown() call from a plugin takes precedence over this option."
-      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
@@ -981,6 +1007,14 @@
     "general": {
       "description": "General",
       "platform_settings": {
+        "locale": {
+          "description": "System language",
+          "hint": "Set the system language for plugins, error replies, and other system messages. Does not change model responses or the WebUI language.",
+          "labels": [
+            "🇨🇳 简体中文",
+            "🇺🇸 English"
+          ]
+        },
         "unique_session": {
           "description": "Isolate Conversation",
           "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
@@ -1012,7 +1046,7 @@
       },
       "wake_prefix": {
         "description": "Wake Word",
-        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it."
+        "hint": "A list of message prefixes that wake the bot. You can also wake it by mentioning it.\n\nBuilt-in commands such as `/help` and `/sid` also depend on the wake word: in group chats they do not trigger unless the message starts with a wake word; in private chats they trigger without a prefix unless \"Private Messages Require Wake Word\" is enabled."
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
@@ -1118,6 +1152,15 @@
     }
   },
   "access_group": {
+    "blacklist": {
+      "description": "Blacklist",
+      "platform_settings": {
+        "id_blacklist": {
+          "description": "Blocked session IDs",
+          "hint": "Stop processing these sessions. Blacklist takes priority over whitelist, including administrators."
+        }
+      }
+    },
     "name": "Access Control",
     "admins": {
       "description": "Administrators",
@@ -1686,6 +1729,9 @@
       "dashscope_embedding": {
         "hint": "Aliyun DashScope Embedding. Default base URL: https://dashscope.aliyuncs.com/api/v1."
       },
+      "volcengine_embedding": {
+        "hint": "Volcengine Embedding, the default address is https://ark.cn-beijing.volces.com/api/v3. Agent Plan is https://ark.cn-beijing.volces.com/api/plan/v3."
+      },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
         "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
@@ -1733,21 +1779,25 @@
       "dashscope_tts_voice": {
         "description": "Voice"
       },
+      "dashscope_tts_websocket_url": {
+        "description": "WebSocket Endpoint",
+        "hint": "Optional. Fill in when using a Qwen-Audio-TTS model. Leave blank to use the DashScope SDK default endpoint. Enter a complete WebSocket URL, such as wss://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference, replacing {WorkspaceId} with your actual workspace ID."
+      },
       "gm_resp_image_modal": {
         "description": "Enable image modality",
         "hint": "When enabled, responses can include images. Requires model support or it will error. See the Google Gemini website for supported models. Tip: if you need image generation, disable the `Enable member recognition` setting for better results."
       },
       "gm_native_search": {
         "description": "Enable native search",
-        "hint": "When enabled, all function tools are disabled. Check official docs for free quota limits."
+        "hint": "Only Gemini 3 and later models support using this together with function tools. For Gemini 3 and later, native search is only available on the paid tier; see the official docs for pricing."
       },
       "gm_native_coderunner": {
         "description": "Enable native code runner",
-        "hint": "When enabled, all function tools are disabled."
+        "hint": "Only Gemini 3 and later models support using this together with function tools."
       },
       "gm_url_context": {
         "description": "Enable URL context",
-        "hint": "When enabled, all function tools are disabled."
+        "hint": "Only Gemini 3 and later models support using this together with function tools."
       },
       "gm_safety_settings": {
         "description": "Safety filters",
@@ -1773,11 +1823,11 @@
         "description": "Thinking Config",
         "budget": {
           "description": "Thinking Budget",
-          "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+          "hint": "Thinking token budget for Gemini 2.5. Leave blank to use the model default. See https://ai.google.dev/gemini-api/docs/thinking#set-budget"
         },
         "level": {
           "description": "Thinking Level",
-          "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+          "hint": "See https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
         }
       },
       "anth_thinking_config": {
@@ -1882,6 +1932,18 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "stepfun-tts-voice": {
+        "description": "Voice ID"
+      },
+      "deepseek-tts-voice": {
+        "description": "Voice",
+        "hint": "DeepSeek TTS voice. The corresponding voice_id is sent to the API.",
+        "labels": ["Stella (female, default)", "Tide (male)"]
+      },
+      "deepseek-tts-filter-markdown": {
+        "description": "Filter Markdown",
+        "hint": "Remove Markdown formatting before synthesis. Enabled by default."
       },
       "elevenlabs-tts-voice-id": {
         "description": "Voice ID",

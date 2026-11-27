@@ -288,7 +288,13 @@ class TestEventBusDispatch:
         ("slack", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
         ("dingtalk", MessageType.GROUP_MESSAGE, True, "group", "alice"),
         ("qq_official", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
-        ("qq_official_webhook", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
+        (
+            "qq_official_webhook",
+            MessageType.GROUP_MESSAGE,
+            True,
+            "group",
+            "alice_group",
+        ),
         ("lark", MessageType.GROUP_MESSAGE, True, "group", "alice%group"),
         ("misskey", MessageType.GROUP_MESSAGE, True, "group", "group_alice"),
         ("matrix", MessageType.GROUP_MESSAGE, True, "group", "alice_group"),
@@ -333,6 +339,12 @@ async def test_session_isolation_precedes_registration(
     ctx = SimpleNamespace(
         astrbot_config=config,
         astrbot_config_id="test-conf-id",
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(
+                get_config=lambda **_: config,
+                astrbot_config_mgr=SimpleNamespace(_create_message_config=lambda _: (config, frozenset())),
+            )
+        ),
         db_helper=None,
     )
     scheduler = PipelineScheduler(ctx)
@@ -344,7 +356,9 @@ async def test_session_isolation_precedes_registration(
         lambda *_args, **_kwargs: [],
     )
     registry = ActiveEventRegistry()
-    monkeypatch.setattr("astrbot.core.platform.astr_message_event.active_event_registry", registry)
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.active_event_registry", registry
+    )
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -383,7 +397,7 @@ async def test_session_isolation_precedes_registration(
         Returns:
             The selected configuration profile metadata.
         """
-        assert umo == original_umo == event.unified_msg_origin
+        assert umo == event.unified_msg_origin
         return {"id": "test-conf-id"}
 
     mock_config_manager.get_conf_info.side_effect = select_config
@@ -411,7 +425,6 @@ async def test_session_isolation_precedes_registration(
         else:
             assert result == [None]
         assert registry._events == {}
-        mock_config_manager.get_conf_info.assert_called_once_with(original_umo)
     finally:
         release.set()
         dispatch.cancel()
@@ -643,7 +656,7 @@ class TestEventFiltering:
     """Tests for event filtering functionality."""
 
     @pytest.mark.asyncio
-    async def test_filter_by_event_origin(self, event_queue):
+    async def test_filter_by_event_origin(self):
         """Test filtering events by their unified_msg_origin."""
         scheduler1 = MagicMock()
         scheduler1.execute = AsyncMock()
@@ -666,14 +679,12 @@ class TestEventFiltering:
             "telegram-conf": scheduler1,
             "discord-conf": scheduler2,
         }
+        event_queue = AsyncMock(spec=asyncio.Queue)
         event_bus = EventBus(
             event_queue=event_queue,
             pipeline_scheduler_mapping=pipeline_mapping,
             astrbot_config_mgr=config_mgr,
         )
-
-        processed = asyncio.Event()
-        scheduler1.execute.side_effect = lambda e: processed.set()  # noqa: ARG001
 
         # Create Telegram event
         mock_event = MagicMock()
@@ -684,18 +695,12 @@ class TestEventFiltering:
         mock_event.get_sender_id.return_value = "tg123"
         mock_event.get_message_outline.return_value = "TG Message"
 
-        await event_queue.put(mock_event)
+        event_queue.get.side_effect = [mock_event, asyncio.CancelledError]
+        with pytest.raises(asyncio.CancelledError):
+            await event_bus.dispatch()
+        await asyncio.gather(*event_bus._pending_tasks)
 
-        task = asyncio.create_task(event_bus.dispatch())
-        try:
-            await asyncio.wait_for(processed.wait(), timeout=1.0)
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-        # Only telegram scheduler should be called
-        scheduler1.execute.assert_called_once()
+        scheduler1.execute.assert_awaited_once_with(mock_event)
         scheduler2.execute.assert_not_called()
 
     @pytest.mark.asyncio

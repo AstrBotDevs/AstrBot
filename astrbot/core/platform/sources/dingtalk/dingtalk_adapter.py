@@ -35,7 +35,7 @@ from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import (
     decode_button_callback,
-    encode_button_callback,
+    encode_button_callback_async,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
@@ -105,7 +105,7 @@ class DingtalkPlatformAdapter(Platform):
 
         class AstrCardCallbackClient(dingtalk_stream.CallbackHandler):
             async def process(self, message: dingtalk_stream.CallbackMessage):
-                abm = outer_self.convert_card_callback(message)
+                abm = await asyncio.to_thread(outer_self.convert_card_callback, message)
                 if abm is not None:
                     await outer_self.handle_msg(abm)
                 return AckMessage.STATUS_OK, "OK"
@@ -666,7 +666,7 @@ class DingtalkPlatformAdapter(Platform):
                 }
                 if isinstance(button.action, Button.CallbackAction):
                     try:
-                        item["id"] = encode_button_callback(
+                        item["id"] = await encode_button_callback_async(
                             button.id,
                             button.action.data,
                             expires_at=row.action_expires_at,
