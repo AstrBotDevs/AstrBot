@@ -24,6 +24,7 @@
     "description": {
       "openai": "Supports all OpenAI API-style providers.",
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
+      "opencode_go": "Dedicated OpenCode Go subscription integration using an OpenAI-compatible API with per-session isolation.",
       "vllm_rerank": "Also supports Jina AI, Cohere, PPIO and other providers.",
       "default": ""
     },
