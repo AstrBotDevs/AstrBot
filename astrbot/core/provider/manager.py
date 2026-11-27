@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import inspect
 import os
 import traceback
 from collections.abc import Callable
@@ -26,6 +27,7 @@ from .provider import (
 from .register import llm_tools, provider_cls_map
 
 if TYPE_CHECKING:
+    from ..config import AstrBotConfig
     from ..persona_mgr import PersonaManager
 
 
@@ -245,12 +247,15 @@ class ProviderManager:
         self,
         provider_type: ProviderType,
         umo: str | None,
+        *,
+        config: "AstrBotConfig | None" = None,
     ) -> Providers | None:
         """Resolve the configured provider with fallbacks.
 
         Args:
             provider_type: Provider type to resolve.
             umo: User message origin used to load session configuration.
+            config: Optional preloaded configuration for the session.
 
         Returns:
             Resolved provider instance, or None when the provider type is disabled
@@ -260,7 +265,8 @@ class ProviderManager:
             ValueError: If provider_type is unsupported.
         """
         provider_id = None
-        config = self.acm.get_conf(umo)
+        if config is None:
+            config = self.acm.get_conf(umo)
         if provider_type == ProviderType.CHAT_COMPLETION:
             agent_runner = config.get("agent", {})
             provider_id = (
@@ -341,7 +347,13 @@ class ProviderManager:
         Returns:
             Provider instance currently in use, or None if unavailable.
         """
-        return self._resolve_using_provider(provider_type, umo)
+        get_conf_async = getattr(self.acm, "get_conf_async", None)
+        config = (
+            await get_conf_async(umo)
+            if inspect.iscoroutinefunction(get_conf_async)
+            else None
+        )
+        return self._resolve_using_provider(provider_type, umo, config=config)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商

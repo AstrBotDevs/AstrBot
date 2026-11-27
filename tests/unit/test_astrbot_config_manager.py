@@ -128,3 +128,127 @@ async def test_update_and_delete_conf_use_async_global_preferences(tmp_path):
         "abconf_mapping",
         {},
     )
+
+
+@pytest.mark.asyncio
+async def test_async_config_resolution_avoids_sync_sqlite_on_cold_cache(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify async config resolution avoids synchronous sqlite3.connect on cold cache."""
+    import sqlite3
+
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.config.default import DEFAULT_CONFIG
+    from astrbot.core.config_bindings import BINDING_KEY
+    from astrbot.core.db.sqlite import SQLiteDatabase
+    from astrbot.core.platform.message_session import MessageSession
+    from astrbot.core.provider.entities import ProviderType
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.utils.shared_preferences import SharedPreferences
+
+    db = SQLiteDatabase(str(tmp_path / "data.db"))
+    await db.initialize()
+    sp_instance = SharedPreferences(
+        db_helper=db, json_storage_path=str(tmp_path / "sp.json")
+    )
+    await sp_instance.initialize()
+    try:
+        default_conf = AstrBotConfig(
+            config_path=str(tmp_path / "cmd_config.json"),
+            default_config=DEFAULT_CONFIG,
+        )
+        profile_conf = AstrBotConfig(
+            config_path=str(tmp_path / "abconf_profile_1.json"),
+            default_config={**DEFAULT_CONFIG, "wake_prefix": ["!"]},
+        )
+        profile_conf.save_config()
+
+        umo = "bot1:GroupMessage:group_1"
+        await sp_instance.global_put(
+            "abconf_mapping",
+            {"profile_1": {"path": "abconf_profile_1.json", "name": "Profile 1"}},
+        )
+        await sp_instance.session_put(
+            umo,
+            BINDING_KEY,
+            {
+                "profile_id": "profile_1",
+                "overrides": {
+                    "agent.config.model.provider_id": "custom_chat",
+                    "wake_prefix": ["?"],
+                },
+            },
+        )
+        # Clear in-memory overlay to simulate cold cache
+        with sp_instance._cache_lock:
+            sp_instance._cache.clear()
+
+        ucr = MagicMock()
+        ucr.get_conf_id_for_umop.return_value = "route_profile"
+        manager = AstrBotConfigManager(default_conf, ucr, sp_instance)
+        await manager.initialize()
+        manager.confs["profile_1"] = profile_conf
+
+        def fail_sync_connect(*_args, **_kwargs):
+            raise AssertionError("synchronous sqlite3.connect should not be called")
+
+        monkeypatch.setattr(sqlite3, "connect", fail_sync_connect)
+
+        info = await manager.get_conf_info_async(umo)
+        assert info["id"] == "profile_1"
+        assert info["name"] == "Profile 1"
+
+        routed_info = await manager.get_conf_info_async(
+            MessageSession.from_str(umo), follow_route=True
+        )
+        assert routed_info["id"] == "default"
+
+        invalid_info = await manager.get_conf_info_async("not-a-valid-umo")
+        assert invalid_info["id"] == "default"
+
+        with sp_instance._cache_lock:
+            sp_instance._cache.clear()
+
+        snapshot, override_paths = await manager._create_message_config_async(umo)
+        assert snapshot["wake_prefix"] == ["?"]
+        assert override_paths == frozenset(
+            {"agent.config.model.provider_id", "wake_prefix"}
+        )
+
+        conf = await manager.get_conf_async(umo)
+        assert conf["wake_prefix"] == ["?"]
+
+        session_conf = await manager.get_conf_async(MessageSession.from_str(umo))
+        assert session_conf["wake_prefix"] == ["?"]
+
+        pm = ProviderManager(
+            manager,
+            db,
+            MagicMock(
+                default_persona="default",
+                persona_v3_config=[],
+                personas_v3=[],
+                selected_default_persona_v3=None,
+            ),
+        )
+        fake_chat = MagicMock()
+        pm.inst_map["custom_chat"] = fake_chat
+        resolved = await pm.get_using_provider_async(ProviderType.CHAT_COMPLETION, umo)
+        assert resolved is fake_chat
+
+        async def fail_get_async(*_args, **_kwargs):
+            raise RuntimeError("db unavailable")
+
+        monkeypatch.setattr(sp_instance, "get_async", fail_get_async)
+        assert (await manager.get_conf_info_async("not-a-valid-umo"))["id"] == "default"
+        assert (await manager.get_conf_async("not-a-valid-umo")) is default_conf
+        bad_snapshot, bad_overrides = await manager._create_message_config_async(
+            "not-a-valid-umo"
+        )
+        assert bad_snapshot["wake_prefix"] == default_conf["wake_prefix"]
+        assert bad_overrides == frozenset()
+        bad_info, _, _ = await manager.resolve_message_config_async("not-a-valid-umo")
+        assert bad_info["id"] == "default"
+    finally:
+        await sp_instance.close()
+        await db.engine.dispose()
