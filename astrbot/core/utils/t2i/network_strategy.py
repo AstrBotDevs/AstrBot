@@ -92,6 +92,9 @@ def inject_shiki_runtime(tmpl_str: str) -> str:
 
 
 class NetworkRenderStrategy(RenderStrategy):
+    _OFFICIAL_ENDPOINTS_TIMEOUT_S = 15
+    _RENDER_TIMEOUT_S = 30
+
     def __init__(self, base_url: str | None = None) -> None:
         super().__init__()
         if not base_url:
@@ -101,10 +104,11 @@ class NetworkRenderStrategy(RenderStrategy):
 
         self.endpoints = [self.BASE_RENDER_URL]
         self.template_manager = TemplateManager()
+        self._endpoints_task: asyncio.Task[None] | None = None
 
     async def initialize(self) -> None:
         if self.BASE_RENDER_URL == ASTRBOT_T2I_DEFAULT_ENDPOINT:
-            asyncio.create_task(self.get_official_endpoints())
+            self._endpoints_task = asyncio.create_task(self.get_official_endpoints())
 
     async def get_template(self, name: str = "base") -> str:
         """通过名称获取文转图 HTML 模板"""
@@ -119,15 +123,20 @@ class NetworkRenderStrategy(RenderStrategy):
             ) as session:
                 async with session.get(
                     "https://api.soulter.top/astrbot/t2i-endpoints",
+                    timeout=aiohttp.ClientTimeout(
+                        total=self._OFFICIAL_ENDPOINTS_TIMEOUT_S
+                    ),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         all_endpoints: list[dict] = data.get("data", [])
-                        self.endpoints = [
+                        active_endpoints = [
                             ep.get("url")
                             for ep in all_endpoints
                             if ep.get("active") and ep.get("url")
                         ]
+                        if active_endpoints:
+                            self.endpoints = active_endpoints
                         logger.info(
                             f"Successfully got {len(self.endpoints)} official T2I endpoints.",
                         )
@@ -193,18 +202,27 @@ class NetworkRenderStrategy(RenderStrategy):
                         session.post(
                             f"{endpoint}/generate",
                             json=post_data,
+                            timeout=aiohttp.ClientTimeout(total=self._RENDER_TIMEOUT_S),
                         ) as resp,
                     ):
                         if resp.status == 200:
                             ret = await resp.json()
-                            return f"{endpoint}/{ret['data']['id']}"
+                            ret_id = (
+                                (ret.get("data") or {}).get("id")
+                                if isinstance(ret, dict)
+                                else None
+                            )
+                            if not ret_id:
+                                raise ValueError("Invalid T2I URL response payload")
+                            return f"{endpoint}/{ret_id}"
                         raise Exception(f"HTTP {resp.status}")
                 else:
-                    # download_image_by_url 失败时抛异常
+                    # download_image_by_url raises on non-200 or non-image payload
                     return await download_image_by_url(
                         f"{endpoint}/generate",
                         post=True,
                         post_data=post_data,
+                        timeout=self._RENDER_TIMEOUT_S,
                     )
             except Exception as e:
                 last_exception = e

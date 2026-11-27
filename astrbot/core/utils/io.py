@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import inspect
 import logging
@@ -8,7 +9,7 @@ import ssl
 import time
 import uuid
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.parse import unquote, urlparse
 
 import aiohttp
@@ -110,11 +111,58 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     return p
 
 
+def _write_image_bytes(data: bytes, path: str | None) -> str:
+    """Persist downloaded image bytes to a target file or temp image."""
+    if not path:
+        return save_temp_img(data)
+    with open(path, "wb") as f:
+        f.write(data)
+    return path
+
+
+async def _fetch_image_bytes(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    post: bool,
+    post_data: dict | None,
+    ssl_context: ssl.SSLContext | None,
+    timeout: float,
+) -> bytes:
+    """Perform an image HTTP request and validate status, content-type, and body."""
+    request_kwargs: dict[str, Any] = {"timeout": aiohttp.ClientTimeout(total=timeout)}
+    if ssl_context is not None:
+        request_kwargs["ssl"] = ssl_context
+    if post:
+        request_kwargs["json"] = post_data
+        request_cm = session.post(url, **request_kwargs)
+    else:
+        request_cm = session.get(url, **request_kwargs)
+
+    async with request_cm as resp:
+        _raise_for_download_status(resp, url)
+        content_type = (
+            (resp.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        )
+        if content_type.startswith("text/") or content_type == "application/json":
+            raise DownloadFileHTTPError(
+                f"Unexpected non-image Content-Type {content_type!r} "
+                f"from {_safe_url_for_log(url)}"
+            )
+        data = await resp.read()
+        if not data:
+            raise DownloadFileHTTPError(
+                f"Empty image response from {_safe_url_for_log(url)}"
+            )
+        return data
+
+
 async def download_image_by_url(
     url: str,
     post: bool = False,
     post_data: dict | None = None,
     path: str | None = None,
+    timeout: float = 30,
 ) -> str:
     """下载图片, 返回 path"""
     try:
@@ -126,20 +174,14 @@ async def download_image_by_url(
             trust_env=True,
             connector=connector,
         ) as session:
-            if post:
-                async with session.post(url, json=post_data) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
+            data = await _fetch_image_bytes(
+                session,
+                url,
+                post=post,
+                post_data=post_data,
+                ssl_context=None,
+                timeout=timeout,
+            )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
@@ -151,23 +193,16 @@ async def download_image_by_url(
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            if post:
-                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except Exception as e:
-        raise e
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            data = await _fetch_image_bytes(
+                session,
+                url,
+                post=post,
+                post_data=post_data,
+                ssl_context=ssl_context,
+                timeout=timeout,
+            )
+    return await asyncio.to_thread(_write_image_bytes, data, path)
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
@@ -330,7 +365,7 @@ async def download_file(
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
