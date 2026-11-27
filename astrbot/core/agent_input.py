@@ -95,9 +95,9 @@ def append_system_reminders(
         user_id = (
             " ".join(
                 "".join(
-                    ch
+                    " " if unicodedata.category(ch) == "Cc" else ch
                     for ch in str(raw_user_id)
-                    if unicodedata.category(ch) not in ("Cc", "Cf")
+                    if unicodedata.category(ch) != "Cf"
                 ).split()
             )
             .replace("<", "＜")
@@ -108,9 +108,9 @@ def append_system_reminders(
         nickname = (
             " ".join(
                 "".join(
-                    ch
+                    " " if unicodedata.category(ch) == "Cc" else ch
                     for ch in str(raw_nickname)
-                    if unicodedata.category(ch) not in ("Cc", "Cf")
+                    if unicodedata.category(ch) != "Cf"
                 ).split()
             )
             .replace("<", "＜")
@@ -118,12 +118,13 @@ def append_system_reminders(
             if raw_nickname is not None
             else ""
         )
-        sender_payload = json.dumps(
-            {"user_id": user_id, "nickname": nickname},
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-        system_parts.append(f"Sender: {sender_payload}")
+        if user_id or nickname:
+            sender_payload = json.dumps(
+                {"user_id": user_id, "nickname": nickname},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            system_parts.append(f"Sender: {sender_payload}")
 
     if cfg.get("group_name_display") and event.message_obj.group_id:
         if not event.message_obj.group:

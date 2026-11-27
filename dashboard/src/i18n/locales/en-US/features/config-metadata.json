@@ -504,7 +504,7 @@
         },
         "identifier": {
           "description": "User Identification",
-          "hint": "Prepend the user ID to the user prompt."
+          "hint": "Include the sender's user ID and nickname in the user message context."
         },
         "group_name_display": {
           "description": "Display Group Name",
