@@ -6,7 +6,7 @@ import random
 import re
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
 from google import genai
@@ -696,6 +696,53 @@ class ProviderGoogleGenAI(Provider):
         )
 
     @staticmethod
+    def _collect_web_search_sources(
+        candidate: types.Candidate,
+        sources: list[dict[str, Any]],
+        seen_urls: set[str],
+    ) -> None:
+        """Append unique web sources from Gemini grounding and URL context metadata.
+
+        Args:
+            candidate: Gemini response candidate from a non-streaming or streaming reply.
+            sources: Accumulated source entries for the current response.
+            seen_urls: URLs already recorded in ``sources``.
+        """
+        grounding_metadata = candidate.grounding_metadata
+        if grounding_metadata and grounding_metadata.grounding_chunks:
+            for chunk in grounding_metadata.grounding_chunks:
+                web = chunk.web
+                if not web or not web.uri or web.uri in seen_urls:
+                    continue
+                seen_urls.add(web.uri)
+                sources.append(
+                    {
+                        "index": str(len(sources) + 1),
+                        "url": web.uri,
+                        "title": web.title or web.uri,
+                    }
+                )
+
+        url_context_metadata = candidate.url_context_metadata
+        if url_context_metadata and url_context_metadata.url_metadata:
+            for item in url_context_metadata.url_metadata:
+                if (
+                    item.url_retrieval_status
+                    != types.UrlRetrievalStatus.URL_RETRIEVAL_STATUS_SUCCESS
+                    or not item.retrieved_url
+                    or item.retrieved_url in seen_urls
+                ):
+                    continue
+                seen_urls.add(item.retrieved_url)
+                sources.append(
+                    {
+                        "index": str(len(sources) + 1),
+                        "url": item.retrieved_url,
+                        "title": item.retrieved_url,
+                    }
+                )
+
+    @staticmethod
     def _ensure_usable_response(
         llm_response: LLMResponse,
         *,
@@ -939,6 +986,11 @@ class ProviderGoogleGenAI(Provider):
             result.candidates[0],
             llm_response,
         )
+        self._collect_web_search_sources(
+            result.candidates[0],
+            llm_response.web_search_sources,
+            set(),
+        )
         llm_response.id = result.response_id
         if result.usage_metadata:
             llm_response.usage = self._extract_usage(result.usage_metadata)
@@ -963,6 +1015,8 @@ class ProviderGoogleGenAI(Provider):
         # Accumulate the complete response text for the final response
         accumulated_text = ""
         accumulated_reasoning = ""
+        web_search_sources: list[dict[str, Any]] = []
+        seen_source_urls: set[str] = set()
         final_response = None
         tool_response = None
         finished = False
@@ -1017,14 +1071,16 @@ class ProviderGoogleGenAI(Provider):
             async for chunk in result:
                 if chunk.usage_metadata is not None:
                     request.usage = self._extract_usage(chunk.usage_metadata)
-                # Some endpoints send their final usage in a metadata-only frame.
+                if chunk.candidates:
+                    self._collect_web_search_sources(
+                        chunk.candidates[0], web_search_sources, seen_source_urls
+                    )
                 if finished:
                     continue
-                llm_response = LLMResponse("assistant", is_chunk=True)
-
                 if not chunk.candidates:
                     logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
                     continue
+                llm_response = LLMResponse("assistant", is_chunk=True)
                 if not chunk.candidates[0].content:
                     logger.warning(f"Gemini stream chunk has empty content: {chunk}")
                     continue
@@ -1064,6 +1120,7 @@ class ProviderGoogleGenAI(Provider):
                             llm_response.reasoning_content = accumulated_reasoning + (
                                 llm_response.reasoning_content or ""
                             )
+                    llm_response.web_search_sources = web_search_sources
                     llm_response.id = chunk.response_id
                     request.mark_first_token()
                     tool_response = llm_response
@@ -1128,6 +1185,8 @@ class ProviderGoogleGenAI(Provider):
             final_response.result_chain = MessageChain(
                 chain=[Comp.Plain(accumulated_text)],
             )
+
+        final_response.web_search_sources = web_search_sources
 
         self._ensure_usable_response(
             final_response,

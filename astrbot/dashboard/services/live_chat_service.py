@@ -765,6 +765,9 @@ class LiveChatService:
                             logger.error(f"[Live Chat] 解析 TTSStats 失败: {exc}")
                         continue
 
+                    if result_chain_type == "web_search_sources":
+                        continue
+
                     if result_type == "plain":
                         bot_text += data
 
