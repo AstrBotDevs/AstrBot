@@ -516,9 +516,9 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        # Map tool call IDs to function names for later tool result matching.
-        tool_id_to_name: dict[str, str] = {}
-        for message in payloads["messages"]:
+        tool_call_names: dict[str, str] = {}
+        messages = payloads["messages"]
+        for message_index, message in enumerate(messages):
             role, content = message["role"], message.get("content")
 
             if role == "user":
@@ -543,8 +543,9 @@ class ProviderGoogleGenAI(Provider):
                         extra_content = tool.get("extra_content") or {}
                         google_extra = extra_content.get("google") or {}
                         function_name = tool["function"]["name"]
-                        if tool.get("id"):
-                            tool_id_to_name[tool["id"]] = function_name
+                        tool_id = tool.get("id")
+                        if tool_id:
+                            tool_call_names[tool_id] = function_name
                         # Replay server-side tool parts unchanged (with their thought signatures).
                         for server_side_part in google_extra.get("server_parts") or []:
                             try:
@@ -561,6 +562,14 @@ class ProviderGoogleGenAI(Provider):
                             name=function_name,
                             args=json.loads(tool["function"]["arguments"]),
                         )
+                        # Official Gemini often omits id (and we fall back to name).
+                        # Only emit a distinct id so strict proxies can pair history.
+                        if (
+                            tool_id
+                            and tool_id != function_name
+                            and part.function_call is not None
+                        ):
+                            part.function_call.id = tool_id
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
@@ -570,7 +579,8 @@ class ProviderGoogleGenAI(Provider):
                         tool_parts.append(part)
 
                 if isinstance(content, str):
-                    parts.append(types.Part.from_text(text=content))
+                    if content:
+                        parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
                     thinking_signature = None
                     text = ""
@@ -602,7 +612,7 @@ class ProviderGoogleGenAI(Provider):
                         # Omit duplicate thought_signature already carried by a tool/server part.
                         if text:
                             parts.append(types.Part(text=text))
-                    else:
+                    elif text or thinking_signature:
                         parts.append(
                             types.Part(
                                 text=text,
@@ -618,11 +628,21 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool":
-                tool_call_id = message["tool_call_id"]
-                # Resolve function name from preceding assistant tool calls via call ID.
-                func_name = message.get("name") or tool_id_to_name.get(
-                    tool_call_id, tool_call_id
-                )
+                tool_call_id = message.get("tool_call_id")
+                preceding_name = tool_call_names.pop(tool_call_id, None)
+                func_name = message.get("name") or preceding_name
+                if not func_name:
+                    # Imported histories can place the result before its call.
+                    func_name = next(
+                        (
+                            tool["function"]["name"]
+                            for later in messages[message_index + 1 :]
+                            if later["role"] == "assistant"
+                            for tool in later.get("tool_calls") or []
+                            if tool.get("id") == tool_call_id
+                        ),
+                        tool_call_id,
+                    )
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
@@ -630,6 +650,12 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
+                if (
+                    tool_call_id
+                    and tool_call_id != func_name
+                    and part.function_response is not None
+                ):
+                    part.function_response.id = tool_call_id
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
