@@ -1661,6 +1661,7 @@ async def test_query_stream_extracts_usage_from_empty_choices_chunk(
         async with aclosing(provider.text_chat_stream(prompt="hello")) as stream:
             assert (await anext(stream)).is_chunk
 
+        await temp_db.chat_usage_writer.flush()
         async with temp_db.get_db() as session:
             rows = (
                 (

@@ -1,11 +1,14 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
+from sqlalchemy import event
 from sqlmodel import select
 
+from astrbot.core.db import chat_usage_writer
 from astrbot.core.db.po import ChatRequestStat
 from astrbot.core.pipeline.process_stage.method import star_request
 from astrbot.core.provider.sources import chat_request, request_retry
@@ -85,6 +88,7 @@ async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_token
     finally:
         await provider.terminate()
 
+    await temp_db.chat_usage_writer.flush()
     async with temp_db.get_db() as session:
         rows = (
             (
@@ -112,3 +116,39 @@ async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_token
     assert stats["range_by_plugin"] == [
         {"plugin_id": plugin.plugin_id, "tokens": 18, "calls": 2},
     ]
+
+
+@pytest.mark.asyncio
+async def test_usage_queue_batches_writes_and_drains_on_close(temp_db, monkeypatch):
+    monkeypatch.setattr(chat_usage_writer, "QUEUE_CAPACITY", 3)
+    monkeypatch.setattr(chat_usage_writer, "BATCH_SIZE", 2)
+    writer = chat_usage_writer.ChatUsageWriter(temp_db)
+    await temp_db.initialize()
+    batch_sizes = []
+
+    @event.listens_for(temp_db.engine.sync_engine, "before_cursor_execute")
+    def count_inserts(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO chat_request_stats"):
+            batch_sizes.append(len(parameters) if executemany else 1)
+
+    for output in range(4):
+        writer.enqueue(
+            ChatRequestStat(
+                created_at=datetime.now(timezone.utc),
+                provider_id="provider",
+                provider_model="model",
+                status="completed",
+                token_output=output,
+                duration=0.1,
+            )
+        )
+    assert batch_sizes == []
+
+    await writer.close()
+
+    assert batch_sizes == [2, 1]
+    async with temp_db.get_db() as session:
+        result = await session.execute(
+            select(ChatRequestStat.token_output).order_by(ChatRequestStat.id)
+        )
+        assert result.scalars().all() == [0, 1, 2]

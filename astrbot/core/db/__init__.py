@@ -8,6 +8,7 @@ from deprecated import deprecated
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from astrbot.core.db.chat_usage_writer import ChatUsageWriter
 from astrbot.core.db.po import (
     ApiKey,
     Attachment,
@@ -55,6 +56,7 @@ class BaseDatabase(abc.ABC):
         from astrbot.core.db.conversation import ConversationStore
 
         self.conversation_store = ConversationStore(self)
+        self.chat_usage_writer = ChatUsageWriter(self)
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,

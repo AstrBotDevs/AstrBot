@@ -14,7 +14,7 @@ from inspect import isawaitable
 from time import monotonic
 from typing import TYPE_CHECKING, TypeVar
 
-from astrbot.core import db_helper, logger
+from astrbot.core import db_helper
 from astrbot.core.db.po import ChatRequestStat
 from astrbot.core.platform.astr_message_event import current_message_event
 from astrbot.core.provider.entities import TokenUsage
@@ -112,11 +112,7 @@ async def chat_request(
                 duration=monotonic() - request.started,
                 time_to_first_token=request.time_to_first_token,
             )
-            try:
-                async with db_helper.get_db() as session, session.begin():
-                    session.add(record)
-            except Exception:
-                logger.warning("Could not persist chat request usage", exc_info=True)
+            db_helper.chat_usage_writer.enqueue(record)
 
     async with retry_provider_request_context(
         label, attempt, max_attempts=max_attempts

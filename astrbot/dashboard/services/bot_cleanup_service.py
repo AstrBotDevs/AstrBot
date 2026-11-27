@@ -136,6 +136,9 @@ async def delete_bot_data(
             }
         )
 
+    if "stats" in targets:
+        await core.db.chat_usage_writer.flush()
+
     async with core.db.get_db() as session:
         async with session.begin():
             if "conversations" in targets:
