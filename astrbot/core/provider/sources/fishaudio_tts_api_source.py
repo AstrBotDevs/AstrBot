@@ -14,7 +14,6 @@ from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
-
 SUPPORTED_AUDIO_FORMATS: tuple[Literal["wav", "mp3"], ...] = ("wav", "mp3")
 SUPPORTED_MP3_BITRATES: tuple[Literal[64, 128, 192], ...] = (64, 128, 192)
 
@@ -64,7 +63,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         )
         if raw_format not in SUPPORTED_AUDIO_FORMATS:
             logger.warning(
-                f"[FishAudio TTS] 不支持的音频格式 '{raw_format}'，已回退为 'wav'"
+                f"[FishAudio TTS] Unsupported audio format '{raw_format}', falling back to 'wav'."
             )
             raw_format = "wav"
         self.audio_format: Literal["wav", "mp3"] = cast(
@@ -77,7 +76,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             bitrate = 128
         elif isinstance(raw_bitrate, bool):
             logger.warning(
-                f"[FishAudio TTS] 无效的 MP3 码率 '{raw_bitrate}'，已回退为 128"
+                f"[FishAudio TTS] Invalid MP3 bitrate '{raw_bitrate}', falling back to 128."
             )
             bitrate = 128
         else:
@@ -85,17 +84,15 @@ class ProviderFishAudioTTSAPI(TTSProvider):
                 bitrate = int(raw_bitrate)
             except (TypeError, ValueError):
                 logger.warning(
-                    f"[FishAudio TTS] 无效的 MP3 码率 '{raw_bitrate}'，已回退为 128"
+                    f"[FishAudio TTS] Invalid MP3 bitrate '{raw_bitrate}', falling back to 128."
                 )
                 bitrate = 128
         if bitrate not in SUPPORTED_MP3_BITRATES:
             logger.warning(
-                f"[FishAudio TTS] 不支持的 MP3 码率 '{bitrate}'，已回退为 128"
+                f"[FishAudio TTS] Unsupported MP3 bitrate '{bitrate}', falling back to 128."
             )
             bitrate = 128
-        self.mp3_bitrate: Literal[64, 128, 192] = cast(
-            Literal[64, 128, 192], bitrate
-        )
+        self.mp3_bitrate: Literal[64, 128, 192] = cast(Literal[64, 128, 192], bitrate)
         self.api_base: str = provider_config.get(
             "api_base",
             "https://api.fish-audio.cn/v1",
