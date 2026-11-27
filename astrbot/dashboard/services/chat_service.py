@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlsplit
 
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -330,6 +331,9 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_firecrawl",
+        "web_search_exa",
+        "web_search_anysearch",
         "web_search_deepseek",
         "web_search_serpapi",
         "news_search_serpapi",
@@ -351,9 +355,21 @@ def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> d
             try:
                 result_data = json.loads(tool_call["result"])
                 for item in result_data.get("results", []):
+                    url = item.get("url")
+                    if not isinstance(url, str):
+                        continue
+                    try:
+                        parsed_url = urlsplit(url)
+                    except ValueError:
+                        continue
+                    if (
+                        parsed_url.scheme not in ("http", "https")
+                        or not parsed_url.hostname
+                    ):
+                        continue
                     if idx := item.get("index"):
                         web_search_results[idx] = {
-                            "url": item.get("url"),
+                            "url": url,
                             "title": item.get("title"),
                             "snippet": item.get("snippet"),
                         }

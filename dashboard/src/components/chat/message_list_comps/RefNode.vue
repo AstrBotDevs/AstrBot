@@ -1,6 +1,6 @@
 <template>
   <v-chip
-    v-if="resultData"
+    v-if="resultData && url"
     class="ref-chip"
     size="x-small"
     variant="flat"
@@ -44,17 +44,19 @@ const resultData = computed(() => {
   return results?.[refIndex.value] || null;
 });
 
-const url = computed(() => resultData.value?.url || "");
-
-const domain = computed(() => {
-  if (!url.value) return "";
+const sourceUrl = computed(() => {
+  const value = resultData.value?.url;
+  if (typeof value !== "string") return null;
   try {
-    const urlObj = new URL(url.value);
-    return urlObj.hostname.replace(/^www\./, "");
-  } catch (e) {
-    return "";
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed : null;
+  } catch {
+    return null;
   }
 });
+
+const url = computed(() => sourceUrl.value?.href || "");
+const domain = computed(() => sourceUrl.value?.hostname.replace(/^www\./, "") || "");
 
 const chipStyle = computed(() => ({
   backgroundColor: isDark.value

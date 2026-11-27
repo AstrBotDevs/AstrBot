@@ -81,15 +81,22 @@ export default {
         ? this.refs
         : [];
 
-      return used
-        .map((ref) => ({
-          index: ref?.index,
-          title: ref?.title || ref?.url || "Reference",
-          url: ref?.url,
-          snippet: ref?.snippet,
-          favicon: ref?.favicon,
-        }))
-        .filter((ref) => ref.url);
+      return used.flatMap((ref) => {
+        if (typeof ref?.url !== "string") return [];
+        try {
+          const url = new URL(ref.url);
+          if (url.protocol !== "http:" && url.protocol !== "https:") return [];
+          return [{
+            index: ref.index,
+            title: ref.title || ref.url || "Reference",
+            url: url.href,
+            snippet: ref.snippet,
+            favicon: ref.favicon,
+          }];
+        } catch {
+          return [];
+        }
+      });
     },
   },
   methods: {
@@ -114,7 +121,7 @@ export default {
 
     openLink(url) {
       if (url) {
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener");
       }
     },
   },
