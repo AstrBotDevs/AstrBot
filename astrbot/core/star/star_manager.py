@@ -49,6 +49,7 @@ from astrbot.core.utils.requirements_utils import (
 )
 
 from . import StarMetadata
+from .base import Star
 from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
@@ -192,6 +193,8 @@ async def _install_requirements_with_precheck(
 
 
 class PluginManager:
+    _LEGACY_DEL_TIMEOUT_S: float = 10.0
+
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         from .star_tools import StarTools
 
@@ -1997,7 +2000,15 @@ class PluginManager:
 
     @staticmethod
     async def _terminate_plugin(star_metadata: StarMetadata) -> None:
-        """终止插件，调用插件的 terminate() 和 __del__() 方法"""
+        """Terminate a plugin and dispatch unload hooks.
+
+        Prefers an overridden ``terminate()`` method anywhere in the plugin's
+        class hierarchy. Falls back to awaiting the deprecated ``__del__()``
+        hook in an executor only when ``terminate()`` is not overridden.
+
+        Args:
+            star_metadata: Metadata of the plugin instance being terminated.
+        """
         logger.info(f"Terminating plugin {star_metadata.name} ...")
 
         if not star_metadata.activated:
@@ -2011,41 +2022,91 @@ class PluginManager:
         if star_metadata.star_cls is None:
             return
 
-        if "__del__" in star_metadata.star_cls_type.__dict__:
-            loop = asyncio.get_running_loop()
-            future = loop.run_in_executor(
-                None,
-                star_metadata.star_cls.__del__,
-            )
+        cls_type = star_metadata.star_cls_type or type(star_metadata.star_cls)
+        terminate_attr = getattr(cls_type, "terminate", None)
+        has_custom_terminate = (
+            terminate_attr is not None and terminate_attr is not Star.terminate
+        )
+        del_attr = getattr(cls_type, "__del__", None)
+        has_custom_del = del_attr is not None and del_attr is not Star.__del__
 
-            def _log_del_exception(fut: asyncio.Future) -> None:
-                if fut.cancelled():
-                    return
-                if (exc := fut.exception()) is not None:
+        try:
+            if has_custom_terminate:
+                try:
+                    with plugin_scope(star_metadata.plugin_id):
+                        res = star_metadata.star_cls.terminate()
+                        if inspect.isawaitable(res):
+                            await res
+                except Exception as exc:
+                    logger.error(
+                        "Plugin %s raised an exception in terminate: %r",
+                        star_metadata.name,
+                        exc,
+                        exc_info=True,
+                    )
+            elif has_custom_del:
+                if not getattr(del_attr, "_astrbot_one_shot_del", False):
+                    original_del = del_attr
+
+                    def _one_shot_del(self_obj, _orig=original_del):
+                        if getattr(self_obj, "_astrbot_del_invoked", False):
+                            return None
+                        self_obj._astrbot_del_invoked = True
+                        return _orig(self_obj)
+
+                    _one_shot_del._astrbot_one_shot_del = True  # type: ignore[attr-defined]
+                    cls_type.__del__ = _one_shot_del
+
+                loop = asyncio.get_running_loop()
+                del_future = loop.run_in_executor(None, star_metadata.star_cls.__del__)
+                handled_inline = False
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(del_future),
+                        timeout=PluginManager._LEGACY_DEL_TIMEOUT_S,
+                    )
+                    handled_inline = True
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Plugin %s timed out in __del__ after %.1fs",
+                        star_metadata.name,
+                        PluginManager._LEGACY_DEL_TIMEOUT_S,
+                    )
+                except Exception as exc:
+                    handled_inline = True
                     logger.error(
                         "Plugin %s raised an exception in __del__: %r",
                         star_metadata.name,
                         exc,
                     )
+                finally:
+                    if not handled_inline:
 
-            future.add_done_callback(_log_del_exception)
-        elif "terminate" in star_metadata.star_cls_type.__dict__:
-            with plugin_scope(star_metadata.plugin_id):
-                await star_metadata.star_cls.terminate()
+                        def _log_late_del_exception(fut: asyncio.Future) -> None:
+                            if fut.cancelled():
+                                return
+                            if (late_exc := fut.exception()) is not None:
+                                logger.error(
+                                    "Plugin %s raised an exception in __del__: %r",
+                                    star_metadata.name,
+                                    late_exc,
+                                )
 
-        # 触发插件卸载事件
-        handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnPluginUnloadedEvent,
-        )
-        for handler in handlers:
-            try:
-                logger.info(
-                    f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
-                )
-                with plugin_scope(star_map[handler.handler_module_path].plugin_id):
-                    await handler.handler(star_metadata)
-            except Exception:
-                logger.error(traceback.format_exc())
+                        del_future.add_done_callback(_log_late_del_exception)
+        finally:
+            # 触发插件卸载事件
+            handlers = star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnPluginUnloadedEvent,
+            )
+            for handler in handlers:
+                try:
+                    logger.info(
+                        f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    )
+                    with plugin_scope(star_map[handler.handler_module_path].plugin_id):
+                        await handler.handler(star_metadata)
+                except Exception:
+                    logger.error(traceback.format_exc())
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
