@@ -4376,7 +4376,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
-                        "hint": "在用户提示词前带上用户 ID 信息。",
+                        "hint": "在用户消息上下文中附带发送者的用户 ID 与昵称信息。",
                     },
                     "provider_settings.group_name_display": {
                         "description": "显示群名称",

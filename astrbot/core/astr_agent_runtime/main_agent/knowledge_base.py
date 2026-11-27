@@ -3,7 +3,6 @@
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.agent_input import format_user_identifier
 from astrbot.core.astr_agent_runtime.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
@@ -36,19 +35,9 @@ async def apply_knowledge_base(
     else:
         if req.prompt is None or not req.prompt.strip():
             return
-        query = req.prompt
-        if config.provider_settings.get("identifier"):
-            identifier = format_user_identifier(event)
-            if identifier:
-                if query.startswith(f"{identifier}: "):
-                    query = query[len(identifier) + 2 :]
-                elif query.startswith(f"{identifier}:"):
-                    query = query[len(identifier) + 1 :]
-        if not query.strip():
-            return
         try:
             kb_result = await retrieve_knowledge_base(
-                query=query,
+                query=req.prompt,
                 umo=event.unified_msg_origin,
                 context=plugin_context,
             )
