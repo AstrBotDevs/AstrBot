@@ -39,7 +39,7 @@ class ProviderEdgeTTS(TTSProvider):
         self.rate = provider_config.get("rate")
         self.volume = provider_config.get("volume")
         self.pitch = provider_config.get("pitch")
-        self.timeout = provider_config.get("timeout", 30)
+        self.timeout = int(provider_config.get("timeout", 30))
 
         self.proxy = os.getenv("https_proxy", None)
 
@@ -53,7 +53,12 @@ class ProviderEdgeTTS(TTSProvider):
         wav_path = os.path.join(temp_dir, f"edge_tts_{generate_timestamp_id()}.wav")
 
         # 构建 Edge TTS 参数
-        kwargs = {"text": text, "voice": self.voice}
+        kwargs = {
+            "text": text,
+            "voice": self.voice,
+            "connect_timeout": self.timeout,
+            "receive_timeout": self.timeout,
+        }
         if self.rate:
             kwargs["rate"] = self.rate
         if self.volume:
