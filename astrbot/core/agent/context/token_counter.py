@@ -77,7 +77,10 @@ class EstimateTokenCounter:
 
             if msg.tool_calls:
                 for tc in msg.tool_calls:
-                    tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
+                    tc_str = json.dumps(
+                        tc if isinstance(tc, dict) else tc.model_dump(),
+                        ensure_ascii=False,
+                    )
                     total += self._estimate_tokens(tc_str)
 
         return total
