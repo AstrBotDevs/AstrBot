@@ -1360,8 +1360,45 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield completed
             return
 
-        if not llm_resp.tools_call_name:
+        # Classify the round before the hook runs, and drive the tool branch below
+        # from this flag rather than from the mutable response, so a handler cannot
+        # turn a tool round into a final one.
+        has_tool_calls = bool(llm_resp.tools_call_name)
+        if not has_tool_calls:
             await self._complete_with_assistant_response(llm_resp)
+        else:
+            # Intermediate round: runs once the round finishes, before tools
+            # execute and before the round is persisted. In live streaming mode,
+            # deltas have already been yielded without buffering to preserve
+            # time-to-first-token, so edits here cannot retract streamed chunks
+            # and instead update persisted history, MessageCompleted, and
+            # non-streaming / stream_to_general output. Snapshot the tool-call
+            # payload by value so a handler may rewrite text but cannot alter
+            # whether or which tools run, neither by rebinding these attributes
+            # nor by mutating them.
+            tool_calls_snapshot = copy.deepcopy(
+                (
+                    llm_resp.tools_call_name,
+                    llm_resp.tools_call_args,
+                    llm_resp.tools_call_ids,
+                    llm_resp.tools_call_extra_content,
+                )
+            )
+            try:
+                await self.agent_hooks.on_llm_response_intermediate(
+                    self.run_context, llm_resp
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error in on_llm_response_intermediate hook: {e}",
+                    exc_info=True,
+                )
+            (
+                llm_resp.tools_call_name,
+                llm_resp.tools_call_args,
+                llm_resp.tools_call_ids,
+                llm_resp.tools_call_extra_content,
+            ) = tool_calls_snapshot
 
         content = []
         if llm_resp.reasoning_content:
@@ -1374,7 +1411,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self._message_content = tuple(content)
 
         # 如果有工具调用，还需处理工具调用
-        if llm_resp.tools_call_name:
+        if has_tool_calls:
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
                 if self._is_stop_requested():

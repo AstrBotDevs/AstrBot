@@ -522,6 +522,44 @@ def register_on_llm_response(**kwargs):
     return decorator
 
 
+def register_on_llm_response_intermediate(**kwargs):
+    """Register a handler for a completed LLM round that requests tool calls.
+
+    The handler runs once per round that requests tool calls, after that round's
+    response completes, before it is persisted to run history, and before its
+    tools run. In live streaming mode, deltas are yielded as they arrive to
+    preserve first-token latency, so handler edits cannot retract already-streamed
+    chunks and apply only to persisted history, completed message payloads, and
+    non-streaming or ``stream_to_general`` delivery. Use ``on_llm_response`` to
+    observe a plain/final model reply.
+
+    Args:
+        **kwargs: Handler metadata passed to the common registrar.
+
+    Returns:
+        A decorator for an intermediate LLM response handler.
+
+    Examples:
+        ```py
+        from astrbot.api.provider import LLMResponse
+
+        @on_llm_response_intermediate()
+        async def test(self, event: AstrMessageEvent, response: LLMResponse) -> None:
+            ...
+        ```
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(
+            awaitable,
+            EventType.OnLLMResponseIntermediateEvent,
+            **kwargs,
+        )
+        return awaitable
+
+    return decorator
+
+
 def register_on_agent_begin(**kwargs):
     """当 Agent 开始运行时的事件
 
