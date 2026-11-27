@@ -1211,6 +1211,7 @@ class ChatService:
                 },
             )
 
+        finalized = False
         self.running_convs[run.session_id] = True
         try:
             while True:
@@ -1229,7 +1230,9 @@ class ChatService:
                 if msg_type == "end":
                     end_frame = result
                     await save_reply(final=True)
-                    run.status = "completed"
+                    finalized = True
+                    if run.status != "failed":
+                        run.status = "completed"
                     break
 
                 if chain_type == "agent_stats":
@@ -1276,6 +1279,7 @@ class ChatService:
                             },
                         }
                 elif msg_type == "error":
+                    run.status = "failed"
                     error = (
                         result_text
                         if isinstance(result_text, dict)
@@ -1336,7 +1340,7 @@ class ChatService:
             self._publish_chat_run(run, {"type": "error", "data": error})
         finally:
             try:
-                if run.status != "completed":
+                if not finalized:
                     await save_reply(final=True)
             except Exception as exc:
                 logger.exception(

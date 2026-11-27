@@ -309,6 +309,10 @@
       "title": "Connection problem",
       "description": "Check your network connection and try again shortly."
     },
+    "ffmpegNotFound": {
+      "title": "FFmpeg is not available",
+      "description": "Install FFmpeg in the AstrBot runtime environment and ensure it is in PATH, then try again."
+    },
     "generic": {
       "title": "This reply could not be completed",
       "description": "Try again later or open the details to learn more."
