@@ -489,19 +489,9 @@ class ProviderGoogleGenAI(Provider):
                 contents.append(content_cls(parts=part))
 
         gemini_contents: list[types.Content] = []
-        # Tool result messages only carry tool_call_id, not the function name.
-        # Index first so functionResponse.name still matches even if a tool
-        # message appears before its assistant tool_calls in this payload.
         tool_call_names: dict[str, str] = {}
-        for message in payloads["messages"]:
-            if message.get("role") != "assistant":
-                continue
-            for tool in message.get("tool_calls") or []:
-                tool_id = tool.get("id")
-                func_name = (tool.get("function") or {}).get("name")
-                if tool_id and func_name:
-                    tool_call_names[tool_id] = func_name
-        for message in payloads["messages"]:
+        messages = payloads["messages"]
+        for message_index, message in enumerate(messages):
             role, content = message["role"], message.get("content")
 
             if role == "user":
@@ -527,6 +517,8 @@ class ProviderGoogleGenAI(Provider):
                         google_extra = extra_content.get("google") or {}
                         function_name = tool["function"]["name"]
                         tool_id = tool.get("id")
+                        if tool_id:
+                            tool_call_names[tool_id] = function_name
                         # Replay server-side tool parts unchanged (with their thought signatures).
                         for server_side_part in google_extra.get("server_parts") or []:
                             try:
@@ -593,7 +585,7 @@ class ProviderGoogleGenAI(Provider):
                         # Omit duplicate thought_signature already carried by a tool/server part.
                         if text:
                             parts.append(types.Part(text=text))
-                    else:
+                    elif text or thinking_signature:
                         parts.append(
                             types.Part(
                                 text=text,
@@ -610,11 +602,20 @@ class ProviderGoogleGenAI(Provider):
 
             elif role == "tool":
                 tool_call_id = message.get("tool_call_id")
-                func_name = (
-                    message.get("name")
-                    or tool_call_names.get(tool_call_id)
-                    or tool_call_id
-                )
+                preceding_name = tool_call_names.pop(tool_call_id, None)
+                func_name = message.get("name") or preceding_name
+                if not func_name:
+                    # Imported histories can place the result before its call.
+                    func_name = next(
+                        (
+                            tool["function"]["name"]
+                            for later in messages[message_index + 1 :]
+                            if later["role"] == "assistant"
+                            for tool in later.get("tool_calls") or []
+                            if tool.get("id") == tool_call_id
+                        ),
+                        tool_call_id,
+                    )
                 part = types.Part.from_function_response(
                     name=func_name,
                     response={
