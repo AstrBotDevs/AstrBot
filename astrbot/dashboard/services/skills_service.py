@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import traceback
+import uuid
 import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -141,6 +142,13 @@ class SkillsService:
         normalized = Path(raw_path.replace("\\", "/"))
         if normalized.is_absolute() or ".." in normalized.parts:
             raise ValueError("Invalid relative path")
+        if (
+            expect_file
+            and normalized == Path("SKILL.md")
+            and not (skill_dir / normalized).exists()
+            and (skill_dir / "skill.md").is_file()
+        ):
+            normalized = Path("skill.md")
 
         target = (skill_dir / normalized).resolve(strict=True)
         if not target.is_relative_to(skill_dir):
@@ -453,19 +461,31 @@ class SkillsService:
             )
 
         skills_root = Path(skill_mgr.skills_root).resolve(strict=False)
-        skill_dir = (skills_root / skill_name).resolve(strict=False)
-        if skill_dir == skills_root or not skill_dir.is_relative_to(skills_root):
-            raise SkillsServiceError("Invalid skill path")
-        if not skill_dir.is_dir() or not (
-            (skill_dir / "SKILL.md").exists() or (skill_dir / "skill.md").exists()
+        skill_dir = (
+            next(
+                (
+                    entry.resolve(strict=False)
+                    for entry in skills_root.iterdir()
+                    if entry.name == skill_name and entry.is_dir()
+                ),
+                None,
+            )
+            if skills_root.is_dir()
+            else None
+        )
+        if (
+            skill_dir is None
+            or skill_dir == skills_root
+            or not skill_dir.is_relative_to(skills_root)
+            or not (
+                (skill_dir / "SKILL.md").exists() or (skill_dir / "skill.md").exists()
+            )
         ):
             raise SkillsServiceError("Local skill not found", status_code=404)
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
-        zip_path = export_dir / f"{skill_name}.zip"
-        if zip_path.exists():
-            zip_path.unlink()
+        zip_path = export_dir / f"{uuid.uuid4().hex}.zip"
 
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for path in sorted(skill_dir.rglob("*")):
@@ -608,7 +628,10 @@ class SkillsService:
         active = payload.get("active", True)
         if not isinstance(name, str) or not name.strip():
             raise SkillsServiceError("Missing skill name")
-        SkillManager().set_skill_active(name, bool(active))
+        try:
+            SkillManager().set_skill_active(name, bool(active))
+        except ValueError as exc:
+            raise SkillsServiceError(str(exc)) from exc
         return {"name": name, "active": bool(active)}
 
     async def delete_skill(self, data: object) -> dict:

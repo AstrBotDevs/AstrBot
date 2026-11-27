@@ -185,11 +185,22 @@ def test_delete_skill_path_boundaries(monkeypatch, tmp_path: Path):
     for name in ("skill-1.0.0", "my skill", "demo"):
         _write_skill(skills_root, name, "local")
 
-    for bad in ("", " ", ".", "..", "../victim", "..\\victim", str(victim_dir), 123):
+    for bad in (
+        "",
+        " ",
+        ".",
+        "..",
+        ".. ",
+        "../victim",
+        "..\\victim",
+        str(victim_dir),
+        123,
+    ):
         with pytest.raises(ValueError, match="Invalid skill"):
             mgr.delete_skill(bad)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="Invalid skill"):
-        mgr.set_skill_active(123, False)  # type: ignore[arg-type]
+    for bad in ("../victim", 123):
+        with pytest.raises(ValueError, match="Invalid skill"):
+            mgr.set_skill_active(bad, False)  # type: ignore[arg-type]
 
     mgr.delete_skill(" demo")
     assert victim_dir.exists() and (skills_root / "demo").exists()
@@ -237,9 +248,13 @@ async def test_skill_zip_and_service_boundaries(monkeypatch, tmp_path: Path):
     (legacy / "skill.md").write_text("---\ndescription: x\n---\n", encoding="utf-8")
     outside = tmp_path / "outside.txt"
     outside.write_text("secret", encoding="utf-8")
-    (legacy / "leak.txt").symlink_to(outside)
+    try:
+        (legacy / "leak.txt").symlink_to(outside)
+    except OSError:
+        pass
 
     service = SkillsService(core_lifecycle=None)
+    assert service.get_skill_file("legacy")["path"] == "skill.md"
     with zipfile.ZipFile(service.prepare_skill_archive("legacy").path) as zf:
         assert zf.namelist() == ["legacy/skill.md"]
     with pytest.raises(SkillsServiceError, match="Invalid skill"):
