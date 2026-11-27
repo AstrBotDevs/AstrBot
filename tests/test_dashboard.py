@@ -992,9 +992,11 @@ async def test_auth_login_with_recovery_code_disables_totp(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("login_path", ["/api/auth/login", "/api/v1/auth/login"])
 async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
+    login_path: str,
 ):
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config["dashboard"]
@@ -1010,7 +1012,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
             "recovery_code_hash": recovery_code_hash,
         }
         response = await test_client.post(
-            "/api/auth/login",
+            login_path,
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -1032,7 +1034,8 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
         assert trusted_cookie_header
         assert "HttpOnly" in trusted_cookie_header
         _assert_cookie_samesite_strict(trusted_cookie_header)
-        assert "Path=/api/auth" in trusted_cookie_header
+        # Trailing semicolon keeps this from matching the narrower /api/auth path.
+        assert "; Path=/api;" in trusted_cookie_header
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -1041,9 +1044,11 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("login_path", ["/api/auth/login", "/api/v1/auth/login"])
 async def test_auth_login_skips_totp_when_trusted_cookie_valid(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
+    login_path: str,
 ):
     original_dashboard_config = copy.deepcopy(
         core_lifecycle_td.astrbot_config["dashboard"]
@@ -1059,7 +1064,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
             "recovery_code_hash": recovery_code_hash,
         }
         first_login = await test_client.post(
-            "/api/auth/login",
+            login_path,
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
@@ -1071,7 +1076,7 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
         assert first_data["status"] == "ok"
 
         second_login = await test_client.post(
-            "/api/auth/login",
+            login_path,
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
