@@ -22,10 +22,10 @@ def _make_group_event(segments: list[dict]) -> _FakeOneBotEvent:
     return _FakeOneBotEvent(
         {
             "message_type": "group",
-            "group_id": 1032290619,
-            "self_id": 3884021973,
+            "group_id": 100001,
+            "self_id": 900001,
             "message_id": 1001,
-            "sender": {"user_id": 2854196310, "nickname": "OfficialBot"},
+            "sender": {"user_id": 10002, "nickname": "OfficialBot"},
             "message": segments,
         }
     )
