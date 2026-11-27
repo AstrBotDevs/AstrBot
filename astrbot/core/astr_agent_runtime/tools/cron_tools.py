@@ -12,12 +12,16 @@ from astrbot.core.agent.runtime import get_agent_permissions
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
 from astrbot.core.cron.manager import CronJobSchedulingError
+from astrbot.core.cron.targets import get_delivery_sessions
 from astrbot.core.platform.message_type import MessageType
 
 
 def _extract_job_session(job: Any) -> str | None:
     payload = getattr(job, "payload", None)
     if not isinstance(payload, dict):
+        return None
+    if len(get_delivery_sessions(payload)) > 1:
+        # A chat-local edit could change what the job sends to other chats.
         return None
     session = payload.get("session")
     return str(session) if session is not None else None

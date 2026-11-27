@@ -54,6 +54,30 @@ def _job(job_id: str, *, umo: str = "test:group:shared", sender_id: str = "user-
     )
 
 
+@pytest.mark.asyncio
+async def test_multi_target_job_cannot_be_managed_from_chat():
+    """Chat-local permissions do not grant control of a broadcast task."""
+    job = _job("broadcast")
+    job.payload["sessions"] = [job.payload["session"], "lark:GroupMessage:other"]
+    manager = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=job)),
+        list_jobs=AsyncMock(return_value=[job]),
+        update_job=AsyncMock(),
+        delete_job=AsyncMock(),
+    )
+    context = _context(manager, is_admin=True)
+    tool = FutureTaskTool()
+    assert "No cron jobs found" in await tool.call(context, action="list")
+    assert (
+        await tool.call(context, action="edit", job_id=job.job_id, note="Change")
+    ).startswith("error:")
+    assert (await tool.call(context, action="delete", job_id=job.job_id)).startswith(
+        "error:"
+    )
+    manager.update_job.assert_not_awaited()
+    manager.delete_job.assert_not_awaited()
+
+
 def test_future_task_schema_has_action_and_create_cron_guidance():
     """The merged tool should expose action routing and unambiguous cron guidance."""
     tool = FutureTaskTool()

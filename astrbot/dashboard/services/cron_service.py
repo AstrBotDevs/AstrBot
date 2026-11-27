@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.cron.targets import get_delivery_sessions
+from astrbot.core.platform.message_session import MessageSession
 
 
 class CronServiceError(Exception):
@@ -34,6 +36,7 @@ class CronService:
                 data[key] = value.isoformat()
 
         payload = data.get("payload") or {}
+        data["sessions"] = get_delivery_sessions(payload)
         data["note"] = payload.get("note") or data.get("description") or ""
         data["run_at"] = payload.get("run_at")
         data["run_once"] = data.get("run_once", False)
@@ -60,7 +63,8 @@ class CronService:
             name = payload.get("name") or "active_agent_task"
             cron_expression = payload.get("cron_expression")
             note = payload.get("note") or payload.get("description") or name
-            session = str(payload.get("session") or "").strip()
+            targets = self._delivery_payload(payload)
+            session = targets.get("session", "")
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
             timezone_name = str(payload.get("timezone") or "").strip()
@@ -86,7 +90,7 @@ class CronService:
 
             run_at_dt = self._parse_optional_run_at(run_at)
             job_payload = {
-                "session": session,
+                **targets,
                 "note": note,
                 "persona_id": persona_id,
                 "provider_id": provider_id,
@@ -195,15 +199,17 @@ class CronService:
 
     def _merge_active_agent_updates(self, job, payload: dict, updates: dict) -> None:
         merged_payload = dict(job.payload) if isinstance(job.payload, dict) else {}
-        if "payload" in payload and isinstance(payload.get("payload"), dict):
-            merged_payload.update(payload["payload"])
-
-        if "session" in payload:
-            session = str(payload.get("session") or "").strip()
-            if session:
-                merged_payload["session"] = session
-            else:
-                merged_payload.pop("session", None)
+        nested = payload.get("payload")
+        if not isinstance(nested, dict):
+            nested = {}
+        merged_payload.update(nested)
+        delivery_fields = (
+            payload if {"session", "sessions"} & payload.keys() else nested
+        )
+        if {"session", "sessions"} & delivery_fields.keys():
+            merged_payload.pop("session", None)
+            merged_payload.pop("sessions", None)
+            merged_payload.update(self._delivery_payload(delivery_fields))
 
         self._merge_note(payload, job, merged_payload, updates)
 
@@ -242,6 +248,39 @@ class CronService:
         updates["run_once"] = next_run_once
         updates["cron_expression"] = next_cron_expression
         updates["payload"] = merged_payload
+
+    @staticmethod
+    def _delivery_payload(payload: dict) -> dict:
+        """Build delivery fields while retaining the legacy primary session.
+
+        Args:
+            payload: Fields supplied by the dashboard or API client.
+
+        Returns:
+            Fields to store in the cron payload.
+
+        Raises:
+            CronServiceError: A new list contains an invalid session.
+        """
+        if "sessions" not in payload:
+            return {"session": str(payload.get("session") or "").strip()}
+        values = payload["sessions"]
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value.strip() for value in values
+        ):
+            raise CronServiceError("sessions must be a list of session IDs")
+        sessions = get_delivery_sessions(payload)
+        for value in sessions:
+            try:
+                session = MessageSession.from_str(value)
+                if not session.platform_id.strip() or not session.session_id.strip():
+                    raise ValueError
+            except ValueError as exc:
+                raise CronServiceError(f"Invalid delivery session: {value}") from exc
+        result = {"session": sessions[0] if sessions else ""}
+        if len(sessions) > 1:
+            return {**result, "sessions": sessions}
+        return result
 
     @staticmethod
     def _merge_note(

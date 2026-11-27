@@ -26,6 +26,7 @@ from astrbot.core.astr_agent_runtime.tools.computer_tools.util import (
 )
 from astrbot.core.astr_agent_runtime.tools.output import prepare_tool_output
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.astrbot_path import (
@@ -345,6 +346,20 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             return (
                 f"Message prepared for session {target_session} and handed to the "
                 "caller for delivery. It has not been sent. Do not submit it again."
+            )
+        event = context.context.event
+        if (
+            isinstance(event, AgentWakeupEvent)
+            and event.additional_delivery_sessions
+            and str(target_session) == current_session
+        ):
+            sent, failed = await event.send_to_delivery_sessions(message_chain)
+            event._has_send_oper = event._has_send_oper or current_session in sent
+            if not failed:
+                return f"Message sent to {len(sent)} configured sessions."
+            return (
+                f"Sent to {len(sent)} configured sessions. Delivery failed for: "
+                f"{', '.join(failed)}. Do not repeat the broadcast."
             )
         try:
             sent = await context.context.context.send_message(

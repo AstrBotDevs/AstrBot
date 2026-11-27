@@ -703,6 +703,31 @@ class TestRunActiveAgentJob:
         assert wake.await_args.kwargs["role"] == expected
 
     @pytest.mark.asyncio
+    async def test_multi_target_job_dispatches_one_agent(
+        self, cron_manager, sample_cron_job, mock_context, monkeypatch
+    ):
+        """Wake one agent in the first session and attach the other destinations."""
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
+        first = "lark:GroupMessage:first"
+        second = "lark:GroupMessage:second"
+        cron_manager.ctx = mock_context
+        sample_cron_job.payload = {
+            "session": first,
+            "sessions": [first, second, first],
+            "origin": "api",
+        }
+
+        await cron_manager._run_active_agent_job(
+            sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
+        )
+
+        assert wake.await_count == 1
+        assert wake.await_args.kwargs["umo"] == first
+        assert wake.await_args.kwargs["additional_delivery_sessions"] == (second,)
+        mock_context.get_config.assert_called_once_with(umo=first)
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("session", [None, "", "   "])
     async def test_job_requires_a_target_umo(
         self, cron_manager, sample_cron_job, mock_context, monkeypatch, session

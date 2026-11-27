@@ -7,6 +7,7 @@ from sqlmodel import col, delete, func, select
 from astrbot.core import sp
 from astrbot.core.config_bindings import BINDING_KEY
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.cron.targets import get_delivery_sessions
 from astrbot.core.db.po import (
     ConversationEvent,
     ConversationV3,
@@ -46,12 +47,35 @@ async def delete_bot_data(
 
     if "cron_jobs" in targets:
         for job in await core.db.list_cron_jobs():
-            session = (job.payload or {}).get("session")
-            if isinstance(session, str) and session.partition(":")[0] == bot_id:
+            payload = job.payload or {}
+            sessions = get_delivery_sessions(
+                payload
+                if job.job_type == "active_agent"
+                else {"session": payload.get("session")}
+            )
+            if sessions and sessions[0].partition(":")[0] == bot_id:
                 if core.cron_manager:
                     await core.cron_manager.delete_job(job.job_id)
                 else:
                     await core.db.delete_cron_job(job.job_id)
+            elif job.job_type == "active_agent":
+                remaining = [
+                    session
+                    for session in sessions
+                    if session.partition(":")[0] != bot_id
+                ]
+                if len(remaining) != len(sessions):
+                    updated_payload = {**payload, "sessions": remaining}
+                    if len(remaining) == 1:
+                        updated_payload.pop("sessions")
+                    if core.cron_manager:
+                        await core.cron_manager.update_job(
+                            job.job_id, payload=updated_payload
+                        )
+                    else:
+                        await core.db.update_cron_job(
+                            job.job_id, payload=updated_payload
+                        )
 
     if targets & {"custom_rules", "preferences", "conversations", "routing"}:
         async with core.db.get_db() as session:

@@ -75,7 +75,7 @@
                   @update:model-value="value => selectedUmoFilter = String(value || '')"
                 />
                 <v-checkbox
-                  v-if="jobs.some(job => !getJobSession(job))"
+                  v-if="jobs.some(job => !getJobSessions(job).length)"
                   :model-value="selectedUmoFilter === NO_DELIVERY_TARGET_FILTER"
                   :label="tm('filters.noDeliveryTarget')"
                   hide-details
@@ -115,7 +115,7 @@
                 </div>
 
                 <div class="task-meta text-caption text-medium-emphasis">
-                  <span class="task-meta-item">
+                  <span class="task-meta-item" :title="deliveryTargetText(item)">
                     <v-icon size="small" class="me-1">mdi-send-outline</v-icon>
                     {{ deliveryTargetText(item) }}
                   </span>
@@ -370,7 +370,10 @@
                   />
                 </div>
 
-                <UmoSelector v-model="newJob.session" :label="tm('form.session')" />
+                <UmoSelector v-model="newJob.sessions" multiple :label="tm('form.session')" />
+                <p v-if="newJob.sessions.length > 1" class="text-caption text-medium-emphasis">
+                  {{ tm("form.multipleSessionsHint") }}
+                </p>
               </div>
             </v-card-text>
             <v-card-actions class="justify-end px-5 pb-5">
@@ -440,24 +443,24 @@ const newJob = ref({
   weekly_time: "09:00",
   monthly_day: 1,
   monthly_time: "09:00",
-  session: "",
+  sessions: [] as string[],
   timezone: "",
   enabled: true,
 });
 
 const snackbar = ref({ show: false, message: "", color: "success" });
 
-const jobUmos = computed(() => [...new Set(jobs.value.map(getJobSession).filter(Boolean))]);
+const jobUmos = computed(() => [...new Set(jobs.value.flatMap(getJobSessions))]);
 
 const filteredJobs = computed(() => {
   const query = taskSearch.value.trim().toLowerCase();
   const umo = selectedUmoFilter.value;
   return jobs.value.filter((job) => {
-    const session = getJobSession(job);
-    if (umo === NO_DELIVERY_TARGET_FILTER && session) {
+    const sessions = getJobSessions(job);
+    if (umo === NO_DELIVERY_TARGET_FILTER && sessions.length) {
       return false;
     }
-    if (umo && umo !== NO_DELIVERY_TARGET_FILTER && session !== umo) {
+    if (umo && umo !== NO_DELIVERY_TARGET_FILTER && !sessions.includes(umo)) {
       return false;
     }
 
@@ -549,12 +552,14 @@ function taskPreview(item: any): string {
   return text.length > 86 ? `${text.slice(0, 86)}...` : text;
 }
 
-function getJobSession(job: any): string {
-  return String(job.session || job?.payload?.session || "").trim();
+function getJobSessions(job: any): string[] {
+  if (Array.isArray(job.sessions)) return job.sessions;
+  const session = String(job.session || job.payload?.session || "").trim();
+  return session ? [session] : [];
 }
 
 function deliveryTargetText(item: any): string {
-  return getJobSession(item) || tm("card.noDeliveryTarget");
+  return getJobSessions(item).join(", ") || tm("card.noDeliveryTarget");
 }
 
 function nextRunText(item: any): string {
@@ -676,10 +681,7 @@ async function loadJobs() {
     const res = await cronApi.list();
     if (res.data.status === "ok") {
       const data = Array.isArray(res.data.data) ? res.data.data : [];
-      jobs.value = data.map((job: any) => ({
-        ...job,
-        session: job?.payload?.session || job?.session || "",
-      }));
+      jobs.value = data;
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
@@ -792,7 +794,7 @@ function resetNewJob() {
     weekly_time: "09:00",
     monthly_day: 1,
     monthly_time: "09:00",
-    session: "",
+    sessions: [],
     timezone: "",
     enabled: true,
   };
@@ -814,7 +816,7 @@ function openEdit(job: any) {
     weekly_time: schedule.weekly_time,
     monthly_day: schedule.monthly_day,
     monthly_time: schedule.monthly_time,
-    session: job.session || job?.payload?.session || "",
+    sessions: getJobSessions(job),
     timezone: job.timezone || "",
     enabled: job.enabled !== false,
   };
@@ -1014,7 +1016,7 @@ function buildPayload() {
     note: newJob.value.note.trim(),
     cron_expression: cronExpression,
     run_at: runOnce ? toIsoDatetime(newJob.value.run_at) : "",
-    session: newJob.value.session,
+    sessions: newJob.value.sessions,
     timezone: newJob.value.timezone,
     enabled: newJob.value.enabled,
   };

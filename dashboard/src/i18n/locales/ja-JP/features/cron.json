@@ -146,6 +146,7 @@
     "cronPlaceholder": "0 9 * * *",
     "runAt": "実行時刻 *",
     "session": "配信先（任意）",
+    "multipleSessionsHint": "タスクを1回実行し、選択したすべての会話に結果を配信します。最初の会話の設定とコンテキストを使用します。",
     "noUmos": "利用可能なセッションがありません",
     "timezone": "タイムゾーン（任意、例：Asia/Shanghai）",
     "enabled": "有効"

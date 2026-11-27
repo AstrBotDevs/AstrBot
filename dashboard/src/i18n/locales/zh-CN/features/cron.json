@@ -146,6 +146,7 @@
     "cronPlaceholder": "0 9 * * *",
     "runAt": "执行时间 *",
     "session": "投递到（可选）",
+    "multipleSessionsHint": "任务执行一次，结果发到所选会话。第一个会话提供运行配置和对话上下文。",
     "noUmos": "暂无可用会话",
     "timezone": "时区（可选，如 Asia/Shanghai）",
     "enabled": "启用"

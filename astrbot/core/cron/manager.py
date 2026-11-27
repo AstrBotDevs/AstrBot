@@ -11,6 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.cron.targets import get_delivery_sessions
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 
@@ -36,6 +37,7 @@ PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT = (
     "You can use `send_message_to_user` to send images, files, and other generated artifacts. "
     "Only messages sent through `send_message_to_user` are delivered to the user. "
     "Use it for all user-facing messages, including any necessary summary. "
+    "{delivery_guidance}"
     'When finished, respond only with "Task complete".'
     "\n</system_reminder>"
 )
@@ -444,9 +446,10 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        umo = str(payload.get("session") or "").strip()
-        if not umo:
+        sessions = get_delivery_sessions(payload)
+        if not sessions:
             raise ValueError(f"Cron job {job.job_id!r} has no target UMO.")
+        umo = sessions[0]
         note = payload.get("note") or job.description or job.name
 
         extras = {
@@ -480,15 +483,24 @@ class CronJobManager:
             )
             else "member"
         )
+        user_prompt = PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
+            cron_job=json.dumps(extras["cron_job"], ensure_ascii=False),
+            delivery_guidance=(
+                "This task has multiple configured recipients. Omit the session "
+                "argument to deliver the same message to all of them. Do not include "
+                "private conversation history in the message. "
+                if len(sessions) > 1
+                else ""
+            ),
+        )
         await wake_main_agent(
             self.ctx,
             umo=umo,
             source="cron",
             source_id=job.job_id,
-            user_prompt=PROACTIVE_AGENT_CRON_WOKE_USER_PROMPT.format(
-                cron_job=json.dumps(extras["cron_job"], ensure_ascii=False)
-            ),
+            user_prompt=user_prompt,
             role=role,
+            additional_delivery_sessions=tuple(sessions[1:]),
         )
 
 
