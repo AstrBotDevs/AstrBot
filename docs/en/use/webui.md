@@ -284,9 +284,9 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 ## ChatUI workbench
 
-The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
+The workbench button (globe icon) at the right of the ChatUI header opens a reading and visualization area; select it again to close. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
 
-Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
+On desktop the workbench opens on the right below the top bar, with its tabs, **+**, expand and close (×) buttons inside the panel; the top bar keeps the same icons whether it is open or not, and the workbench button stays highlighted while it is open. Drag the left divider to resize. Expand to fill the chat area; the left sidebar and the top bar stay usable. Old → new: workbench tabs in the top bar → the top of the workbench panel; the hide button → the × at the panel's upper right, or the workbench button again. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
 
 See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
 
