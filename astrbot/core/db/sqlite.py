@@ -557,12 +557,16 @@ class SQLiteDatabase(BaseDatabase):
                 base_query = base_query.where(*conditions)
 
             group_by_session = bool(kwargs.get("group_by_session", False))
+            session_key = col(ConversationV3.umo)
+            if group_by_session and kwargs.get("group_webchat"):
+                session_key = case(
+                    (ConversationV3.platform_id == "webchat", "webchat"),
+                    else_=literal("umo:").concat(session_key),
+                )
 
             # Get total count matching the filters
             count_target = (
-                func.distinct(ConversationV3.umo)
-                if group_by_session
-                else ConversationV3.id
+                func.distinct(session_key) if group_by_session else ConversationV3.id
             )
             count_query = select(func.count(count_target))
             if conditions:
@@ -589,7 +593,7 @@ class SQLiteDatabase(BaseDatabase):
                     "session_tie_breaker"
                 )
                 session_query = select(
-                    ConversationV3.umo,
+                    session_key,
                     session_sort,
                     session_tie_breaker,
                 )
@@ -604,22 +608,22 @@ class SQLiteDatabase(BaseDatabase):
                     else session_tie_breaker.desc
                 )
                 session_rows = await session.execute(
-                    session_query.group_by(ConversationV3.umo)
+                    session_query.group_by(session_key)
                     .order_by(session_order())
                     .order_by(session_tie_order())
                     .offset(offset)
                     .limit(page_size)
                 )
-                session_ids = [row[0] for row in session_rows.all()]
-                if not session_ids:
+                session_keys = [row[0] for row in session_rows.all()]
+                if not session_keys:
                     return [], total
                 session_rank = case(
-                    {session_id: index for index, session_id in enumerate(session_ids)},
-                    value=ConversationV3.umo,
-                    else_=len(session_ids),
+                    {key: index for index, key in enumerate(session_keys)},
+                    value=session_key,
+                    else_=len(session_keys),
                 )
                 result_query = (
-                    base_query.where(col(ConversationV3.umo).in_(session_ids))
+                    base_query.where(session_key.in_(session_keys))
                     .order_by(session_rank)
                     .order_by(order())
                     .order_by(tie_breaker())

@@ -48,6 +48,7 @@ class ConversationService:
         sort_by: str = "created_at",
         sort_order: str = "desc",
         group_by_session: bool = False,
+        group_webchat: bool = False,
         include_history: bool = True,
     ) -> dict:
         platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
@@ -80,6 +81,7 @@ class ConversationService:
                 sort_by=sort_by,
                 sort_order=sort_order,
                 group_by_session=group_by_session,
+                group_webchat=group_webchat,
                 include_history=include_history,
             )
         except Exception as exc:
