@@ -10,6 +10,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent import get_runtime_config_default
 
+PLUGIN_DEFAULT_REGISTRY_URL = "https://cloud.astrbot.app/api/v1/market/plugins.json"
+
 
 def get_local_permission_defaults(system: str | None = None) -> dict:
     """Return fresh Local permission defaults shared by all operating systems.
@@ -344,7 +346,6 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
-                        "use_markdown": True,
                     },
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
@@ -352,7 +353,6 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "appid": "",
                         "secret": "",
-                        "use_markdown": True,
                         "is_sandbox": False,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
@@ -944,11 +944,6 @@ CONFIG_METADATA_2 = {
                         "description": "启用频道私聊",
                         "type": "bool",
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
-                    },
-                    "use_markdown": {
-                        "description": "主动消息使用 Markdown",
-                        "type": "bool",
-                        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
                     },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",
@@ -1727,7 +1722,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "",
-                        "model": "whisper-1",
+                        "model": "gpt-transcribe",
                         "proxy": "",
                     },
                     "MiMo STT(API)": {
@@ -1783,6 +1778,19 @@ CONFIG_METADATA_2 = {
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
+                        "proxy": "",
+                    },
+                    "StepFun TTS(API)": {
+                        "id": "stepfun_tts",
+                        "type": "stepfun_tts_api",
+                        "provider": "stepfun",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.stepfun.com/v1",
+                        "model": "stepaudio-3-tts",
+                        "stepfun-tts-voice": "wenrounvsheng",
+                        "timeout": "60",
                         "proxy": "",
                     },
                     "DeepSeek TTS(API)": {
@@ -2969,6 +2977,10 @@ CONFIG_METADATA_2 = {
                         "description": "voice",
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "stepfun-tts-voice": {
+                        "description": "音色 ID",
+                        "type": "string",
                     },
                     "deepseek-tts-voice": {
                         "description": "音色",

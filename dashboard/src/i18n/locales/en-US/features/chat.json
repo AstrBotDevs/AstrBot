@@ -95,6 +95,8 @@
     "output": "Output"
   },
   "toolStatus": {
+    "interrupted": "Interrupted, result unknown",
+    "interruptedDetail": "Execution was interrupted (stopped, timed out or failed) before a result arrived. The action may have taken effect; check before retrying.",
     "done": "Done",
     "running": "Running"
   },

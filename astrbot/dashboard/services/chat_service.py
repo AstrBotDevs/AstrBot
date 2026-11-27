@@ -4,10 +4,12 @@ import asyncio
 import json
 import os
 import re
+import sqlite3
 import uuid
 from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -19,6 +21,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
+    resolve_view,
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
@@ -163,10 +166,20 @@ def build_bot_history_content(
 
 
 class BotMessageAccumulator:
+    """Collect the bot output of one turn as WebChat history message parts.
+
+    A tool call takes its place in ``parts`` when it starts and is completed in
+    place when its result arrives, so later parts (such as an approval card)
+    stay after it. ``record`` is the turn's history record once first saved;
+    later saves update it, so a turn is one history entry.
+    """
+
     def __init__(self) -> None:
         self.parts: list[dict] = []
         self.pending_text = ""
+        self._plain_streaming = True
         self.pending_tool_calls: dict[str, dict] = {}
+        self.record = None
 
     def has_content(self) -> bool:
         return bool(self.parts or self.pending_text or self.pending_tool_calls)
@@ -177,26 +190,43 @@ class BotMessageAccumulator:
         *,
         chain_type: str | None,
         streaming: bool,
-    ) -> None:
+    ) -> str:
+        """Accumulate a plain frame and return the text to send to subscribers.
+
+        Args:
+            result_text: Text or serialized tool payload.
+            chain_type: Optional reasoning or tool event type.
+            streaming: Whether this frame is an incremental text chunk.
+
+        Returns:
+            The frame text, including a paragraph break when a stream follows
+            standalone text. Subscribers can then render it after reconnecting.
+        """
         if chain_type == "tool_call":
             self._flush_pending_text()
             self._store_tool_call(result_text)
-            return
+            return result_text
 
         if chain_type == "tool_call_result":
             self._flush_pending_text()
             self._store_tool_call_result(result_text)
-            return
+            return result_text
 
         if chain_type == "reasoning":
             self._flush_pending_text()
             self._append_think_part(result_text)
-            return
+            return result_text
 
-        if streaming:
-            self.pending_text += result_text
-        else:
-            self.pending_text = result_text
+        if not result_text:
+            return result_text
+        separator = ""
+        if not streaming or not self._plain_streaming:
+            self._flush_pending_text()
+            if self.parts and self.parts[-1].get("type") == "plain":
+                separator = "\n\n"
+        self.pending_text += separator + result_text
+        self._plain_streaming = streaming
+        return separator + result_text if streaming else result_text
 
     def add_part(self, part: dict | None) -> None:
         """Append a structured non-text message part.
@@ -209,13 +239,21 @@ class BotMessageAccumulator:
         self._flush_pending_text()
         self.parts.append(part)
 
-    def build_message_parts(
-        self, *, include_pending_tool_calls: bool = False
-    ) -> list[dict]:
+    def build_message_parts(self, *, final: bool = False) -> list[dict]:
+        """Return the message parts collected so far.
+
+        Args:
+            final: Whether the turn is over. Tool calls that never returned are
+                then marked ``unknown``: whether their side effects happened
+                (stop, timeout, or a failure mid-call) cannot be known.
+
+        Returns:
+            The message parts, including running tool calls.
+        """
         self._flush_pending_text()
-        if include_pending_tool_calls and self.pending_tool_calls:
+        if final:
             for tool_call in self.pending_tool_calls.values():
-                self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+                tool_call["phase"] = "unknown"
             self.pending_tool_calls = {}
         return self.parts
 
@@ -253,7 +291,12 @@ class BotMessageAccumulator:
         tool_call_id = str(tool_call.get("id") or "")
         if not tool_call_id:
             return
-        self.pending_tool_calls[tool_call_id] = tool_call
+        existing = self.pending_tool_calls.get(tool_call_id)
+        if existing is not None:
+            existing.update(tool_call)
+        else:
+            self.pending_tool_calls[tool_call_id] = tool_call
+            self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
 
     def _store_tool_call_result(self, result_text: str) -> None:
         tool_result = self._parse_json_object(result_text)
@@ -264,12 +307,13 @@ class BotMessageAccumulator:
         if not tool_call_id:
             return
 
-        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
-            "id": tool_call_id
-        }
+        tool_call = self.pending_tool_calls.pop(tool_call_id, None)
+        if tool_call is None:
+            # A result without a known call is stored on its own.
+            tool_call = {"id": tool_call_id}
+            self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
-        self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
 
     @staticmethod
     def _parse_json_object(raw_text: str) -> dict | None:
@@ -437,6 +481,7 @@ class ChatRunState:
     turn_id: str
     platform_history_id: str
     back_queue: asyncio.Queue
+    user_message_created_at: datetime | None = None
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     message_parts: list[dict] = field(default_factory=list)
     agent_stats: dict = field(default_factory=dict)
@@ -460,12 +505,12 @@ class ChatService:
         Raises:
             ViewError: If the source or plugin is no longer accessible.
         """
-        from astrbot.core.chatui import ViewError, resolve_view, view_store
+        from astrbot.core.message.interactive_ui import ViewError, view_store
 
         record = await asyncio.to_thread(view_store.get, view_id)
-        if record["owner"] != username:
+        if record["platform_id"] != "webchat" or record["owner"] != username:
             raise ViewError("FORBIDDEN", "This view is not accessible.")
-        if record["platform"] == "webchat_thread":
+        if record["history_platform_id"] == "webchat_thread":
             session = await self.db.get_webchat_thread_by_id(record["session_id"])
             umo = build_thread_unified_msg_origin(username, record["session_id"])
         else:
@@ -483,6 +528,7 @@ class ChatService:
                 not message
                 or not message.is_active
                 or message.user_id != record["session_id"]
+                or message.platform_id != record["history_platform_id"]
             ):
                 raise ViewError(
                     "VIEW_UNAVAILABLE", "The source message is unavailable."
@@ -845,10 +891,10 @@ class ChatService:
             raise ChatServiceError(str(exc)) from exc
 
     async def delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
-        from astrbot.core.chatui import view_store
+        from astrbot.core.message.interactive_ui import view_store
 
         for thread_id in thread_ids:
-            await asyncio.to_thread(view_store.delete_session, thread_id)
+            await asyncio.to_thread(view_store.delete_session, "webchat", thread_id)
             unified_msg_origin = build_thread_unified_msg_origin(creator, thread_id)
             active_event_registry.request_agent_stop_all(unified_msg_origin)
             tasks = []
@@ -876,27 +922,38 @@ class ChatService:
         refs: dict,
         turn_id: str | None = None,
         platform_history_id: str = "webchat",
+        record=None,
     ):
-        record = await self.platform_history_mgr.insert(
-            platform_id=platform_history_id,
-            user_id=webchat_conv_id,
-            content=build_bot_history_content(
-                message_parts,
-                agent_stats=agent_stats,
-                refs=refs,
-            ),
-            sender_id="bot",
-            sender_name="bot",
-            turn_id=turn_id,
-        )
-        from astrbot.core.chatui import view_store
+        """Insert the bot message of a turn, or update its existing record.
 
-        if record:
-            for part in message_parts:
-                if part.get("type") == "view":
-                    await asyncio.to_thread(
-                        view_store.bind_message, part["id"], str(record.id)
-                    )
+        Args:
+            webchat_conv_id: WebChat conversation ID.
+            message_parts: Everything the bot sent in this turn so far.
+            agent_stats: Latest agent statistics.
+            refs: Web search references.
+            turn_id: Turn the record belongs to.
+            platform_history_id: History bucket (main chat or thread).
+            record: This turn's record from an earlier save, if any.
+
+        Returns:
+            The turn's history record.
+        """
+        content = build_bot_history_content(
+            message_parts,
+            agent_stats=agent_stats,
+            refs=refs,
+        )
+        if record is not None:
+            await self.platform_history_mgr.update(record.id, content=content)
+        else:
+            record = await self.platform_history_mgr.insert(
+                platform_id=platform_history_id,
+                user_id=webchat_conv_id,
+                content=content,
+                sender_id="bot",
+                sender_name="bot",
+                turn_id=turn_id,
+            )
         return record
 
     def get_active_chat_runs(self, username: str, session_id: str) -> list[dict]:
@@ -1060,48 +1117,89 @@ class ChatService:
         Args:
             run: Chat run owning the producer queue and durable state.
         """
-        pending_accumulator = BotMessageAccumulator()
-        display_accumulator = BotMessageAccumulator()
-        pending_agent_stats = {}
-        pending_refs = {}
+        reply = BotMessageAccumulator()
+        bound_view_ids: set[str] = set()
+        end_frame = {
+            "type": "end",
+            "data": "",
+            "streaming": False,
+            "message_id": run.run_id,
+        }
 
-        async def flush_pending_bot_message():
-            nonlocal pending_accumulator, pending_agent_stats, pending_refs
-            if not (
-                pending_accumulator.has_content() or pending_refs or pending_agent_stats
-            ):
-                return None
+        async def save_reply(*, final: bool = False) -> None:
+            """Persist the reply and publish its history record.
 
-            message_parts_to_save = pending_accumulator.build_message_parts(
-                include_pending_tool_calls=True
-            )
-            plain_text = collect_plain_text_from_message_parts(message_parts_to_save)
+            Args:
+                final: Whether pending tool calls should be marked interrupted.
+            """
+            parts = reply.build_message_parts(final=final)
+            if final:
+                run.message_parts = deepcopy(parts)
+            if not (parts or run.refs or run.agent_stats):
+                return
+
             try:
-                extracted_refs = extract_web_search_refs(
-                    plain_text,
-                    message_parts_to_save,
+                run.refs = extract_web_search_refs(
+                    collect_plain_text_from_message_parts(parts), parts
                 )
             except Exception as exc:
                 logger.exception(
                     f"Failed to extract web search refs: {exc}",
                     exc_info=True,
                 )
-                extracted_refs = pending_refs
 
-            run.refs = extracted_refs
-            saved_record = await self.save_bot_message(
+            record = await self.save_bot_message(
                 run.session_id,
-                message_parts_to_save,
-                pending_agent_stats,
-                extracted_refs,
+                parts,
+                run.agent_stats,
+                run.refs,
                 run.turn_id,
                 run.platform_history_id,
+                record=reply.record,
             )
-            pending_accumulator = BotMessageAccumulator()
-            pending_agent_stats = {}
-            pending_refs = {}
-            return saved_record
+            reply.record = record
+            if record is None:
+                return
 
+            from astrbot.core.message.interactive_ui import view_store
+
+            for part in parts:
+                if part.get("type") != "view":
+                    continue
+                view_id = part["id"]
+                if view_id in bound_view_ids:
+                    continue
+                try:
+                    await asyncio.to_thread(
+                        view_store.bind_message,
+                        view_id,
+                        str(record.id),
+                        platform_id="webchat",
+                        session_id=run.session_id,
+                        history_platform_id=run.platform_history_id,
+                    )
+                except (sqlite3.Error, OSError) as exc:
+                    logger.warning(
+                        "Could not bind ChatUI view %s to history message %s: %s",
+                        view_id,
+                        record.id,
+                        exc,
+                    )
+                else:
+                    bound_view_ids.add(view_id)
+            self._publish_chat_run(
+                run,
+                {
+                    "type": "message_saved",
+                    "data": {
+                        "id": record.id,
+                        "created_at": to_utc_isoformat(record.created_at),
+                        "turn_id": run.turn_id,
+                    },
+                },
+            )
+
+        finalized = False
         self.running_convs[run.session_id] = True
         try:
             while True:
@@ -1117,12 +1215,19 @@ class ChatService:
                 streaming = result.get("streaming", False)
                 chain_type = result.get("chain_type")
 
+                if msg_type == "end":
+                    end_frame = result
+                    await save_reply(final=True)
+                    finalized = True
+                    if run.status != "failed":
+                        run.status = "completed"
+                    break
+
                 if chain_type == "agent_stats":
                     try:
                         run.agent_stats = json.loads(result_text)
                     except (TypeError, json.JSONDecodeError):
                         run.agent_stats = {}
-                    pending_agent_stats = run.agent_stats
                     self._publish_chat_run(
                         run,
                         {"type": "agent_stats", "data": run.agent_stats},
@@ -1131,12 +1236,11 @@ class ChatService:
 
                 attachment_saved_payload = None
                 if msg_type == "plain":
-                    for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_plain(
-                            result_text,
-                            chain_type=chain_type,
-                            streaming=streaming,
-                        )
+                    outgoing_text = reply.add_plain(
+                        result_text, chain_type=chain_type, streaming=streaming
+                    )
+                    if outgoing_text != result_text:
+                        result = {**result, "data": outgoing_text}
                 elif msg_type in {"image", "record", "file", "video"}:
                     prefix = {
                         "image": "[IMAGE]",
@@ -1153,8 +1257,7 @@ class ChatService:
                         msg_type,
                         display_name=display_name,
                     )
-                    for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_part(part)
+                    reply.add_part(part)
                     if part and part.get("attachment_id") and part.get("type"):
                         attachment_saved_payload = {
                             "type": "attachment_saved",
@@ -1170,104 +1273,85 @@ class ChatService:
                         if isinstance(result_text, dict)
                         else {"code": "agent_error", "message": str(result_text)}
                     )
-                    part = {**error, "type": "error"}
-                    for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_part(part)
+                    reply.add_part({**error, "type": "error"})
                 elif msg_type in {"actionrow", "view"} and isinstance(
                     result_text, dict
                 ):
-                    part = {**result_text, "type": msg_type}
-                    for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_part(part)
+                    reply.add_part({**result_text, "type": msg_type})
+                elif msg_type == "follow_up_captured" and isinstance(result_text, dict):
+                    target_turn_id = result_text.pop("_target_turn_id", None)
+                    if target_turn_id and run.user_message_created_at is not None:
+                        from sqlalchemy import update
 
-                snapshot_accumulator = deepcopy(display_accumulator)
-                run.message_parts = snapshot_accumulator.build_message_parts(
-                    include_pending_tool_calls=True
-                )
+                        from astrbot.core.db.po import PlatformMessageHistory
+
+                        # Move an already-saved reply below this follow-up.
+                        # A first insert after this transaction is already in order.
+                        display_at = run.user_message_created_at + timedelta(
+                            microseconds=1
+                        )
+                        async with self.db.get_db() as session, session.begin():
+                            await session.execute(
+                                update(PlatformMessageHistory)
+                                .where(
+                                    PlatformMessageHistory.platform_id
+                                    == run.platform_history_id,
+                                    PlatformMessageHistory.user_id == run.session_id,
+                                    PlatformMessageHistory.turn_id == target_turn_id,
+                                    PlatformMessageHistory.content["type"].as_string()
+                                    == "bot",
+                                    PlatformMessageHistory.is_active.is_(True),
+                                    PlatformMessageHistory.created_at < display_at,
+                                )
+                                .values(created_at=display_at)
+                            )
+
+                run.message_parts = deepcopy(reply.build_message_parts())
                 self._publish_chat_run(run, result)
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
 
-                should_save = False
-                if msg_type == "end":
-                    should_save = bool(
-                        pending_accumulator.has_content()
-                        or pending_refs
-                        or pending_agent_stats
-                    )
-                elif msg_type not in {"view", "ui_action_result", "run_started"} and (
-                    (streaming and msg_type == "complete") or not streaming
+                if (
+                    msg_type not in {"ui_action_result", "run_started"}
+                    and (not streaming or msg_type in {"complete", "view"})
+                    and chain_type not in ("tool_call", "tool_call_result")
                 ):
-                    if chain_type not in ("tool_call", "tool_call_result"):
-                        should_save = True
-
-                if should_save:
-                    saved_record = await flush_pending_bot_message()
-                    if saved_record:
-                        self._publish_chat_run(
-                            run,
-                            {
-                                "type": "message_saved",
-                                "data": {
-                                    "id": saved_record.id,
-                                    "created_at": to_utc_isoformat(
-                                        saved_record.created_at
-                                    ),
-                                    "turn_id": run.turn_id,
-                                },
-                            },
-                        )
-                if msg_type == "end":
-                    if run.status != "failed":
-                        run.status = "completed"
-                    break
+                    await save_reply()
         except asyncio.CancelledError:
             run.status = "stopped"
         except Exception as exc:
             run.status = "failed"
             logger.exception(f"WebChat run unexpected error: {exc}", exc_info=True)
             error = {"code": "agent_error", "message": "WebChat run failed"}
-            for accumulator in (pending_accumulator, display_accumulator):
-                accumulator.add_part({**error, "type": "error"})
-            run.message_parts = deepcopy(display_accumulator).build_message_parts(
-                include_pending_tool_calls=True
-            )
+            reply.add_part({**error, "type": "error"})
+            run.message_parts = deepcopy(reply.build_message_parts(final=True))
             self._publish_chat_run(run, {"type": "error", "data": error})
         finally:
             try:
-                saved_record = await asyncio.shield(flush_pending_bot_message())
-                if saved_record:
-                    self._publish_chat_run(
-                        run,
-                        {
-                            "type": "message_saved",
-                            "data": {
-                                "id": saved_record.id,
-                                "created_at": to_utc_isoformat(saved_record.created_at),
-                                "turn_id": run.turn_id,
-                            },
-                        },
-                    )
+                if not finalized:
+                    await save_reply(final=True)
             except Exception as exc:
                 logger.exception(
                     f"Failed to persist pending webchat message: {exc}",
                     exc_info=True,
                 )
 
-            webchat_queue_mgr.remove_back_queue(run.run_id)
-            if self.chat_runs.get(run.run_id) is run:
-                self.chat_runs.pop(run.run_id, None)
-            run_ids = self.chat_runs_by_session.get(run.session_id)
-            if run_ids is not None:
-                run_ids.discard(run.run_id)
-                if not run_ids:
-                    self.chat_runs_by_session.pop(run.session_id, None)
-                    self.running_convs.pop(run.session_id, None)
-            for subscriber in list(run.subscribers):
-                # Preserve final output; a full queue closes after it has drained.
-                if not subscriber.full():
-                    subscriber.put_nowait(None)
-            run.subscribers.clear()
+            finally:
+                self._publish_chat_run(run, end_frame)
+                webchat_queue_mgr.remove_back_queue(run.run_id)
+                if self.chat_runs.get(run.run_id) is run:
+                    self.chat_runs.pop(run.run_id, None)
+                run_ids = self.chat_runs_by_session.get(run.session_id)
+                if run_ids is not None:
+                    run_ids.discard(run.run_id)
+                    if not run_ids:
+                        self.chat_runs_by_session.pop(run.session_id, None)
+                        self.running_convs.pop(run.session_id, None)
+                for subscriber in run.subscribers:
+                    # Preserve final output; a full queue closes after it has drained.
+                    if not subscriber.full():
+                        subscriber.put_nowait(None)
+                run.subscribers.clear()
 
     async def build_chat_stream(
         self,
@@ -1367,6 +1451,11 @@ class ChatService:
             turn_id=turn_id,
             platform_history_id=platform_history_id,
             back_queue=back_queue,
+            user_message_created_at=(
+                saved_user_record.created_at
+                if saved_user_record is not None and not skip_user_history
+                else None
+            ),
         )
         self.chat_runs[message_id] = run
         self.chat_runs_by_session.setdefault(webchat_conv_id, set()).add(message_id)
@@ -1438,7 +1527,7 @@ class ChatService:
         return await self.stop_session(username, session_id)
 
     async def delete_session_internal(self, session, username: str) -> None:
-        from astrbot.core.chatui import view_store
+        from astrbot.core.message.interactive_ui import view_store
 
         session_id = session.session_id
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
@@ -1488,7 +1577,9 @@ class ChatService:
             webchat_queue_mgr.remove_queues(session_id)
 
         await self.db.delete_platform_session(session_id)
-        await asyncio.to_thread(view_store.delete_session, session_id)
+        await asyncio.to_thread(
+            view_store.delete_session, session.platform_id, session_id
+        )
 
     async def delete_webchat_session(self, username: str, session_id: str) -> None:
         session = await self.db.get_platform_session_by_id(session_id)

@@ -41,6 +41,10 @@
     },
     "deepseekSttHints": {
       "apiBase": "DeepSeek STT API base URL, https://api.deepseek.com/v1 by default. /tools/asr is appended automatically; do not add another /v1."
+    },
+    "stepfunTtsHints": {
+      "model": "StepFun TTS model ID. Defaults to stepaudio-3-tts.",
+      "apiBase": "Use https://api.stepfun.com/v1 for the China API (default) or https://api.stepfun.ai/v1 for the international API. For Step Plan, use https://api.stepfun.com/step_plan/v1 in China or https://api.stepfun.ai/step_plan/v1 internationally. AstrBot appends /audio/speech."
     }
   },
   "availability": {

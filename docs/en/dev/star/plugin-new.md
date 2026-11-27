@@ -143,6 +143,29 @@ If you only want to declare a minimum version, use:
 If the current AstrBot version does not satisfy this range, the plugin will be blocked from loading with a compatibility error.
 In the WebUI installation flow, you can choose to "Ignore Warning and Install" to bypass this check.
 
+### Recommended Marketplace Categories
+
+Set the optional `category` field in the `metadata.yaml` file at the root of your plugin. Choose one category ID that fits your plugin's main purpose. For example, a general-purpose utility plugin can use the following value.
+
+```yaml
+category: utility
+```
+
+Once the marketplace index includes this value, users can find your plugin under that category. [Marketplace category format](../plugin-market/2026-11-25.md#_4-1-marketplace-categories)
+
+| ID | Label | Typical plugins |
+| --- | --- | --- |
+| `utility` | Utility | General utilities and everyday information lookup |
+| `ai_context` | AI Conversation | Plugins that modify model context or support conversations, such as knowledge bases, long-term memory, and proactive replies. |
+| `entertainment` | Entertainment | General entertainment and chat minigames |
+| `game` | Game | Connections to external games |
+| `media` | Media | Image, audio, and video processing or generation |
+| `productivity` | Productivity | Tasks, calendars, notes, and personal workflows |
+| `integration` | Integration | Third-party platforms and services |
+| `platform_adapter` | Platform Adapter | Messaging platforms and protocols |
+| `provider_adapter` | Provider Adapter | Model, voice, and vector services |
+| `other` | Other | Plugins the market source explicitly groups under Other |
+
 ### Debugging Plugins
 
 AstrBot uses a runtime plugin injection mechanism. Therefore, when debugging plugins, you need to start the AstrBot main application.

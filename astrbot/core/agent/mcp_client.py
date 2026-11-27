@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import importlib.metadata as importlib_metadata
 import logging
 import os
 import re
@@ -10,10 +11,12 @@ from pathlib import Path, PureWindowsPath
 from typing import Any, Generic
 
 import httpx
+from packaging.version import Version
 from tenacity import (
+    RetryCallState,
     before_sleep_log,
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -93,15 +96,51 @@ _DENIED_DOCKER_ARGS = frozenset(
     }
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+_MCP_RECONNECT_ERROR_MESSAGES = (
+    "session terminated",
+    "session was terminated",
+)
+
+
+def _is_mcp_reconnect_error(exc: BaseException) -> bool:
+    """Check whether an MCP tool-call failure should trigger a reconnect.
+
+    A broken stdio pipe surfaces as ``anyio.ClosedResourceError``; a
+    streamable-HTTP server may report the same condition as a generic error
+    whose message mentions the terminated session; and a wedged server makes
+    the call hit its read deadline (``TimeoutError`` or an ``McpError`` whose
+    code is ``httpx.codes.REQUEST_TIMEOUT``). Anything else (business errors,
+    upstream 5xx) must not trigger a reconnect.
+
+    Args:
+        exc: The exception raised by the MCP session call.
+
+    Returns:
+        True if the exception indicates a terminated or wedged MCP session
+        and a reconnect is warranted.
+    """
+    if "anyio" in globals() and isinstance(exc, anyio.ClosedResourceError):
+        return True
+    if isinstance(exc, TimeoutError):
+        return True
+    if McpError is not None and isinstance(exc, McpError):
+        error = getattr(exc, "error", None)
+        if error is not None and error.code == httpx.codes.REQUEST_TIMEOUT:
+            return True
+    message = str(exc).lower()
+    return any(marker in message for marker in _MCP_RECONNECT_ERROR_MESSAGES)
+
 
 try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
+    from mcp.shared.exceptions import McpError
 except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
+    McpError = None  # type: ignore[assignment, unused-ignore]
 
 streamable_http_client_legacy = None
 streamable_http_client = None
@@ -476,46 +515,86 @@ class MCPClient:
             2. When transport is specified as `sse`, use SSE connection.
             3. If not specified, default to SSE connection to MCP service.
 
+        An initial connection failure is retried once.  Reconnects already have
+        their own bounded retry in call_tool_with_reconnect(), so a reconnect
+        attempt only opens one new connection here.
+
         Args:
             mcp_server_config (dict): Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
 
+        Raises:
+            RuntimeError: If the installed mcp SDK is the 2.x line, which this
+                client cannot drive.
+            Exception: The connection still fails after the initial retry.
         """
+        # mcp 2.x renamed Tool.inputSchema to input_schema and takes float
+        # timeout seconds instead of timedelta, so the 1.x client code below
+        # cannot drive a server on 2.x. Plugin dependencies share this
+        # environment and can upgrade mcp past the core pin, so name the
+        # version here instead of surfacing a per-server initialization
+        # timeout for a cause the log never explains.
+        try:
+            installed_mcp_version = importlib_metadata.version("mcp")
+        except importlib_metadata.PackageNotFoundError:
+            installed_mcp_version = None
+        if (
+            installed_mcp_version is not None
+            and Version(installed_mcp_version).major >= 2
+        ):
+            raise RuntimeError(
+                f"Unsupported MCP SDK version: mcp {installed_mcp_version} is "
+                "installed; this client drives the mcp 1.x API and cannot use "
+                "the mcp 2.x line. MCP servers stay unavailable until a "
+                'supported release is installed (pip install "mcp>=1.8.0,<2").'
+            )
+
         self._mcp_server_config = mcp_server_config
         self._server_name = name
 
-        ready: asyncio.Future = asyncio.get_running_loop().create_future()
+        max_attempts = 1 if self._reconnecting else 2
+        for attempt in range(max_attempts):
+            ready: asyncio.Future = asyncio.get_running_loop().create_future()
 
-        # Defensively cancel any existing connection task that was not cleaned
-        # up before this call (e.g. if connect_to_server is called twice).
-        if self._connection_task and not self._connection_task.done():
-            self._cancel_connection_task(self._connection_task)
-            self._connection_task = None
-
-        self._connection_task = asyncio.create_task(
-            self._run_connection(mcp_server_config, name, ready),
-            name=f"mcp-conn:{name}",
-        )
-
-        try:
-            await ready
-        except asyncio.CancelledError:
-            # Caller was cancelled while waiting — tear down the connection task.
-            # cancel() is asynchronous; the task will not finish until the next
-            # event-loop iteration, so we track it in _old_connection_tasks so
-            # that cleanup() can await it later.
+            # Defensively cancel any existing connection task that was not cleaned
+            # up before this call (e.g. if connect_to_server is called twice).
             if self._connection_task and not self._connection_task.done():
                 self._cancel_connection_task(self._connection_task)
-            self._connection_task = None
-            raise
-        except Exception:
-            # _do_connect raised; the connection task's finally block may still
-            # be running (e.g. awaiting stack.aclose()).  Track it so that
-            # cleanup() can await it, but do NOT cancel it — we want the
-            # finally block to finish cleaning up resources naturally.
-            if self._connection_task and not self._connection_task.done():
-                self._old_connection_tasks.append(self._connection_task)
-            self._connection_task = None
-            raise
+                self._connection_task = None
+
+            self._connection_task = asyncio.create_task(
+                self._run_connection(mcp_server_config, name, ready),
+                name=f"mcp-conn:{name}",
+            )
+
+            try:
+                await ready
+                return
+            except asyncio.CancelledError:
+                # Caller was cancelled while waiting — tear down the connection task.
+                # cancel() is asynchronous; the task will not finish until the next
+                # event-loop iteration, so we track it in _old_connection_tasks so
+                # that cleanup() can await it later.
+                if self._connection_task and not self._connection_task.done():
+                    self._cancel_connection_task(self._connection_task)
+                self._connection_task = None
+                raise
+            except Exception as exc:
+                # _do_connect raised; the connection task's finally block may still
+                # be running (e.g. awaiting stack.aclose()).  Track it so that
+                # cleanup() can await it, but do NOT cancel it — we want the
+                # finally block to finish cleaning up resources naturally.
+                if self._connection_task and not self._connection_task.done():
+                    self._old_connection_tasks.append(self._connection_task)
+                self._connection_task = None
+                self.session = None
+
+                if attempt + 1 < max_attempts:
+                    logger.warning(
+                        f"Initial connection to MCP server {name} failed, retrying once: {exc}"
+                    )
+                    await asyncio.sleep(1)
+                    continue
+                raise
 
     async def _do_connect(self, mcp_server_config: dict, name: str) -> None:
         """Internal: perform the actual connection inside _run_connection's task."""
@@ -744,16 +823,33 @@ class MCPClient:
             ValueError: MCP session is not available
             anyio.ClosedResourceError: raised after reconnection failure
         """
+        last_reconnectable: BaseException | None = None
+
+        async def _reconnect_before_retry(retry_state: RetryCallState) -> None:
+            # Log, then reconnect outside the retry predicate so that a failing
+            # reconnect never masquerades as a retryable tool error.
+            before_sleep_log(logger, logging.WARNING)(retry_state)
+            try:
+                await self._reconnect()
+            except Exception:
+                logger.exception(
+                    "MCP reconnect before retry failed for tool %s.", tool_name
+                )
 
         @retry(
-            retry=retry_if_exception_type(anyio.ClosedResourceError),
+            retry=retry_if_exception(_is_mcp_reconnect_error),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
+            before_sleep=_reconnect_before_retry,
             reraise=True,
         )
         async def _call_with_retry():
+            nonlocal last_reconnectable
             if not self.session:
+                # The session disappeared (e.g. a failed reconnect cleared it).
+                # Surface the original tool error instead of a bare ValueError.
+                if last_reconnectable is not None:
+                    raise last_reconnectable
                 raise ValueError("MCP session is not available for MCP function tools.")
 
             try:
@@ -762,13 +858,19 @@ class MCPClient:
                     arguments=arguments,
                     read_timeout_seconds=read_timeout_seconds,
                 )
-            except anyio.ClosedResourceError:
-                logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
-                )
-                # Attempt to reconnect
+            except Exception as exc:
+                if _is_mcp_reconnect_error(exc):
+                    last_reconnectable = exc
+                raise
+
+        if not self.session:
+            # A previous call may have exhausted its retry after clearing the
+            # session. Try one reconnect before rejecting the next tool call.
+            try:
                 await self._reconnect()
-                # Reraise the exception to trigger tenacity retry
+            except Exception:
+                if last_reconnectable is not None:
+                    raise last_reconnectable
                 raise
 
         return await _call_with_retry()

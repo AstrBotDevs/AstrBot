@@ -29,6 +29,7 @@ from astrbot.core.platform.astr_message_event import (
     event_context,
 )
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType
 
 
@@ -71,7 +72,6 @@ async def sdk(environment, monkeypatch):
     env.context.conversation_manager.update_conversation.side_effect = save
     env.platform_send = AsyncMock()
     env.context.platform_manager.platform_insts[0].send_by_session = env.platform_send
-    monkeypatch.setattr(native_session, "record_agent_stats", AsyncMock())
     monkeypatch.setattr(native_session.Metric, "upload", AsyncMock())
     try:
         yield env
@@ -291,7 +291,7 @@ async def test_metadata_reaches_hooks_without_becoming_model_input(
         SimpleNamespace(get_handlers_by_event_type=lambda *args, **kwargs: [handler]),
     )
     monkeypatch.setattr(
-        decorate, "star_map", {"metadata_test": SimpleNamespace(name="metadata_test")}
+        decorate, "star_map", {"metadata_test": StarMetadata(name="metadata_test")}
     )
     run = await sdk.context.agent.run_turn(
         umo=sdk.event.unified_msg_origin,

@@ -8,7 +8,6 @@ import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
 
 from mcp.types import (
@@ -123,6 +122,10 @@ class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
 
+class _ModelInterruptedBySteering(Exception):
+    """Restart generation within the current step using queued steering input."""
+
+
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 AwaitableResultT = T.TypeVar("AwaitableResultT")
 
@@ -222,22 +225,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
         if self._pending_follow_ups and self.run_context.run_end_reason != "max_steps":
             # A plain reply is also a safe boundary for accepted user input.
-            follow_ups = list(self._pending_follow_ups)
-            await self._append_context_messages(
-                [
-                    Message(
-                        role="user",
-                        content=self._follow_up_user_content(follow_ups),
-                    )
-                ]
-            )
-            # Keep input arriving while the context sink was awaited for the next step.
-            del self._pending_follow_ups[: len(follow_ups)]
-            if not self._pending_follow_ups:
-                self._steering_signal.clear()
-            for ticket in follow_ups:
-                ticket.consumed = True
-                ticket.resolved.set()
+            await self._append_pending_follow_ups()
             self.final_llm_resp = None
             return
 
@@ -537,41 +525,51 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _await_or_stop(
         self,
         awaitable: T.Awaitable[AwaitableResultT],
+        *,
+        interrupt_for_steering: bool = False,
     ) -> AwaitableResultT | None:
-        """Await work while allowing a stop request to cancel it immediately.
+        """Await work until completion, stop, or an allowed steer.
 
         Args:
-            awaitable: Provider or context-processing operation to execute.
+            awaitable: Operation to execute.
+            interrupt_for_steering: Allow pending input to preempt model generation.
 
         Returns:
             The operation result, or None when user cancellation wins the race.
 
         Raises:
+            _ModelInterruptedBySteering: If steering preempts the operation.
             asyncio.CancelledError: If the outer Agent task is cancelled.
             Exception: Any exception raised by the awaited operation.
         """
         operation_task = asyncio.ensure_future(awaitable)
         abort_task = asyncio.create_task(self._abort_signal.wait())
+        waiters = {abort_task}
+        if interrupt_for_steering:
+            waiters.add(asyncio.create_task(self._steering_signal.wait()))
         try:
-            done, _ = await asyncio.wait(
-                {operation_task, abort_task},
+            await asyncio.wait(
+                {operation_task, *waiters},
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            if abort_task in done:
-                if not operation_task.done():
-                    operation_task.cancel()
-                await asyncio.gather(operation_task, return_exceptions=True)
+            if not self._is_stop_requested() and not (
+                interrupt_for_steering and self._steering_signal.is_set()
+            ):
+                return operation_task.result()
+            operation_task.cancel()
+            await asyncio.gather(operation_task, return_exceptions=True)
+            if self._is_stop_requested():
                 return None
-            return operation_task.result()
+            raise _ModelInterruptedBySteering
         except asyncio.CancelledError:
             if not operation_task.done():
                 operation_task.cancel()
             await asyncio.gather(operation_task, return_exceptions=True)
             raise
         finally:
-            if not abort_task.done():
-                abort_task.cancel()
-            await asyncio.gather(abort_task, return_exceptions=True)
+            for waiter in waiters:
+                waiter.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
 
     async def _recorded_responses(
         self,
@@ -698,12 +696,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         streaming=streaming,
                     )
                 )
+            if self._is_stop_requested():
+                status = TurnStatus.CANCELLED
+                return
+            if self._steering_signal.is_set():
+                raise _ModelInterruptedBySteering
             if streaming:
-                stream = self.provider.text_chat_stream(**payload)
+                stream = iterate_in_task(self.provider.text_chat_stream(**payload))
                 try:
                     while True:
                         try:
-                            response = await self._await_or_stop(anext(stream))
+                            response = await self._await_or_stop(
+                                anext(stream), interrupt_for_steering=True
+                            )
                         except StopAsyncIteration:
                             break
                         if response is None:
@@ -723,7 +728,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 finally:
                     await self._close_executor(stream)
             else:
-                response = await self._await_or_stop(self.provider.text_chat(**payload))
+                response = await self._await_or_stop(
+                    self.provider.text_chat(**payload), interrupt_for_steering=True
+                )
                 if response is not None:
                     final = response
                     status = (
@@ -735,7 +742,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     yield response
                 else:
                     status = TurnStatus.CANCELLED
-        except (asyncio.CancelledError, GeneratorExit):
+        except (asyncio.CancelledError, GeneratorExit, _ModelInterruptedBySteering):
             if not settled:
                 status = TurnStatus.CANCELLED
             raise
@@ -762,10 +769,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
-        async for response in self._recorded_responses(
-            payload, contexts=self.run_context.messages, streaming=self.streaming
-        ):
-            yield response
+        async with aclosing(
+            self._recorded_responses(
+                payload, contexts=self.run_context.messages, streaming=self.streaming
+            )
+        ) as responses:
+            async for response in responses:
+                yield response
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -787,6 +797,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         last_exception: Exception | None = None
         last_err_response: LLMResponse | None = None
 
+        async def wait_before_retry(delay: float) -> None:
+            await self._await_or_stop(asyncio.sleep(delay), interrupt_for_steering=True)
+
         for idx, candidate in enumerate(candidates):
             if self._is_stop_requested():
                 return
@@ -801,6 +814,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.provider = candidate
             try:
                 retrying = AsyncRetrying(
+                    sleep=wait_before_retry,
                     retry=retry_if_exception_type(EmptyModelOutputError),
                     stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
                     wait=wait_exponential(
@@ -817,29 +831,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     has_stream_output = False
                     with attempt:
                         try:
-                            async for resp in self._iter_llm_responses(
-                                include_model=idx == 0
-                            ):
-                                if resp.is_chunk:
-                                    has_stream_output = True
+                            async with aclosing(
+                                self._iter_llm_responses(include_model=idx == 0)
+                            ) as responses:
+                                async for resp in responses:
+                                    if resp.is_chunk:
+                                        has_stream_output = True
+                                        yield resp
+                                        continue
+
+                                    if (
+                                        resp.role == "err"
+                                        and not has_stream_output
+                                        and (not is_last_candidate)
+                                    ):
+                                        last_err_response = resp
+                                        logger.warning(
+                                            "Chat Model %s returns error response, trying fallback to next provider.",
+                                            candidate_id,
+                                        )
+                                        break
+
+                                    self._sanitize_malformed_tool_calls(resp)
                                     yield resp
-                                    continue
-
-                                if (
-                                    resp.role == "err"
-                                    and not has_stream_output
-                                    and (not is_last_candidate)
-                                ):
-                                    last_err_response = resp
-                                    logger.warning(
-                                        "Chat Model %s returns error response, trying fallback to next provider.",
-                                        candidate_id,
-                                    )
-                                    break
-
-                                self._sanitize_malformed_tool_calls(resp)
-                                yield resp
-                                return
+                                    return
 
                             if has_stream_output:
                                 return
@@ -859,6 +874,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             raise
                     if self._is_stop_requested():
                         return
+            except _ModelInterruptedBySteering:
+                self.provider = candidates[0]
+                raise
             except ConversationPersistenceError:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -936,7 +954,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         message_text: str,
         temp_text: str | None = None,
     ) -> FollowUpTicket | None:
-        """Queue user input after the next tool batch or plain assistant reply.
+        """Queue user input and interrupt any in-progress model generation.
 
         Args:
             message_text: Additional user input to append without modification.
@@ -956,23 +974,37 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._steering_signal.set()
         return ticket
 
-    @staticmethod
-    def _follow_up_user_content(follow_ups: list[FollowUpTicket]) -> list[TextPart]:
-        """Assemble consumed follow-up text with optional temporary reminders.
-
-        Args:
-            follow_ups: Tickets consumed at this safe boundary.
-
-        Returns:
-            User content parts; reminders stay visible for the current run
-            but are excluded from restored long-term history.
-        """
+    async def _append_pending_follow_ups(self) -> None:
+        """Persist queued steering inputs as one user message in the current turn."""
+        if not self._pending_follow_ups:
+            return
+        follow_ups = list(self._pending_follow_ups)
         content: list[TextPart] = []
         for index, ticket in enumerate(follow_ups):
             content.append(TextPart(text=("\n" if index else "") + ticket.text))
             if ticket.temp_text:
                 content.append(TextPart(text=ticket.temp_text).mark_as_temp())
-        return content
+        content.append(
+            TextPart(
+                text=(
+                    "\n<system_reminder>\n"
+                    "This is a steer for the current turn. If it changes your plan, "
+                    "first explain the adjustment in 1–2 sentences of user-visible text, "
+                    "then continue.\n"
+                    "</system_reminder>"
+                )
+            ).mark_as_temp()
+        )
+        message = Message(role="user", content=content)
+        message._turn_continuation = True
+        await self._append_context_messages([message])
+        # Keep inputs accepted while persistence was in flight.
+        del self._pending_follow_ups[: len(follow_ups)]
+        if not self._pending_follow_ups:
+            self._steering_signal.clear()
+        for ticket in follow_ups:
+            ticket.consumed = True
+            ticket.resolved.set()
 
     def _resolve_unconsumed_follow_ups(self) -> None:
         if not self._pending_follow_ups:
@@ -1182,9 +1214,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
-            async with aclosing(self._step()) as responses:
-                async for response in responses:
-                    yield response
+            if self._step_budget_max is not None:
+                self._step_budget_used += 1
+            while True:
+                try:
+                    async with aclosing(self._step()) as responses:
+                        async for response in responses:
+                            yield response
+                    break
+                except _ModelInterruptedBySteering:
+                    if message := self._finish_message():
+                        yield message
             completed = True
         except (asyncio.CancelledError, GeneratorExit):
             self.run_context.run_end_reason = "cancelled"
@@ -1204,12 +1244,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
-        if self._step_budget_max is not None:
-            self._step_budget_used += 1
-
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
+
+        if self._is_stop_requested():
+            await self._finalize_aborted_step()
+            return
+        await self._append_pending_follow_ups()
 
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
@@ -1233,65 +1275,70 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield self._context_response(reason="compaction", origin="system")
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
-        async for llm_response in self._iter_llm_responses_with_fallback():
-            if llm_response.is_chunk:
-                if self.stats.time_to_first_token == 0:
-                    self.stats.time_to_first_token = time.time() - self.stats.start_time
-
-                content = []
-                if llm_response.reasoning_content:
-                    content.append(ReasoningOutput(text=llm_response.reasoning_content))
-                if llm_response.result_chain:
-                    content.extend(content_from_chain(llm_response.result_chain))
-                elif llm_response.completion_text:
-                    content.append(PlainOutput(text=llm_response.completion_text))
-                for reasoning in (True, False):
-                    text = "".join(
-                        part.text or ""
-                        for part in content
-                        if isinstance(
-                            part, ReasoningOutput if reasoning else PlainOutput
+        async with aclosing(self._iter_llm_responses_with_fallback()) as responses:
+            async for llm_response in responses:
+                if llm_response.is_chunk:
+                    if self.stats.time_to_first_token == 0:
+                        self.stats.time_to_first_token = (
+                            time.time() - self.stats.start_time
                         )
-                    )
-                    if not text or self._message_closed:
-                        continue
-                    key = "reasoning" if reasoning else "plain"
-                    if key not in self._message_indices:
-                        self._message_indices[key] = len(self._message_parts)
-                        self._message_parts.append(
-                            ReasoningOutput(text="")
+
+                    content = []
+                    if llm_response.reasoning_content:
+                        content.append(
+                            ReasoningOutput(text=llm_response.reasoning_content)
+                        )
+                    if llm_response.result_chain:
+                        content.extend(content_from_chain(llm_response.result_chain))
+                    elif llm_response.completion_text:
+                        content.append(PlainOutput(text=llm_response.completion_text))
+                    for reasoning in (True, False):
+                        text = "".join(
+                            part.text or ""
+                            for part in content
+                            if isinstance(
+                                part, ReasoningOutput if reasoning else PlainOutput
+                            )
+                        )
+                        if not text or self._message_closed:
+                            continue
+                        key = "reasoning" if reasoning else "plain"
+                        if key not in self._message_indices:
+                            self._message_indices[key] = len(self._message_parts)
+                            self._message_parts.append(
+                                ReasoningOutput(text="")
+                                if reasoning
+                                else PlainOutput(text="")
+                            )
+                        index = self._message_indices[key]
+                        accumulated = (self._message_parts[index].text or "") + text
+                        self._message_parts[index] = (
+                            ReasoningOutput(text=accumulated)
                             if reasoning
-                            else PlainOutput(text="")
+                            else PlainOutput(text=accumulated)
                         )
-                    index = self._message_indices[key]
-                    accumulated = (self._message_parts[index].text or "") + text
-                    self._message_parts[index] = (
-                        ReasoningOutput(text=accumulated)
-                        if reasoning
-                        else PlainOutput(text=accumulated)
-                    )
-                    event_type = ReasoningDelta if reasoning else TextDelta
-                    yield event_type(
-                        message_id=self._message_id, part_index=index, text=text
-                    )
-                if self._is_stop_requested():
-                    break
-                continue
-            llm_resp_result = llm_response
+                        event_type = ReasoningDelta if reasoning else TextDelta
+                        yield event_type(
+                            message_id=self._message_id, part_index=index, text=text
+                        )
+                    if self._is_stop_requested():
+                        break
+                    continue
+                llm_resp_result = llm_response
 
-            # Chunk responses have already continued above. A missing usage report
-            # means the latest context occupancy is unknown.
-            self.stats.current_context_tokens = 0
-            if llm_response.usage:
-                # Keep cumulative usage for billing and expose the latest request
-                # input separately for context-window occupancy displays.
-                self.stats.token_usage += llm_response.usage
-                self.stats.current_context_tokens = llm_response.usage.input
-                if self.req.conversation:
-                    self.req.conversation.token_usage = llm_response.usage.total
-            # Preserve legacy statistics for history and plugin readers.
-            self.stats.end_time = time.time()
-            break  # got final response
+                # Chunk responses have already continued above. A missing usage report
+                # means the latest context occupancy is unknown.
+                self.stats.current_context_tokens = 0
+                if llm_response.usage:
+                    # Keep cumulative usage for billing and expose the latest request
+                    # input separately for context-window occupancy displays.
+                    self.stats.token_usage += llm_response.usage
+                    self.stats.current_context_tokens = llm_response.usage.input
+                    if self.req.conversation:
+                        self.req.conversation.token_usage = llm_response.usage.total
+                # Preserve legacy statistics for history and plugin readers.
+                self.stats.end_time = time.time()
+                break  # got final response
 
         if self._is_stop_requested():
             await self._finalize_aborted_step()
@@ -1449,24 +1496,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
-            if tool_call_result_blocks and self._pending_follow_ups:
-                # Keep all tool replies together before adding new user input.
-                follow_ups = list(self._pending_follow_ups)
-                await self._append_context_messages(
-                    [
-                        Message(
-                            role="user",
-                            content=self._follow_up_user_content(follow_ups),
-                        )
-                    ]
-                )
-                # Preserve inputs arriving while the context sink was awaited.
-                del self._pending_follow_ups[: len(follow_ups)]
-                if not self._pending_follow_ups:
-                    self._steering_signal.clear()
-                for ticket in follow_ups:
-                    ticket.consumed = True
-                    ticket.resolved.set()
+            if tool_call_result_blocks:
+                await self._append_pending_follow_ups()
 
     async def step_until_done(
         self, max_step: int
@@ -2075,20 +2106,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_execution_started = True
         executor = None
         try:
-            detach = getattr(self.tool_executor, "detach", None)
             executor = self._iter_tool_executor_results(
                 self.tool_executor.execute(
                     tool=tool, run_context=self.run_context, **arguments
-                ),
-                detach=partial(
-                    detach,
-                    tool=tool,
-                    run_context=self.run_context,
-                    task_id=execution_id,
-                    arguments=arguments,
                 )
-                if detach is not None
-                else None,
             )
             async for item in executor:
                 if isinstance(item, CallToolResult):
@@ -2159,93 +2180,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_tool_executor_results(
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
-        *,
-        detach: Callable[..., CallToolResult | None] | None = None,
-    ) -> T.AsyncGenerator[ToolExecutorResultT | CallToolResult, None]:
-        """Read tools until completion, stop, or accepted background ownership.
+    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        """Read tool results in the original turn until completion or stop.
 
         Args:
-            executor: Tool iterator whose original task must survive a handoff.
-            detach: Optional executor callback accepting ownership of a pending read.
+            executor: Tool iterator whose lifetime is owned by this call.
 
         Yields:
-            Tool results, or a submission receipt when execution moves to the background.
+            Results produced by the tool, including direct output signals.
+
+        Raises:
+            _ToolExecutionInterrupted: If the turn is stopped.
         """
-        executor = iterate_in_task(executor)
-        detached = False
-
-        async def _next_executor_result() -> ToolExecutorResultT:
-            return await anext(executor)
-
-        try:
-            while True:
-                if self._is_stop_requested():
-                    raise _ToolExecutionInterrupted(
-                        "Tool execution interrupted before reading the next tool result."
-                    )
-
-                next_result_task = asyncio.create_task(_next_executor_result())
-                abort_task = asyncio.create_task(self._abort_signal.wait())
-                steering_task = (
-                    asyncio.create_task(self._steering_signal.wait())
-                    if detach
-                    else None
-                )
+        async with aclosing(iterate_in_task(executor)) as results:
+            while not self._is_stop_requested():
                 try:
-                    waiters = {next_result_task, abort_task}
-                    if steering_task is not None:
-                        waiters.add(steering_task)
-                    done, _ = await asyncio.wait(
-                        waiters,
-                        return_when=asyncio.FIRST_COMPLETED,
-                    )
-
-                    if (
-                        steering_task in done
-                        and not next_result_task.done()
-                        and abort_task not in done
-                        and detach is not None
-                    ):
-                        receipt = detach(
-                            executor=executor, pending_result=next_result_task
-                        )
-                        if receipt is not None:
-                            detached = True
-                            yield receipt
-                            return
-                        # Unsupported executors keep waiting without spinning on steering.
-                        detach = None
-                        done, _ = await asyncio.wait(
-                            {next_result_task, abort_task},
-                            return_when=asyncio.FIRST_COMPLETED,
-                        )
-
-                    if abort_task in done:
-                        if not next_result_task.done():
-                            next_result_task.cancel()
-                            with suppress(asyncio.CancelledError, StopAsyncIteration):
-                                await next_result_task
-                        raise _ToolExecutionInterrupted(
-                            "Tool execution interrupted by a stop request."
-                        )
-
-                    try:
-                        yield next_result_task.result()
-                    except StopAsyncIteration:
-                        return
-                except BaseException:
-                    if not detached:
-                        if not next_result_task.done():
-                            next_result_task.cancel()
-                        # Finish the read before closing its async generator.
-                        await asyncio.gather(next_result_task, return_exceptions=True)
-                    raise
-                finally:
-                    for task in (abort_task, steering_task):
-                        if task is not None:
-                            if not task.done():
-                                task.cancel()
-                            await asyncio.gather(task, return_exceptions=True)
-        finally:
-            if not detached:
-                await executor.aclose()
+                    result = await self._await_or_stop(anext(results))
+                except StopAsyncIteration:
+                    return
+                if self._is_stop_requested():
+                    break
+                yield T.cast(ToolExecutorResultT, result)
+            raise _ToolExecutionInterrupted(
+                "Tool execution interrupted by a stop request."
+            )

@@ -138,6 +138,9 @@ async def present_turn(
     emitted: set[str] = set()
     emitted_reasoning: set[str] = set()
     completed: set[str] = set()
+    # Text of the previous model message, and whether a tool call came after it.
+    last_text_id: str | None = None
+    tool_since_text = False
     async for output in turn.events():
         payload = output.payload
         if isinstance(payload, TurnFinished):
@@ -229,6 +232,17 @@ async def present_turn(
                     if isinstance(payload, ReasoningDelta)
                     else emitted
                 ).add(payload.message_id)
+                if not isinstance(payload, ReasoningDelta):
+                    # A new model message with no tool call in between (e.g. after
+                    # injected sub-agent results) would run on from the last one.
+                    if (
+                        event.get_platform_name() == "webchat"
+                        and last_text_id not in (None, payload.message_id)
+                        and not tool_since_text
+                    ):
+                        yield MessageChain().message("\n\n")
+                    last_text_id = payload.message_id
+                    tool_since_text = False
                 yield MessageChain(
                     type="reasoning" if isinstance(payload, ReasoningDelta) else None
                 ).message(payload.text)
@@ -269,6 +283,7 @@ async def present_turn(
                     yield chain
         elif isinstance(payload, ToolStarted):
             names[payload.execution_id] = (payload.name, payload.call_id)
+            tool_since_text = True
             info = {
                 "id": payload.call_id,
                 "name": payload.name,
