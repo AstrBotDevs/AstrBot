@@ -1,0 +1,47 @@
+name: PR size label
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Label by changed lines
+        run: |
+          set -euo pipefail
+          total=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
+            --jq '[.[] | select(.filename | test("^(uv\\.lock|dashboard/pnpm-lock\\.yaml)$|^dashboard/src/api/generated/") | not) | .additions + .deletions] | add // 0' \
+            | awk '{ s += $1 } END { printf "%d\n", s + 0 }')
+
+          if   [ "$total" -lt 10 ];   then label=size:XS
+          elif [ "$total" -lt 30 ];   then label=size:S
+          elif [ "$total" -lt 100 ];  then label=size:M
+          elif [ "$total" -lt 500 ];  then label=size:L
+          elif [ "$total" -lt 1000 ]; then label=size:XL
+          else                             label=size:XXL
+          fi
+
+          echo "changed lines: $total -> $label"
+
+          current=$(gh api --paginate "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+          echo "$current" | grep -Fxq "$label" || gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/labels" -f "labels[]=$label" > /dev/null
+
+          for old in $(echo "$current" | grep '^size:' || true); do
+            if [ "$old" != "$label" ]; then
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR_NUMBER/labels/$old"
+            fi
+          done

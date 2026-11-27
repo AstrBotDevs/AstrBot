@@ -1,0 +1,138 @@
+documentation:
+  - any:
+      - changed-files:
+          - any-glob-to-any-file:
+              - 'docs/**'
+              - '*.md'
+      - head-branch:
+          - '^docs?[/-]'
+
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/actions/**'
+
+bug:
+  - head-branch:
+      - '^(fix|bugfix|hotfix)[/-]'
+      - '^codex/fix[-_]'
+
+enhancement:
+  - head-branch:
+      - '^(feat|feature|features)[/-]'
+
+codex:
+  - head-branch:
+      - '^codex/'
+
+area:webui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'dashboard/**'
+          - 'astrbot/dashboard/**'
+          - 'openspec/openapi-v1.yaml'
+
+area:core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/**'
+          - 'astrbot/api/**'
+          - 'astrbot/cli/**'
+          - 'astrbot/utils/**'
+          - 'astrbot/*.py'
+          - 'main.py'
+
+area:provider:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/provider/**'
+          - 'astrbot/api/provider/**'
+          - 'astrbot/core/agent/**'
+          - 'astrbot/core/astr_main_agent/**'
+          - 'astrbot/core/astr_agent_runtime/**'
+          - 'astrbot/core/agent_*.py'
+          - 'astrbot/core/astr_agent_context.py'
+          - 'astrbot/core/llm_error_messages.py'
+          - 'astrbot/dashboard/api/providers.py'
+          - 'astrbot/dashboard/api/agent_configs.py'
+          - 'astrbot/dashboard/services/agent_config_service.py'
+
+area:platform:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/platform/**'
+          - 'astrbot/api/platform/**'
+          - 'astrbot/core/message/**'
+          - 'astrbot/core/platform_message_history_mgr.py'
+          - 'astrbot/dashboard/api/platform.py'
+          - 'astrbot/dashboard/api/bots.py'
+          - 'astrbot/dashboard/services/platform_service.py'
+          - 'astrbot/dashboard/services/bot_cleanup_service.py'
+
+feature:plugin:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/star/**'
+          - 'astrbot/builtin_stars/**'
+          - 'astrbot/api/star/**'
+          - 'astrbot/dashboard/api/plugins.py'
+          - 'astrbot/dashboard/api/extensions.py'
+          - 'astrbot/dashboard/services/plugin_service.py'
+          - 'astrbot/dashboard/services/plugin_page_service.py'
+          - 'dashboard/src/views/ExtensionPage.vue'
+          - 'dashboard/src/views/Plugin*.vue'
+          - 'dashboard/src/views/extension/**'
+          - 'dashboard/src/components/plugins/**'
+
+feature:knowledge-base:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/knowledge_base/**'
+          - 'astrbot/dashboard/api/knowledge_bases.py'
+          - 'astrbot/dashboard/services/knowledge_base_service.py'
+          - 'dashboard/src/views/knowledge-base/**'
+
+feature:persona:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/persona_mgr.py'
+          - 'astrbot/core/persona_error_reply.py'
+          - 'astrbot/dashboard/api/personas.py'
+          - 'astrbot/dashboard/services/persona_service.py'
+          - 'dashboard/src/views/PersonaPage.vue'
+          - 'dashboard/src/views/persona/**'
+
+feature:updater:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/updater.py'
+          - 'astrbot/core/zip_updater.py'
+          - 'astrbot/core/process_restart.py'
+          - 'astrbot/dashboard/api/updates.py'
+          - 'astrbot/dashboard/services/update_service.py'
+
+feature:chatui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'dashboard/src/components/chat/**'
+          - 'dashboard/src/views/Chat*.vue'
+          - 'dashboard/src/views/ConversationPage.vue'
+          - 'dashboard/src/views/conversation/**'
+          - 'astrbot/dashboard/api/chat.py'
+          - 'astrbot/dashboard/api/chat_projects.py'
+          - 'astrbot/dashboard/api/live_chat.py'
+          - 'astrbot/dashboard/services/chat_service.py'
+          - 'astrbot/dashboard/services/chatui_project_service.py'
+          - 'astrbot/dashboard/services/live_chat_service.py'
+          - 'astrbot/dashboard/services/conversation_service.py'
+          - 'astrbot/core/platform/sources/webchat/**'
+
+desktop:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'astrbot/core/desktop_runtime.py'
+          - 'astrbot/core/utils/desktop_core_lock.py'
+          - 'dashboard/src/utils/desktopRuntime.ts'
+          - 'dashboard/src/components/shared/DesktopUpdateProgress.vue'
+          - 'dashboard/src/types/desktop-bridge.d.ts'
