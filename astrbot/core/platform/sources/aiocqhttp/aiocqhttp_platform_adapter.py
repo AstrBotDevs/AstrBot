@@ -397,6 +397,11 @@ class AiocqhttpAdapter(Platform):
                 message_str += "".join(at_parts)
             elif t == "mface":
                 continue
+            elif t == "inline_keyboard":
+                logger.debug(
+                    f"忽略 aiocqhttp 不支持的消息段类型: {t}, count={sum(1 for _ in m_group)}"
+                )
+                continue
             elif t == "markdown":
                 for m in m_group:
                     text = m["data"].get("markdown") or m["data"].get("content", "")
