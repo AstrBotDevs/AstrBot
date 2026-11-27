@@ -104,6 +104,7 @@
         "toolDialogHint": "Выберите функции, доступные этому персонажу.",
         "selectAllTools": "Выбрать все инструменты",
         "toolCount": "Выбрано инструментов: {selected}/{total}",
+        "unlistedSavedTools": "Сохранённые инструменты вне списка",
         "skillDialogTitle": "Настройка навыков: {name}",
         "skillDialogHint": "Выберите навыки, доступные этому персонажу.",
         "selectAllSkills": "Выбрать все навыки",

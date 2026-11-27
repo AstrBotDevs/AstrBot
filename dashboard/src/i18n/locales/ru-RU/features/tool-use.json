@@ -67,10 +67,12 @@
             "permissionAdmin": "Админ",
             "permissionMember": "Все",
             "permissionEveryone": "Все",
+            "unregistered": "Не зарегистрирован",
+            "savedInactive": "Сохранён как отключённый",
             "actions": "Действия"
         },
         "summary": {
-            "total": "Всего",
+            "total": "Зарегистрировано",
             "active": "Активно",
             "inactive": "Неактивно"
         }

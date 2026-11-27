@@ -67,10 +67,12 @@
       "permissionAdmin": "管理员",
       "permissionMember": "全部用户",
       "permissionEveryone": "全部用户",
+      "unregistered": "未注册",
+      "savedInactive": "已保存为停用",
       "actions": "操作"
     },
     "summary": {
-      "total": "总数",
+      "total": "已注册",
       "active": "已启用",
       "inactive": "未启用"
     }

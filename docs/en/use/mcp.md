@@ -129,7 +129,13 @@ After connecting, make sure the tools are available to the current conversation:
 
 The default persona uses all available capabilities. Create or edit a custom persona to restrict the selection. Selecting a globally disabled tool in a persona does not enable it again.
 
-AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. If you rename a server directly in its configuration file, update any tool selections or permissions that refer to its old tool names. If an older persona selection matches tools from multiple servers, select the intended tool again in that persona.
+AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. The persona capabilities panel shows selections missing from the current list under **Saved tools not listed above**. Select a tool by its full name to use it after a rename.
+
+![Saved tool names in the persona capabilities panel](./images/mcp-saved-persona-en.png)
+
+Open **Extensions → Manage Handlers → Function Tools** to manage the enabled state and permissions of registered MCP tools. Saved disabled states and permissions with no matching tool appear as **Unregistered** for reference. Reapply the settings you need to the tool's full name after an upgrade.
+
+![An MCP tool and unregistered saved entries in Function Tools](./images/mcp-saved-settings-en.png)
 
 **Connected means the service is reachable; it does not guarantee the model will call a tool.** Tool use depends on the model, persona, task, and tool descriptions. External tools such as MCP searches do not require Computer Use. Configure an [execution environment and permissions](/en/use/astrbot-agent-sandbox) only when AstrBot itself needs to execute code or access files.
 

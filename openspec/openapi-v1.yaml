@@ -3101,6 +3101,12 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: include_saved
+          in: query
+          description: Include saved permissions and disabled-tool entries for unregistered tool names.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           $ref: "#/components/responses/Ok"

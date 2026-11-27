@@ -947,10 +947,9 @@ class MCPTool(FunctionTool, Generic[TContext]):
         mcp_server_name: str,
         **kwargs,
     ) -> None:
-        legacy_name = re.sub(r"[^A-Za-z0-9_-]+", "_", mcp_tool.name)
         prefix = f"mcp__{self.server_namespace(mcp_server_name)}__"
         limit = 64 - len(prefix)
-        tool_name = legacy_name
+        tool_name = re.sub(r"[^A-Za-z0-9_-]+", "_", mcp_tool.name)
         # Preserve the original MCP name for dispatch. Hash lossy aliases so
         # their spelling doesn't depend on which other tools are connected.
         if not tool_name or tool_name != mcp_tool.name or len(tool_name) > limit:
@@ -962,7 +961,6 @@ class MCPTool(FunctionTool, Generic[TContext]):
             description=mcp_tool.description or "",
             parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )
-        self.legacy_name = legacy_name
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name

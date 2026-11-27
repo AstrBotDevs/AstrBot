@@ -2590,6 +2590,10 @@ export type ListCommandConflictsError = unknown;
 export type ListToolsData = {
     query?: {
         enabled?: boolean;
+        /**
+         * Include saved permissions and disabled-tool entries for unregistered tool names.
+         */
+        include_saved?: boolean;
         origin?: 'plugin' | 'mcp';
     };
 };

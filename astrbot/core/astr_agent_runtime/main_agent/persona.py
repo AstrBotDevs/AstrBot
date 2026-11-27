@@ -163,22 +163,7 @@ async def apply_persona(
                     if plugin_tools is not None
                     else tmgr.get_func(tool_name)
                 )
-                if tool is None:
-                    # A flat legacy name has no server identity. Resolve it only
-                    # when the registry has one possible owner.
-                    matches = [
-                        item
-                        for item in tmgr.func_list
-                        if isinstance(item, MCPTool) and item.legacy_name == tool_name
-                    ]
-                    if len(matches) == 1:
-                        authorized = (
-                            plugin_tools
-                            if plugin_tools is not None
-                            else tmgr.get_full_tool_set()
-                        )
-                        tool = authorized.get_tool(matches[0].name)
-                elif isinstance(tool, MCPTool):
+                if isinstance(tool, MCPTool):
                     tool = tmgr.get_full_tool_set().get_tool(tool.name)
                 if tool and tool.active:
                     persona_toolset.add_tool(tool)

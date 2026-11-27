@@ -239,12 +239,7 @@ class _PermissionGuardedTool(FunctionTool):
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        if isinstance(self._wrapped, MCPTool):
-            error = await self._mgr._check_tool_permission(
-                self.name, context, legacy_name=self._wrapped.legacy_name
-            )
-        else:
-            error = await self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
 
@@ -414,8 +409,6 @@ class FunctionToolManager:
         self,
         tool_name: str,
         context: Any,
-        *,
-        legacy_name: str | None = None,
     ) -> str | None:
         """Return an error string if the caller lacks permission, or None.
 
@@ -429,8 +422,6 @@ class FunctionToolManager:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
         effective = defaults.get(tool_name)
-        if effective is None and legacy_name is not None:
-            effective = defaults.get(legacy_name)
         if effective is None:
             effective = self._default_permission(tool_name)
 
@@ -658,10 +649,6 @@ class FunctionToolManager:
                 for tool in registered_tools:
                     if tool.name in inactive_names:
                         tool.active = False
-                    elif tool.legacy_name in inactive_names:
-                        tool.active = await sp.get_async(
-                            "mcp_tool", tool.name, "active", False
-                        )
                 existing = [
                     tool
                     for tool in self.func_list
@@ -1045,11 +1032,6 @@ class FunctionToolManager:
                 scope="global",
                 scope_id="global",
             )
-            if (
-                isinstance(func_tool, MCPTool)
-                and func_tool.legacy_name in inactivated_llm_tools
-            ):
-                sp.put("active", True, scope="mcp_tool", scope_id=func_tool.name)
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
                 sp.put(
@@ -1091,11 +1073,6 @@ class FunctionToolManager:
                 "inactivated_llm_tools",
                 [],
             )
-            if (
-                isinstance(func_tool, MCPTool)
-                and func_tool.legacy_name in inactivated_llm_tools
-            ):
-                await sp.put_async("mcp_tool", func_tool.name, "active", True)
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
                 await sp.put_async(

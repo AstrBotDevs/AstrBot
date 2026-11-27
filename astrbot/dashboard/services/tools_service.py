@@ -264,13 +264,44 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to test MCP connection: {exc!s}") from exc
 
-    async def get_tool_list(self) -> list[dict]:
+    async def get_tool_list(self, *, include_saved: bool = False) -> list[dict]:
         try:
             tools = list(self.tool_mgr.func_list)
-            if not tools:
+            if not tools and not include_saved:
                 return []
             perms_store = await sp.global_get("tool_permissions", {})
-            return [self._serialize_tool(tool, perms_store) for tool in tools]
+            defaults = (
+                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+            )
+            if not isinstance(defaults, dict):
+                defaults = {}
+            result = [self._serialize_tool(tool, defaults) for tool in tools]
+            if not include_saved:
+                return result
+
+            stored_inactive = await sp.global_get("inactivated_llm_tools", [])
+            inactive_names = (
+                {name for name in stored_inactive if isinstance(name, str) and name}
+                if isinstance(stored_inactive, list)
+                else set()
+            )
+            for entry in result:
+                entry["inactive_configured"] = entry["name"] in inactive_names
+            registered_names = {entry["name"] for entry in result}
+            saved_names = {name for name in defaults if isinstance(name, str) and name}
+            for name in sorted((inactive_names | saved_names) - registered_names):
+                result.append(
+                    {
+                        "name": name,
+                        "description": "",
+                        "active": False,
+                        "registered": False,
+                        "inactive_configured": name in inactive_names,
+                        "permission": defaults.get(name),
+                        "permission_configured": name in defaults,
+                    }
+                )
+            return result
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
@@ -524,7 +555,7 @@ class ToolsService:
     def _serialize_tool(
         self,
         tool,
-        perms_store: object,
+        defaults: dict,
     ) -> dict:
         if isinstance(tool, MCPTool):
             origin = "mcp"
@@ -540,14 +571,6 @@ class ToolsService:
             origin_name = "unknown"
             origin_display_name = origin_name
 
-        defaults = (
-            perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
-        )
-        if not isinstance(defaults, dict):
-            defaults = {}
-        permission_key = tool.name
-        if isinstance(tool, MCPTool) and permission_key not in defaults:
-            permission_key = tool.legacy_name
         return {
             "name": tool.name,
             "description": tool.description,
@@ -556,6 +579,6 @@ class ToolsService:
             "origin": origin,
             "origin_name": origin_name,
             "origin_display_name": origin_display_name,
-            "permission": defaults.get(permission_key, "member"),
-            "permission_configured": permission_key in defaults,
+            "permission": defaults.get(tool.name, "member"),
+            "permission_configured": tool.name in defaults,
         }

@@ -178,10 +178,11 @@ async def _sync_modelscope_mcp_servers(
 
 @router.get("/tools")
 async def list_tools(
+    include_saved: bool = Query(default=False),
     _auth: AuthContext = Depends(require_tool_scope),
     service: ToolsService = Depends(get_service),
 ):
-    return await _run(service.get_tool_list)
+    return await _run(lambda: service.get_tool_list(include_saved=include_saved))
 
 
 @router.patch("/tools/{tool_id:path}/enabled")

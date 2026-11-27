@@ -67,10 +67,12 @@
       "permissionAdmin": "管理者",
       "permissionMember": "すべてのユーザー",
       "permissionEveryone": "すべてのユーザー",
+      "unregistered": "未登録",
+      "savedInactive": "無効として保存済み",
       "actions": "操作"
     },
     "summary": {
-      "total": "合計",
+      "total": "登録済み",
       "active": "有効",
       "inactive": "無効"
     }

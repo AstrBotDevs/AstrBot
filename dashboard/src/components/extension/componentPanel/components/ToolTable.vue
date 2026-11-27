@@ -25,7 +25,7 @@ const toolHeaders = computed(() => [
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
 
-const getPermissionColor = (permission?: string): string => {
+const getPermissionColor = (permission?: string | null): string => {
   switch (permission) {
     case 'admin':
       return 'error';
@@ -34,7 +34,7 @@ const getPermissionColor = (permission?: string): string => {
   }
 };
 
-const getPermissionLabel = (permission?: string): string => {
+const getPermissionLabel = (permission?: string | null): string => {
   switch (permission) {
     case 'admin':
       return tmTool('functionTools.table.permissionAdmin');
@@ -66,13 +66,22 @@ const getPermissionLabel = (permission?: string): string => {
       </template>
 
       <template #item.origin_name="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.origin_name">
+        <v-chip v-if="item.registered === false" size="small" variant="tonal">
+          {{ tmTool('functionTools.table.unregistered') }}
+        </v-chip>
+        <div v-else class="text-body-2 text-medium-emphasis" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.origin_name">
           {{ item.origin_name || '-' }}
         </div>
       </template>
 
       <template #item.permission="{ item }">
-        <v-menu location="bottom">
+        <template v-if="item.registered === false">
+          <v-chip v-if="item.permission_configured" :color="getPermissionColor(item.permission)" size="small">
+            {{ getPermissionLabel(item.permission) }}
+          </v-chip>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
+        <v-menu v-else location="bottom">
           <template v-slot:activator="{ props: menuProps }">
             <v-chip
               v-bind="menuProps"
@@ -105,14 +114,18 @@ const getPermissionLabel = (permission?: string): string => {
       </template>
 
       <template #item.actions="{ item }">
-        <v-switch
-          :model-value="item.active"
-          color="primary"
-          density="compact"
-          hide-details
-          inset
-          @update:model-value="emit('toggle-tool', item)"
-        />
+        <span v-if="item.inactive_configured && (item.registered === false || item.active)"
+          class="text-caption text-medium-emphasis">
+          {{ tmTool('functionTools.table.savedInactive') }}
+        </span>
+        <v-switch v-if="item.registered !== false" :model-value="item.active" color="primary" density="compact"
+          hide-details inset @update:model-value="emit('toggle-tool', item)" />
+      </template>
+
+      <template #item.data-table-expand="{ item, internalItem, isExpanded, toggleExpand }">
+        <v-btn v-if="item.registered !== false" :icon="isExpanded(internalItem) ? '$collapse' : '$expand'"
+          size="small" variant="text" :aria-label="tmTool('functionTools.parameters')"
+          :aria-expanded="isExpanded(internalItem)" @click.stop="toggleExpand(internalItem)" />
       </template>
 
       <template #no-data>

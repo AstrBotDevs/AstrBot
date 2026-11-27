@@ -126,6 +126,12 @@ const toolGroups = computed(() => {
   });
 });
 
+const unlistedSavedTools = computed(() => {
+  if (!Array.isArray(props.tools)) return [];
+  const listedNames = new Set(toolGroups.value.flatMap((group) => group.toolNames));
+  return [...new Set(props.tools.filter((name) => !listedNames.has(name)))];
+});
+
 const skillItems = computed(() => {
   const items = [];
   const pluginGroups = new Map();
@@ -270,6 +276,7 @@ async function toggleCapabilities(field, names, toggleGroup = false) {
 
   const nextValue =
     availableNames.length > 0 &&
+    (field !== "tools" || unlistedSavedTools.value.length === 0) &&
     availableNames.every((name) => selectedNames.includes(name))
       ? null
       : selectedNames;
@@ -361,11 +368,11 @@ async function saveSelectionDialog() {
     (name) => !dialogItemNames.includes(name),
   );
   nextSelectedNames.push(...selectionDialog.value.selectedNames);
-  const nextValue = availableNames.every((name) =>
-    nextSelectedNames.includes(name),
-  )
-    ? null
-    : [...new Set(nextSelectedNames)];
+  const nextValue =
+    (field !== "tools" || unlistedSavedTools.value.length === 0) &&
+    availableNames.every((name) => nextSelectedNames.includes(name))
+      ? null
+      : [...new Set(nextSelectedNames)];
   if (await applyCapabilityUpdate(field, nextValue, previousValue)) {
     selectionDialog.value.show = false;
   }
@@ -394,6 +401,13 @@ async function saveSelectionDialog() {
       "
       @configure="openSelectionDialog('tools', $event, $event.tools)"
     />
+
+    <v-sheet v-if="!loadingTools && unlistedSavedTools.length" border rounded="lg" class="pa-3">
+      <div class="text-subtitle-2 mb-1">{{ tm('personaQuickPreview.unlistedSavedTools') }}</div>
+      <ul class="ps-4 text-body-2">
+        <li v-for="name in unlistedSavedTools" :key="name" class="text-break">{{ name }}</li>
+      </ul>
+    </v-sheet>
 
     <PersonaCapabilityList
       :title="tm('personaQuickPreview.skillsLabel')"

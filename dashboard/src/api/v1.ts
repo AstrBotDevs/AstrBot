@@ -165,6 +165,7 @@ export interface ProviderListParams {
 export interface ToolListParams {
   origin?: 'plugin' | 'mcp';
   enabled?: boolean;
+  include_saved?: boolean;
 }
 
 export interface SkillListParams extends Record<string, unknown> {

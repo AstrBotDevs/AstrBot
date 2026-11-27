@@ -67,10 +67,12 @@
       "permissionAdmin": "Admin",
       "permissionMember": "All Users",
       "permissionEveryone": "All Users",
+      "unregistered": "Unregistered",
+      "savedInactive": "Saved as disabled",
       "actions": "Actions"
     },
     "summary": {
-      "total": "Total",
+      "total": "Registered",
       "active": "Active",
       "inactive": "Inactive"
     }
