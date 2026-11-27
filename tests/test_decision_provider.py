@@ -14,6 +14,7 @@ from astrbot.core.provider.entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionInput,
     ProviderType,
 )
 from astrbot.core.provider.manager import ProviderManager
@@ -147,6 +148,26 @@ async def test_system_one_sends_caller_supplied_noul_criteria(criteria):
         await provider.terminate()
 
     assert answers["cancel"] == DecisionBooleanAnswer(probability=0.8)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("questions", "state"),
+    [
+        ({"a": DecisionBooleanQuestion("Is it ok?")}, DecisionInput(["text"])),
+        ({"a": DecisionBooleanQuestion(DecisionInput(["Is it ok?"]))}, None),
+    ],
+)
+async def test_system_one_rejects_explicit_decision_input(questions, state):
+    handler = MagicMock(side_effect=AssertionError("no request expected"))
+    provider = _provider(handler)
+    try:
+        with pytest.raises(ValueError):
+            await provider.ask(questions, state)
+    finally:
+        await provider.terminate()
+
+    handler.assert_not_called()
 
 
 @pytest.mark.asyncio

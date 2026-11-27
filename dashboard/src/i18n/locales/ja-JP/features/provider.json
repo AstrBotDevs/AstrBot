@@ -32,6 +32,10 @@
       "model": "System One のモデル ID（例: jev-latest、jev-preview、またはサービス指定のモデル名）。",
       "customHeaders": "AstrBot の判定リクエストに追加する HTTP ヘッダーです。"
     },
+    "geminiDecisionHints": {
+      "apiBase": "Gemini API のベース URL。既定は https://generativelanguage.googleapis.com/v1beta です。末尾が /decisions でない場合は自動で追加されます。",
+      "model": "Gemini Decisions のモデル ID（例: gemini-decision-1）。"
+    },
     "openaiDecisionHints": {
       "apiBase": "OpenAI API のベース URL（既定は https://api.openai.com/v1）。/decisions で終わらない場合は自動で追加されます。",
       "model": "OpenAI Decisions は現在 gpt-6-luna に対応しています。"

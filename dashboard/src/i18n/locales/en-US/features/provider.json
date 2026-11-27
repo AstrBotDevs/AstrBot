@@ -32,6 +32,10 @@
       "model": "System One model ID, such as jev-latest, jev-preview, or the provider's model name.",
       "customHeaders": "HTTP headers added by AstrBot to decision requests."
     },
+    "geminiDecisionHints": {
+      "apiBase": "Gemini API base URL, https://generativelanguage.googleapis.com/v1beta by default. /decisions is appended unless the URL already ends with it.",
+      "model": "Gemini Decisions model ID, such as gemini-decision-1."
+    },
     "openaiDecisionHints": {
       "apiBase": "OpenAI API base URL, https://api.openai.com/v1 by default. /decisions is appended unless the URL already ends with it.",
       "model": "OpenAI Decisions currently supports gpt-6-luna."
