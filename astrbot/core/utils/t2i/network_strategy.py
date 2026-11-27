@@ -186,6 +186,11 @@ class NetworkRenderStrategy(RenderStrategy):
         if endpoint:
             endpoints = [self._clean_url(endpoint)]
         else:
+            if self._endpoints_task is not None and not self._endpoints_task.done():
+                try:
+                    await asyncio.shield(self._endpoints_task)
+                except Exception:
+                    pass
             endpoints = (
                 self.endpoints.copy() if self.endpoints else [self.BASE_RENDER_URL]
             )

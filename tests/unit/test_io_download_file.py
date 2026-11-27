@@ -157,6 +157,8 @@ class _RecordingImageSession:
     [
         (502, "text/html", b"bad gateway"),
         (200, "application/json", b'{"error": "render failed"}'),
+        (200, "application/xml", b"<error>failed</error>"),
+        (200, "application/problem+json", b'{"title": "render error"}'),
         (200, "image/jpeg", b""),
     ],
 )
@@ -190,7 +192,7 @@ async def test_download_image_by_url_rejects_error_or_empty_responses(
 
 
 @pytest.mark.asyncio
-async def test_download_image_by_url_ssl_fallback_keeps_trust_env_and_timeout(
+async def test_download_image_by_url_ssl_fallback_does_not_trust_env_and_keeps_timeout(
     monkeypatch, tmp_path
 ):
     class FakeSSLError(Exception):
@@ -220,7 +222,8 @@ async def test_download_image_by_url_ssl_fallback_keeps_trust_env_and_timeout(
     assert result == str(target_path)
     assert target_path.read_bytes() == b"jpeg-bytes"
     assert len(recorded) == 2
-    assert recorded[1]["session_kwargs"].get("trust_env") is True
+    assert recorded[0]["session_kwargs"].get("trust_env") is True
+    assert "trust_env" not in recorded[1]["session_kwargs"]
     assert recorded[1]["request_kwargs"]["timeout"].total == 18
 
 
@@ -228,7 +231,7 @@ async def test_download_image_by_url_ssl_fallback_keeps_trust_env_and_timeout(
 async def test_network_render_strategy_fails_over_on_http_error(monkeypatch, tmp_path):
     from astrbot.core.utils.t2i import network_strategy
 
-    recorded_urls: list[str] = []
+    recorded_calls: list[dict] = []
     responses: list[_FakeImageResponse | Exception] = [
         _FakeImageResponse(status=502, body=b"bad gateway", content_type="text/plain"),
         _FakeImageResponse(status=200, body=b"valid-img", content_type="image/jpeg"),
@@ -239,18 +242,10 @@ async def test_network_render_strategy_fails_over_on_http_error(monkeypatch, tmp
         "ClientSession",
         lambda **kwargs: _RecordingImageSession(
             responses,
-            [],
+            recorded_calls,
             kwargs,
         ),
     )
-
-    orig_fetch = io._fetch_image_bytes
-
-    async def recording_fetch(session, url, **kwargs):
-        recorded_urls.append(url)
-        return await orig_fetch(session, url, **kwargs)
-
-    monkeypatch.setattr(io, "_fetch_image_bytes", recording_fetch)
     monkeypatch.setattr(
         io, "save_temp_img", lambda data: str(tmp_path / f"img_{len(data)}.jpg")
     )
@@ -263,7 +258,70 @@ async def test_network_render_strategy_fails_over_on_http_error(monkeypatch, tmp
         "{{ text }}", {"text": "hi"}, return_url=False
     )
     assert out == str(tmp_path / f"img_{len(b'valid-img')}.jpg")
-    assert recorded_urls == [
+    assert [call["url"] for call in recorded_calls] == [
         "https://bad.t2i/text2img/generate",
         "https://good.t2i/text2img/generate",
     ]
+
+
+@pytest.mark.asyncio
+async def test_network_render_strategy_awaits_endpoint_discovery_on_startup(
+    monkeypatch,
+):
+    import asyncio
+
+    from astrbot.core.utils.t2i import network_strategy
+
+    discovery_started = asyncio.Event()
+    allow_discovery = asyncio.Event()
+
+    async def slow_discovery():
+        discovery_started.set()
+        await allow_discovery.wait()
+        strategy.endpoints = ["https://discovered.t2i/text2img"]
+
+    class _FakePostResponse:
+        status = 200
+
+        async def json(self):
+            return {"data": {"id": "img-1"}}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    posted_urls: list[str] = []
+
+    class _FakePostSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url: str, **_kwargs):
+            posted_urls.append(url)
+            return _FakePostResponse()
+
+    monkeypatch.setattr(network_strategy, "build_tls_connector", lambda: object())
+    monkeypatch.setattr(
+        network_strategy.aiohttp, "ClientSession", lambda **_kwargs: _FakePostSession()
+    )
+
+    strategy = network_strategy.NetworkRenderStrategy()
+    strategy.get_official_endpoints = slow_discovery  # type: ignore[method-assign]
+    await strategy.initialize()
+    await asyncio.wait_for(discovery_started.wait(), timeout=1.0)
+
+    render_task = asyncio.create_task(
+        strategy.render_custom_template("{{ text }}", {"text": "hi"}, return_url=True)
+    )
+    await asyncio.sleep(0)
+    assert posted_urls == []
+
+    allow_discovery.set()
+    result_url = await asyncio.wait_for(render_task, timeout=1.0)
+    assert result_url == "https://discovered.t2i/text2img/img-1"
+    assert posted_urls == ["https://discovered.t2i/text2img/generate"]
