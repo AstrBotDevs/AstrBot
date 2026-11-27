@@ -728,8 +728,18 @@ class SkillManager:
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def is_sandbox_only_skill(self, name: str) -> bool:
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or name == ".."
+            or any(ch in name for ch in ("/", "\\", "\x00"))
+            or Path(name).parts != (name,)
+        ):
+            return False
         skill_dir = Path(self.skills_root) / name
-        skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
+        skill_md_exists = (
+            _normalize_skill_markdown_path(skill_dir, rename_legacy=False) is not None
+        )
         if skill_md_exists:
             return False
         cache = self._load_sandbox_skills_cache()
@@ -747,6 +757,8 @@ class SkillManager:
         return self._get_plugin_skill_dir(name) is not None
 
     def set_skill_active(self, name: str, active: bool) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Invalid skill name.")
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
                 "Sandbox preset skill cannot be enabled/disabled from local skill management."
@@ -775,6 +787,20 @@ class SkillManager:
             self._save_sandbox_skills_cache(cache)
 
     def delete_skill(self, name: str) -> None:
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or name == ".."
+            or any(ch in name for ch in ("/", "\\", "\x00"))
+            or Path(name).parts != (name,)
+        ):
+            raise ValueError(f"Invalid skill name: {name!r}")
+
+        skills_root = Path(self.skills_root).resolve(strict=False)
+        skill_dir = skills_root / name
+        if skill_dir.parent != skills_root:
+            raise ValueError(f"Invalid skill path: {name!r}")
+
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
                 "Sandbox preset skill cannot be deleted from local skill management."
@@ -784,7 +810,6 @@ class SkillManager:
                 "Plugin-provided skill cannot be deleted from local skill management."
             )
 
-        skill_dir = Path(self.skills_root) / name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
 
@@ -832,8 +857,9 @@ class SkillManager:
             archive_skill_name = None
             if skill_name_hint is not None:
                 archive_skill_name = _normalize_skill_name(skill_name_hint)
-                if archive_skill_name and not _SKILL_NAME_RE.fullmatch(
-                    archive_skill_name
+                if archive_skill_name and (
+                    archive_skill_name in {".", ".."}
+                    or not _SKILL_NAME_RE.fullmatch(archive_skill_name)
                 ):
                     raise ValueError("Invalid skill name.")
 
@@ -857,8 +883,10 @@ class SkillManager:
                         continue
 
                     candidate_name = _normalize_skill_name(src_dir_name)
-                    if not candidate_name or not _SKILL_NAME_RE.fullmatch(
-                        candidate_name
+                    if (
+                        not candidate_name
+                        or candidate_name in {".", ".."}
+                        or not _SKILL_NAME_RE.fullmatch(candidate_name)
                     ):
                         continue
 
@@ -889,7 +917,11 @@ class SkillManager:
                     archive_hint = _normalize_skill_name(
                         archive_skill_name or zip_path_obj.stem
                     )
-                    if not archive_hint or not _SKILL_NAME_RE.fullmatch(archive_hint):
+                    if (
+                        not archive_hint
+                        or archive_hint in {".", ".."}
+                        or not _SKILL_NAME_RE.fullmatch(archive_hint)
+                    ):
                         raise ValueError("Invalid skill name.")
                     skill_name = archive_hint
 
@@ -926,15 +958,17 @@ class SkillManager:
                         ):
                             continue
 
-                        if archive_root_name in {".", "..", ""} or not (
-                            _SKILL_NAME_RE.fullmatch(archive_root_name_normalized)
-                        ):
-                            continue
-
                         if archive_skill_name and len(top_dirs) == 1:
                             skill_name = archive_skill_name
                         else:
                             skill_name = archive_root_name_normalized
+
+                        if skill_name in {
+                            ".",
+                            "..",
+                            "",
+                        } or not _SKILL_NAME_RE.fullmatch(skill_name):
+                            continue
 
                         src_dir = Path(tmp_dir) / archive_root_name
                         normalized_path = _normalize_skill_markdown_path(src_dir)

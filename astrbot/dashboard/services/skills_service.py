@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import traceback
+import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,7 +107,7 @@ class SkillsService:
         skill_name = str(name or "").strip()
         if not skill_name:
             raise ValueError("Missing skill name")
-        if not _SKILL_NAME_RE.match(skill_name):
+        if skill_name in {".", ".."} or not _SKILL_NAME_RE.match(skill_name):
             raise ValueError("Invalid skill name")
 
         skill_mgr = SkillManager()
@@ -124,7 +124,9 @@ class SkillsService:
         skill_dir = (skills_root / skill_name).resolve(strict=True)
         if not skill_dir.is_relative_to(skills_root):
             raise PermissionError("Invalid skill path")
-        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+        if not skill_dir.is_dir() or not (
+            (skill_dir / "SKILL.md").exists() or (skill_dir / "skill.md").exists()
+        ):
             raise FileNotFoundError("Local skill not found")
         return skill_dir
 
@@ -437,7 +439,7 @@ class SkillsService:
         skill_name = str(name or "").strip()
         if not skill_name:
             raise SkillsServiceError("Missing skill name")
-        if not _SKILL_NAME_RE.match(skill_name):
+        if skill_name in {".", ".."} or not _SKILL_NAME_RE.match(skill_name):
             raise SkillsServiceError("Invalid skill name")
 
         skill_mgr = SkillManager()
@@ -450,28 +452,30 @@ class SkillsService:
                 "Plugin-provided skill cannot be downloaded from local skill files."
             )
 
-        skill_dir = Path(skill_mgr.skills_root) / skill_name
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_dir.is_dir() or not skill_md.exists():
+        skills_root = Path(skill_mgr.skills_root).resolve(strict=False)
+        skill_dir = (skills_root / skill_name).resolve(strict=False)
+        if skill_dir == skills_root or not skill_dir.is_relative_to(skills_root):
+            raise SkillsServiceError("Invalid skill path")
+        if not skill_dir.is_dir() or not (
+            (skill_dir / "SKILL.md").exists() or (skill_dir / "skill.md").exists()
+        ):
             raise SkillsServiceError("Local skill not found", status_code=404)
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
-        zip_base = export_dir / skill_name
-        # with_suffix(".zip") replaces only the last suffix (e.g. ".0" in
-        # "skill-writing-1.0.0"), producing "skill-writing-1.0.zip" —
-        # which mismatches shutil.make_archive's "skill-writing-1.0.0.zip".
-        # Append ".zip" to the full name instead.
-        zip_path = zip_base.with_name(zip_base.name + ".zip")
+        zip_path = export_dir / f"{skill_name}.zip"
         if zip_path.exists():
             zip_path.unlink()
 
-        shutil.make_archive(
-            str(zip_base),
-            "zip",
-            root_dir=str(skill_mgr.skills_root),
-            base_dir=skill_name,
-        )
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(skill_dir.rglob("*")):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                resolved = path.resolve(strict=False)
+                if not resolved.is_relative_to(skill_dir):
+                    continue
+                arcname = (Path(skill_name) / path.relative_to(skill_dir)).as_posix()
+                zf.write(resolved, arcname)
         return SkillArchive(path=zip_path, filename=f"{skill_name}.zip")
 
     def prepare_skill_archive_from_dashboard_query(
@@ -602,7 +606,7 @@ class SkillsService:
         payload = self._payload(data)
         name = payload.get("name")
         active = payload.get("active", True)
-        if not name:
+        if not isinstance(name, str) or not name.strip():
             raise SkillsServiceError("Missing skill name")
         SkillManager().set_skill_active(name, bool(active))
         return {"name": name, "active": bool(active)}
@@ -611,9 +615,12 @@ class SkillsService:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         name = payload.get("name")
-        if not name:
+        if not isinstance(name, str) or not name.strip():
             raise SkillsServiceError("Missing skill name")
-        SkillManager().delete_skill(name)
+        try:
+            SkillManager().delete_skill(name)
+        except ValueError as exc:
+            raise SkillsServiceError(str(exc)) from exc
         try:
             await sync_skills_to_active_sandboxes()
         except Exception:
