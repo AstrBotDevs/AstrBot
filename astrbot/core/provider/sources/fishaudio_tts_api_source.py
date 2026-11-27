@@ -71,13 +71,23 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             Literal["wav", "mp3"], raw_format
         )
         raw_bitrate = provider_config.get("fishaudio-tts-mp3-bitrate", 128)
-        try:
-            bitrate = int(raw_bitrate)
-        except (TypeError, ValueError):
+        if raw_bitrate is None or (
+            isinstance(raw_bitrate, str) and not raw_bitrate.strip()
+        ):
+            bitrate = 128
+        elif isinstance(raw_bitrate, bool):
             logger.warning(
                 f"[FishAudio TTS] 无效的 MP3 码率 '{raw_bitrate}'，已回退为 128"
             )
             bitrate = 128
+        else:
+            try:
+                bitrate = int(raw_bitrate)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"[FishAudio TTS] 无效的 MP3 码率 '{raw_bitrate}'，已回退为 128"
+                )
+                bitrate = 128
         if bitrate not in SUPPORTED_MP3_BITRATES:
             logger.warning(
                 f"[FishAudio TTS] 不支持的 MP3 码率 '{bitrate}'，已回退为 128"

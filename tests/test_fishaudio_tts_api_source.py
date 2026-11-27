@@ -1,7 +1,9 @@
 """Unit tests for FishAudio TTS audio format and MP3 bitrate options."""
 
+import logging
 import os
-from unittest.mock import AsyncMock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 import ormsgpack
 import pytest
@@ -104,7 +106,7 @@ async def test_fishaudio_tts_supports_mp3_and_bitrate_string_or_int(tmp_path, mo
 
     assert audio_path.endswith(".mp3")
     assert os.path.isfile(audio_path)
-    assert open(audio_path, "rb").read() == b"ID3fake-mp3-bytes"
+    assert Path(audio_path).read_bytes() == b"ID3fake-mp3-bytes"
     assert captured["payload"]["format"] == "mp3"
     assert captured["payload"]["mp3_bitrate"] == 192
     assert captured["payload"]["reference_id"] == VALID_REF_ID
@@ -124,6 +126,23 @@ async def test_fishaudio_tts_invalid_format_and_bitrate_fall_back_safely():
     req = await provider._generate_request("fallback check")
     assert req.format == "wav"
     assert req.mp3_bitrate == 128
+
+
+def test_fishaudio_tts_empty_bitrate_defaults_silently_and_bool_falls_back(caplog):
+    with caplog.at_level(logging.WARNING, logger="astrbot"):
+        p_empty = _make_provider({"fishaudio-tts-mp3-bitrate": ""})
+        p_none = _make_provider({"fishaudio-tts-mp3-bitrate": None})
+        p_ws = _make_provider({"fishaudio-tts-mp3-bitrate": "   "})
+    assert p_empty.mp3_bitrate == 128
+    assert p_none.mp3_bitrate == 128
+    assert p_ws.mp3_bitrate == 128
+    assert not any("码率" in r.message for r in caplog.records)
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="astrbot"):
+        p_bool = _make_provider({"fishaudio-tts-mp3-bitrate": True})
+    assert p_bool.mp3_bitrate == 128
+    assert any("码率" in r.message for r in caplog.records)
 
 
 def test_fishaudio_tts_schema_exposes_format_and_bitrate_with_compat_defaults():
