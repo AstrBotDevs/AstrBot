@@ -5,6 +5,7 @@ import os
 import shlex
 import uuid
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -99,7 +100,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             },
                             "text": {
                                 "type": "string",
-                                "description": "Text content for `plain` type.",
+                                "description": "Message text for `plain`, or an optional caption sent as plain text before a `file`. The attachment keeps its filename.",
                             },
                             "path": {
                                 "type": "string",
@@ -276,18 +277,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 elif msg_type == "file":
                     path = msg.get("path")
                     url = msg.get("url")
-                    name = (
-                        msg.get("text")
-                        or (_remote_basename(path) if path else "")
-                        or (os.path.basename(url) if url else "")
-                        or "file"
-                    )
+                    if caption := (msg.get("text") or "").strip():
+                        components.append(Comp.Plain(text=caption))
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
                             context, path, component_type="file"
                         )
+                        name = _remote_basename(path) or "file"
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
+                        name = os.path.basename(unquote(urlsplit(url).path)) or "file"
                         components.append(Comp.File(name=name, url=url))
                     else:
                         return f"error: messages[{idx}] must include path or url for file component."

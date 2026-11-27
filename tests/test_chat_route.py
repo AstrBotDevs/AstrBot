@@ -635,8 +635,8 @@ async def test_completed_chat_stream_preserves_pending_output(
             "plain",
             "plain",
             "agent_stats",
-            "end",
             "message_saved",
+            "end",
         ]
         assert json.loads(received[1]["data"])["result"] == "Found"
         assert received[2]["data"] == "Final reply"
@@ -689,11 +689,10 @@ async def test_error_cards_survive_stream_completion_and_history(
             {"type": "error", **error},
         ]
         assert run.message_parts == expected
-        assert [
-            part
-            for call in service.save_bot_message.await_args_list
-            for part in call.args[1]
-        ] == expected
+        # A turn is one record: later saves update it with everything so far.
+        calls = service.save_bot_message.await_args_list
+        assert calls[-1].args[1] == expected
+        assert all(call.kwargs.get("record") is not None for call in calls[1:])
         assert [frame["data"] for frame in frames if frame["type"] == "error"] == [
             error
         ]
@@ -733,9 +732,7 @@ async def test_native_web_search_sources_persist_and_emit_refs(chat_service_inst
         )
         await WebChatMessageEvent._send(
             run.run_id,
-            MessageChain(
-                chain=[Json({"sources": sources})], type="web_search_sources"
-            ),
+            MessageChain(chain=[Json({"sources": sources})], type="web_search_sources"),
             session_id,
             streaming=False,
         )
@@ -750,8 +747,8 @@ async def test_native_web_search_sources_persist_and_emit_refs(chat_service_inst
         assert run.message_parts == [{"type": "plain", "text": "Grounded answer"}]
         assert service.save_bot_message.await_args.args[3] == {"used": sources}
         saved_events = [frame for frame in frames if frame["type"] == "message_saved"]
-        assert len(saved_events) == 1
-        assert saved_events[0]["data"]["refs"] == {"used": sources}
+        assert saved_events
+        assert all(event["data"]["refs"] == {"used": sources} for event in saved_events)
     finally:
         await stream.aclose()
         if run.task and not run.task.done():

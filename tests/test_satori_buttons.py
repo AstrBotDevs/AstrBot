@@ -6,6 +6,7 @@ from astrbot.api.message_components import (
     ActionRow,
     Button,
     ButtonInteraction,
+    File,
 )
 from astrbot.core.platform.button_interaction import decode_button_callback
 from astrbot.core.platform.sources.satori.satori_adapter import (
@@ -125,3 +126,19 @@ async def test_satori_dispatches_button_interaction(monkeypatch):
 
     assert len(dispatched) == 1
     assert dispatched[0].is_button_interaction()
+
+
+@pytest.mark.asyncio
+async def test_satori_escapes_file_attributes(tmp_path):
+    file_path = tmp_path / "x&y.html"
+    file_path.write_text("report")
+    rendered = await SatoriPlatformEvent._convert_component_to_satori_static(
+        File(name='a"/><at id="all"/><file name="b.html', file=str(file_path))
+    )
+
+    escaped_src = str(file_path).replace("&", "&amp;")
+    assert rendered == (
+        f'<file src="{escaped_src}" '
+        'name="a&quot;/&gt;&lt;at id=&quot;all&quot;/&gt;'
+        '&lt;file name=&quot;b.html"/>'
+    )

@@ -533,6 +533,55 @@ def test_database_pages_filters_details_and_restart(persisted, capture):
         restarted.close()
 
 
+def test_trace_reads_use_indexed_state_and_flags(persisted, capture):
+    """Keep summary and detail consistent with indexed filter columns.
+
+    Args:
+        persisted: Isolated trace database.
+        capture: In-memory trace frames.
+    """
+    trace = TraceSpan("message")
+    trace.record("event_received")
+    trace.record("pipeline_end", status="success")
+    nonmatching = []
+    for _ in range(3):
+        other = TraceSpan("message")
+        other.record("event_received")
+        other.record("pipeline_end", status="success")
+        nonmatching.append(other)
+
+    for frame in capture:
+        assert persisted.append(frame)
+    assert persisted.flush()
+
+    # Simulate indexed updates without updating the JSON snapshots.
+    with sqlite3.connect(persisted.path) as connection:
+        connection.execute(
+            "UPDATE traces SET state='interrupted', has_errors=1, "
+            "has_models=1, has_plugins=1 WHERE trace_id=?",
+            (trace.trace_id,),
+        )
+        # Each decoy is missing one predicate. Ignoring any filter must fail.
+        for other, flags in zip(nonmatching, ((0, 1, 1), (1, 0, 1), (1, 1, 0))):
+            connection.execute(
+                "UPDATE traces SET has_errors=?, has_models=?, has_plugins=? "
+                "WHERE trace_id=?",
+                (*flags, other.trace_id),
+            )
+
+    assert persisted.list_traces()["total"] == 4
+    listing = persisted.list_traces(errors=True, models=True, plugins=True)
+    assert listing["total"] == 1
+    assert [item["trace_id"] for item in listing["traces"]] == [trace.trace_id]
+    summary = listing["traces"][0]
+    detail = persisted.get_trace(trace.trace_id)["trace"]
+    for result in (summary, detail):
+        assert result["state"] == "interrupted"
+        assert result["has_errors"] is True
+        assert result["has_models"] is True
+        assert result["has_plugins"] is True
+
+
 # Keep node IDs below Windows' PYTEST_CURRENT_TEST environment variable limit.
 @pytest.mark.parametrize(
     "prompt",

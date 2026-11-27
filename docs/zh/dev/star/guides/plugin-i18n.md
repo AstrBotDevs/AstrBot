@@ -4,12 +4,12 @@
 
 ## 消息回复语言
 
-插件可通过 `self.context.locale(event.unified_msg_origin)` 获取当前会话的系统语言，返回 `zh-CN` 或 `en-US`。此接口读取会话实际生效的配置，包括配置文件路由、会话覆盖和当前消息的配置快照。不传 UMO 时，`self.context.locale()` 返回默认配置文件的语言。
+插件可通过 `await self.context.get_locale(event.unified_msg_origin)` 获取当前会话的系统语言，返回 `zh-CN` 或 `en-US`。原先的 `self.context.locale(...)` 改为异步调用。此接口读取会话实际生效的配置，包括配置文件路由、会话覆盖和当前消息的配置快照。省略 UMO 时使用当前消息的会话，没有当前消息时使用默认配置。
 
 用户在 **平台与消息 → 基本 → 系统语言** 中设置 `platform_settings.locale`。缺失或不支持的语言值回退到 `zh-CN`；此项独立于 WebUI 界面语言。运行时翻译资源和格式化逻辑由插件自己维护，Core 仅提供语言查询接口。内置插件的示例可参考各自目录下的 `i18n.py`。插件需要自行提供回复翻译，例如：
 
 ```python
-locale = self.context.locale(event.unified_msg_origin)
+locale = await self.context.get_locale(event.unified_msg_origin)
 text = "操作成功。" if locale == "zh-CN" else "Operation successful."
 yield event.plain_result(text)
 ```

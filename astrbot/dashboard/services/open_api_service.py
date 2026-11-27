@@ -46,7 +46,7 @@ class OpenApiWebSocketChatBridge:
     create_attachment_from_file: Callable[[str, str], Awaitable[Any]]
     extract_web_search_refs: Callable[[str, list], dict]
     insert_user_message: Callable[[str, str, list], Awaitable[None]]
-    save_bot_message: Callable[[str, list, dict, dict], Awaitable[Any]]
+    save_bot_message: Callable[..., Awaitable[Any]]
 
 
 class OpenApiService:
@@ -418,6 +418,55 @@ class OpenApiService:
         selected_model = post_data.get("selected_model")
         flags = resolve_webchat_request_flags(post_data)
 
+        message_accumulator = BotMessageAccumulator()
+        agent_stats = {}
+        refs = {}
+        pending_refs: dict[str, Any] = {}
+        finalized = False
+        stream_error: Exception | None = None
+
+        async def save_reply(*, final: bool):
+            """Save received output to the turn's existing history record.
+
+            Args:
+                final: Whether to mark unanswered tool calls as interrupted.
+
+            Returns:
+                The saved history record, or None if there was no output.
+            """
+            nonlocal refs
+            if not (
+                message_accumulator.has_content() or refs or pending_refs or agent_stats
+            ):
+                return None
+            parts = message_accumulator.build_message_parts(final=final)
+            extracted_refs: dict[str, Any] = {}
+            try:
+                extracted_refs = chat_bridge.extract_web_search_refs(
+                    collect_plain_text_from_message_parts(parts), parts
+                )
+            except Exception as exc:
+                logger.exception(
+                    f"Open API WS failed to extract web search refs: {exc}"
+                )
+            if pending_refs:
+                merged = list(extracted_refs.get("used", []))
+                seen_urls = {ref["url"] for ref in merged}
+                merged.extend(
+                    ref for ref in pending_refs["used"] if ref["url"] not in seen_urls
+                )
+                extracted_refs = {"used": merged}
+            refs = extracted_refs
+            record = await chat_bridge.save_bot_message(
+                session_id,
+                parts,
+                agent_stats,
+                refs,
+                record=message_accumulator.record,
+            )
+            message_accumulator.record = record
+            return record
+
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
         try:
             chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
@@ -452,9 +501,6 @@ class OpenApiService:
                 }
             )
 
-            message_accumulator = BotMessageAccumulator()
-            agent_stats = {}
-            refs = {}
             while True:
                 try:
                     result = await asyncio.wait_for(back_queue.get(), timeout=1)
@@ -475,36 +521,31 @@ class OpenApiService:
 
                 if chain_type == "agent_stats":
                     try:
-                        stats_info = {
-                            "type": "agent_stats",
-                            "data": json.loads(result_text),
-                        }
-                        await send_json(stats_info)
-                        agent_stats = stats_info["data"]
-                    except Exception:
-                        pass
+                        agent_stats = json.loads(result_text)
+                    except (TypeError, ValueError):
+                        continue
+                    await send_json({"type": "agent_stats", "data": agent_stats})
                     continue
 
                 if chain_type == "web_search_sources":
                     sources = json.loads(result_text)["sources"]
                     if sources:
-                        used = list(refs.get("used", []))
+                        used = list(pending_refs.get("used", []))
                         seen_urls = {ref["url"] for ref in used}
                         for src in sources:
                             if src["url"] not in seen_urls:
                                 seen_urls.add(src["url"])
                                 used.append({**src, "index": str(len(used) + 1)})
-                        refs = {"used": used}
+                        pending_refs = {"used": used}
                     continue
-
-                await send_json(result)
-
                 if msg_type == "plain":
-                    message_accumulator.add_plain(
+                    outgoing_text = message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
                         streaming=streaming,
                     )
+                    if outgoing_text != result_text:
+                        result = {**result, "data": outgoing_text}
                 elif msg_type == "error":
                     error = (
                         result_text
@@ -519,74 +560,49 @@ class OpenApiService:
                         msg_type,
                     )
                     message_accumulator.add_part(part)
+                elif msg_type == "follow_up_captured" and isinstance(result_text, dict):
+                    result_text.pop("_target_turn_id", None)
 
-                should_save = False
-                if msg_type == "end":
-                    should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
+                final = msg_type == "end"
+                if not final:
+                    await send_json(result)
+                saved_record = None
+                if final or (
+                    (msg_type == "complete" or not streaming)
+                    and chain_type not in ("tool_call", "tool_call_result")
+                ):
+                    saved_record = await save_reply(final=final)
+                if final:
+                    finalized = True
+                    await send_json(result)
+                if saved_record:
+                    await send_json(
+                        {
+                            "type": "message_saved",
+                            "data": {
+                                "id": saved_record.id,
+                                "created_at": to_utc_isoformat(saved_record.created_at),
+                            },
+                            "session_id": session_id,
+                        }
                     )
-                elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in ("tool_call", "tool_call_result"):
-                        should_save = True
-
-                if should_save:
-                    message_parts_to_save = message_accumulator.build_message_parts(
-                        include_pending_tool_calls=True
-                    )
-                    plain_text = collect_plain_text_from_message_parts(
-                        message_parts_to_save
-                    )
-                    pending_refs = refs
-                    try:
-                        refs = chat_bridge.extract_web_search_refs(
-                            plain_text,
-                            message_parts_to_save,
-                        )
-                    except Exception as exc:
-                        logger.exception(
-                            f"Open API WS failed to extract web search refs: {exc}",
-                            exc_info=True,
-                        )
-                        refs = {}
-                    if pending_refs:
-                        merged = list(refs.get("used", []))
-                        seen_urls = {ref["url"] for ref in merged}
-                        merged.extend(
-                            ref
-                            for ref in pending_refs["used"]
-                            if ref["url"] not in seen_urls
-                        )
-                        refs = {"used": merged}
-
-                    saved_record = await chat_bridge.save_bot_message(
-                        session_id,
-                        message_parts_to_save,
-                        agent_stats,
-                        refs,
-                    )
-                    if saved_record:
-                        await send_json(
-                            {
-                                "type": "message_saved",
-                                "data": {
-                                    "id": saved_record.id,
-                                    "created_at": to_utc_isoformat(
-                                        saved_record.created_at
-                                    ),
-                                },
-                                "session_id": session_id,
-                            }
-                        )
-                    message_accumulator = BotMessageAccumulator()
-                    agent_stats = {}
-                    refs = {}
-                if msg_type == "end":
+                if final:
                     break
         except Exception as exc:
             logger.exception(f"Open API WS chat failed: {exc}", exc_info=True)
-            await send_error(f"Failed to process message: {exc}", "PROCESSING_ERROR")
+            stream_error = exc
         finally:
-            webchat_queue_mgr.remove_back_queue(message_id)
+            try:
+                if not finalized:
+                    await save_reply(final=True)
+            except Exception as exc:
+                logger.exception(f"Failed to finalize Open API WS history: {exc}")
+            finally:
+                webchat_queue_mgr.remove_back_queue(message_id)
+        if stream_error is not None:
+            await send_error(
+                f"Failed to process message: {stream_error}", "PROCESSING_ERROR"
+            )
 
     async def get_chat_sessions(
         self,

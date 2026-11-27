@@ -63,7 +63,8 @@
     "avgTtft": "Average TTFT",
     "avgDuration": "Average Response Time",
     "avgTpm": "Average Output TPM",
-    "successRate": "Success Rate"
+    "successRate": "Success Rate",
+    "avgCacheHitRate": "Average Cache Hit Rate"
   },
   "modelRanking": {
     "title": "Model Usage Ranking"

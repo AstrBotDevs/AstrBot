@@ -51,7 +51,9 @@ async def test_gemini_thinking_level_is_serialized_on_every_request():
         ("gemini-3.8-flash", {"gm_thinking_config": {"level": "MINIMAL"}}),
     ],
 )
-async def test_gemini_omits_unset_or_unsupported_thinking_config(model, provider_config):
+async def test_gemini_omits_unset_or_unsupported_thinking_config(
+    model, provider_config
+):
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
     provider.provider_config = provider_config
     provider.provider_settings = {}
@@ -207,23 +209,24 @@ def test_gemini_reasoning_only_output_is_allowed():
     )
 
 
-def test_gemini_extract_usage_excludes_cached_tokens_from_input_other():
+def test_gemini_extract_usage_counts_thoughts_and_tool_input_without_double_counting_cache():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
     usage_metadata = SimpleNamespace(
         prompt_token_count=100,
         cached_content_token_count=30,
         candidates_token_count=50,
+        thoughts_token_count=8,
+        tool_use_prompt_token_count=2,
     )
 
     usage = provider._extract_usage(usage_metadata)
 
-    # prompt_token_count already includes cached tokens; input_other must
-    # exclude them so input (input_other + input_cached) is not inflated.
-    assert usage.input_other == 70
+    # Prompt tokens include cache reads; tool prompts are reported separately.
+    assert usage.input_other == 72
     assert usage.input_cached == 30
-    assert usage.input == 100
-    assert usage.output == 50
+    assert usage.input == 102
+    assert usage.output == 58
 
 
 def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
@@ -331,14 +334,12 @@ async def _drain_gemini_stream(provider, monkeypatch, chunks):
         for chunk in chunks:
             yield chunk
 
-    async def fake_retry(
-        provider_name,
-        request_factory,
-        max_attempts=None,
-    ):
+    async def generate_content_stream(**kwargs):
         return fake_stream()
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models, "generate_content_stream", generate_content_stream
+    )
     return [
         response
         async for response in provider._query_stream(
@@ -403,10 +404,12 @@ async def test_gemini_stream_keeps_conversation_header_until_consumed(
         observed_headers.append(headers.get("x-astrbot-conversation-id"))
         yield _gemini_stream_chunk(text="ok")
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def generate_content_stream(**kwargs):
         return fake_stream()
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models, "generate_content_stream", generate_content_stream
+    )
     responses = [
         response
         async for response in provider._query_stream(
@@ -492,10 +495,15 @@ async def test_gemini_query_extracts_grounding_and_url_context_sources(monkeypat
         response_id="resp-grounding",
     )
 
-    async def fake_retry(provider_name, request_factory, max_attempts=None):
+    async def generate_content(**kwargs):
         return response
 
-    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+    monkeypatch.setattr(
+        provider.client.models,
+        "generate_content",
+        generate_content,
+        raising=False,
+    )
     llm_response = await provider._query(
         payloads={
             "messages": [{"role": "user", "content": "check AstrBot docs"}],

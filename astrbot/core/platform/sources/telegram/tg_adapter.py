@@ -37,7 +37,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import (
     BUTTON_ACTION_EXPIRED_MESSAGE,
     ButtonActionExpiredError,
-    decode_button_callback,
+    decode_button_callback_async,
 )
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -482,7 +482,7 @@ class TelegramPlatformAdapter(Platform):
         data = None
         try:
             if isinstance(query.data, str):
-                action_id, data = decode_button_callback(query.data)
+                action_id, data = await decode_button_callback_async(query.data)
         except ButtonActionExpiredError:
             try:
                 await query.answer(text=BUTTON_ACTION_EXPIRED_MESSAGE, show_alert=True)
