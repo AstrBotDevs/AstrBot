@@ -113,7 +113,8 @@ async def test_direct_plugin_chat_counts_each_attempt_and_keeps_historical_token
 
     stats = await service.get_provider_token_stats(1)
     assert stats["range_total_tokens"] == 27
-    assert stats["range_total_calls"] == 2
+    assert stats["range_total_calls"] == 3
+    assert stats["range_success_rate"] == pytest.approx(2 / 3)
     assert stats["range_unknown_usage_calls"] == 1
     assert stats["range_cache_hit_rate"] == pytest.approx(3 / 20)
     assert stats["range_by_plugin"] == [

@@ -539,26 +539,28 @@ class StatService:
                     range_total_tokens += token_total
                     range_input_tokens += input_tokens
                     range_cached_input_tokens += cached_input
+                    range_total_calls += 1
                     if record.is_request:
-                        range_total_calls += 1
                         if record.plugin_id:
                             total_by_plugin[record.plugin_id] += token_total
                             calls_by_plugin[record.plugin_id] += 1
                         if record.token_input_other is None:
                             range_unknown_usage_calls += 1
-                        if record.status == "completed":
-                            range_success_calls += 1
-                        if record.time_to_first_token is not None:
-                            range_ttft_total_ms += record.time_to_first_token * 1000
-                            range_ttft_samples += 1
-                        if record.duration > 0:
-                            range_duration_total_ms += record.duration * 1000
-                            range_duration_samples += 1
-                            range_total_output_tokens += record.token_output or 0
+                    # Historical turn statistics counted every status except error.
+                    if record.status == "completed" or (
+                        not record.is_request and record.status != "error"
+                    ):
+                        range_success_calls += 1
+                    if (record.time_to_first_token or 0) > 0:
+                        range_ttft_total_ms += record.time_to_first_token * 1000
+                        range_ttft_samples += 1
+                    if record.duration > 0:
+                        range_duration_total_ms += record.duration * 1000
+                        range_duration_samples += 1
+                        range_total_output_tokens += record.token_output or 0
 
                 if created_at_local >= today_start_local:
-                    if record.is_request:
-                        today_total_calls += 1
+                    today_total_calls += 1
                     today_total_tokens += token_total
                     today_by_model[provider_model] += token_total
                     today_by_provider[provider_id] += token_total

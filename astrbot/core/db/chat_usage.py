@@ -1,12 +1,12 @@
 """Read historical turn totals alongside the request-level chat ledger."""
 
 from sqlalchemy import literal, union_all
-from sqlmodel import select
+from sqlmodel import func, select
 
 from .po import ChatRequestStat, ProviderStat
 
 # Native turns stopped writing ProviderStat when the request ledger was added.
-# Historical rows provide tokens, but do not represent individual requests.
+# Historical rows retain their original per-turn measurements.
 chat_usage = union_all(
     select(
         ChatRequestStat.created_at,
@@ -34,8 +34,8 @@ chat_usage = union_all(
         ProviderStat.token_input_cached,
         ProviderStat.token_output,
         ProviderStat.status,
-        literal(None).label("duration"),
-        literal(None).label("time_to_first_token"),
+        (ProviderStat.end_time - ProviderStat.start_time).label("duration"),
+        func.nullif(ProviderStat.time_to_first_token, 0).label("time_to_first_token"),
         literal(False).label("is_request"),
     ).where(ProviderStat.agent_type == "internal"),
 ).subquery("chat_usage")
