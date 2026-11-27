@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from astrbot.core import logger
 from astrbot.core.agent.message import TextPart
-from astrbot.core.message.components import File, Reply
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.mention_render import supplement_mention_display
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -170,6 +170,49 @@ async def _apply_file_extract(
                 ),
             },
         )
+
+
+_NON_PLAIN_STEERING_COMPONENTS = (Image, File, Record, Video, Reply)
+
+
+def extract_plain_steering_text(event: AstrMessageEvent) -> str | None:
+    """Return plain steering text when an event needs no media or quote preprocessing.
+
+    Events carrying media attachments, quoted replies, explicit provider requests,
+    side-thread excerpts, or structured tool outputs must run through the full turn
+    pipeline rather than being collapsed into text-only steering.
+
+    Args:
+        event: Incoming platform or programmatic message event.
+
+    Returns:
+        Original message text when safe for plain-text steering, or None when the
+        event requires full turn processing or has no non-empty plain text.
+    """
+    get_extra = getattr(event, "get_extra", None)
+    if callable(get_extra):
+        if get_extra("provider_request") is not None:
+            return None
+        thread_selected_text = get_extra("thread_selected_text")
+        if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+            return None
+    if getattr(event, "tool_result", None) is not None:
+        return None
+
+    message_obj = getattr(event, "message_obj", None)
+    components = getattr(message_obj, "message", None) or ()
+    if any(isinstance(comp, _NON_PLAIN_STEERING_COMPONENTS) for comp in components):
+        return None
+
+    get_message_str = getattr(event, "get_message_str", None)
+    text = (
+        get_message_str()
+        if callable(get_message_str)
+        else getattr(event, "message_str", "")
+    )
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return text
 
 
 def matches_provider_wake_prefix(

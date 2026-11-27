@@ -121,6 +121,15 @@ class InternalAgentSubStage(Stage):
                         follow_up["_target_turn_id"] = target.get_extra("turn_id")
                     event.set_extra("_follow_up_captured", follow_up)
                     return
+                if event.is_stopped() or event.get_extra("agent_stop_requested"):
+                    if is_wakeup:
+                        raise asyncio.CancelledError()
+                    return
+                if (
+                    is_wakeup
+                    and active_event_registry.get_background_stop_signal(event).is_set()
+                ):
+                    raise asyncio.CancelledError()
             if not is_wakeup:
                 try:
                     typing = True

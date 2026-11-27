@@ -19,6 +19,7 @@ from astrbot.core.agent.runtime import (
     TurnResult,
     TurnStatus,
 )
+from astrbot.core.agent_input import extract_plain_steering_text
 from astrbot.core.astr_agent_runtime.main_agent.config import MainAgentBuildConfig
 from astrbot.core.message.mention_render import follow_up_text
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
@@ -316,6 +317,8 @@ class NativeAgentSession(AgentSession):
             text = format_input_content(input.content)
             temp_text = None
         else:
+            if extract_plain_steering_text(input.event) is None:
+                return None
             text, temp_text = follow_up_text(input.event)
         ticket = self._runner.follow_up(message_text=text, temp_text=temp_text)
         if ticket is None:
