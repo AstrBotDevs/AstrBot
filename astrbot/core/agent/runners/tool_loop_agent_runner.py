@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -1563,11 +1564,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         Returns:
             Inline text with overflow references, and images cached for model review.
         """
-        if not result.content:
+        if not result.content and result.structuredContent is None:
             return "The tool returned no content.", []
         cached_images = []
         inline_result = ""
         result_parts: list[str] = []
+        if not result.content:
+            result_parts.append(
+                json.dumps(result.structuredContent, ensure_ascii=False)
+            )
         for index, content_item in enumerate(result.content):
             if isinstance(content_item, TextContent):
                 result_parts.append(content_item.text)
