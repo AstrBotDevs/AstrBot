@@ -319,5 +319,23 @@
     },
     "configureModels": "Configure models",
     "details": "View details"
+  },
+  "messageActions": {
+    "edit": {
+      "title": "Edit",
+      "description": "Once saved, this is sent as your latest message and the chat continues from here."
+    },
+    "retry": {
+      "title": "Regenerate",
+      "description": "Regenerate this reply, optionally with another model."
+    },
+    "copy": {
+      "title": "Copy",
+      "description": "Copy the text of this message."
+    },
+    "stats": {
+      "title": "Details",
+      "description": "Token usage and timing of this reply."
+    }
   }
 }

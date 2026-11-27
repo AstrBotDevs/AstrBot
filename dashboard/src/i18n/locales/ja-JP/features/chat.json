@@ -319,5 +319,23 @@
     },
     "configureModels": "モデルを設定",
     "details": "詳細を表示"
+  },
+  "messageActions": {
+    "edit": {
+      "title": "編集",
+      "description": "保存すると最新のメッセージとして送信され、ここから会話をやり直します。"
+    },
+    "retry": {
+      "title": "再生成",
+      "description": "この返信を再生成します。別のモデルも選べます。"
+    },
+    "copy": {
+      "title": "コピー",
+      "description": "このメッセージのテキストをコピーします。"
+    },
+    "stats": {
+      "title": "詳細",
+      "description": "この返信のトークン使用量と所要時間。"
+    }
   }
 }

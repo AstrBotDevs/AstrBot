@@ -62,3 +62,8 @@
 - Move view declarations from `Star.chatui_views` to `metadata.yaml` under `views`. Keep default labels in metadata and override them with i18n `views.<name>` (legacy `pages.<name>` remains supported). Existing declarations without a target remain standalone `plugin_page` views.
 - `chat_workbench` + `launcher=True` → `chat_workbench_with_launcher`：同一视图既能由消息或工具打开，也能从工作台「＋」打开。只由插件打开的视图继续使用 `chat_workbench`。
 - Replace `chat_workbench` + `launcher=True` with `chat_workbench_with_launcher` for views that can open from messages/tools and from **+**. Keep `chat_workbench` for plugin-opened views without a launcher entry.
+
+### ChatUI appearance / ChatUI 外观
+
+- 消息下方的编辑、重新生成、复制、详情按钮悬停或键盘聚焦时显示名称和一句说明；编辑或重新生成不可用时显示原因，这时它们也可以用 Tab 聚焦查看原因。
+- The edit, regenerate, copy and details buttons under a message show a name and a one-line description on hover or keyboard focus. When edit or regenerate is unavailable they show the reason, and they can still be reached with Tab to read it.

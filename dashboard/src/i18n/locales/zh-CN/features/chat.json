@@ -319,5 +319,23 @@
     },
     "configureModels": "配置模型",
     "details": "查看详情"
+  },
+  "messageActions": {
+    "edit": {
+      "title": "编辑",
+      "description": "保存后，此内容将作为你的最新消息发送，并从此处重新开始。"
+    },
+    "retry": {
+      "title": "重新生成",
+      "description": "重新生成这条回复，也可以换一个模型。"
+    },
+    "copy": {
+      "title": "复制",
+      "description": "复制这条消息的文字。"
+    },
+    "stats": {
+      "title": "详情",
+      "description": "查看这次回复的 token 用量和耗时。"
+    }
   }
 }

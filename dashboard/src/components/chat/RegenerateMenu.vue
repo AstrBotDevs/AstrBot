@@ -8,7 +8,28 @@
     @update:model-value="handleMenuToggle"
   >
     <template #activator="{ props: menuProps }">
-      <span :title="unavailableReason || tm('actions.retry')">
+      <!-- A disabled button cannot take focus, so the span does instead
+           and carries the reason, for keyboard users to reach the hint. -->
+      <span
+        v-bind="
+          disabled
+            ? {
+                tabindex: 0,
+                role: 'button',
+                'aria-disabled': 'true',
+                'aria-label': unavailableReason
+                  ? `${tm('messageActions.retry.title')}: ${unavailableReason}`
+                  : tm('messageActions.retry.title'),
+              }
+            : {}
+        "
+      >
+        <ActionTooltip
+          :title="tm('messageActions.retry.title')"
+          :description="
+            unavailableReason || tm('messageActions.retry.description')
+          "
+        />
         <v-btn
           v-bind="menuProps"
           icon
@@ -150,6 +171,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import ActionTooltip from "@/components/chat/message_list_comps/ActionTooltip.vue";
 import { RotateCw } from "@lucide/vue";
 import { providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
