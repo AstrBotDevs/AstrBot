@@ -8,6 +8,8 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System",
+    "checkUpdate": "Check for updates",
+    "account": "Account",
     "streaming": "Streaming output",
     "streamingHint": "Show responses as they are generated. Applies only to ChatUI.",
     "reasoning": "Show reasoning",

@@ -1,5 +1,8 @@
 # Unreleased
 
+- 桌面端 ChatUI 去掉顶栏右上角的「选项」菜单：语言和主题本来就在左下角「设置 → 通用」里，「检查更新」「修改账户」「退出登录」也移到那里，有新版本时「设置」按钮上显示提示圆点。旧入口 → 新入口：ChatUI 右上角 `⋮ 选项` → 左下角 `设置 → 通用`。其他页面、手机端和独立聊天框不变。
+- Desktop ChatUI drops the **Options** menu in the upper-right corner: language and theme were already under **Settings → General** (bottom left), and **Check for updates**, **Change account** and **Log out** move there too; the **Settings** button shows a dot when an update is available. Old → new: ChatUI upper-right `⋮ Options` → bottom-left `Settings → General`. Other pages, phones and the standalone chat box are unchanged.
+
 ### Chat usage statistics / 聊天用量统计
 
 - Chat Provider 按上游请求尝试记录用量。`insert_provider_stat()` 和旧轮次统计表 `provider_stats` 进入弃用期。历史轮次继续计入 Token 总量，备份仍可导入和导出。

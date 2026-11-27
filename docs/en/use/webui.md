@@ -23,6 +23,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
 | Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
+| ChatUI upper-right `⋮ Options` (Update AstrBot, Change account, Log out) | ChatUI bottom-left `Settings → General` (desktop; phones and other pages keep the upper-right menu) |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
@@ -264,7 +265,7 @@ You can enable/disable and rename each command.
 
 When AstrBot starts, it automatically checks if the admin panel needs updating. If it does, the first log entry (in yellow) will prompt you.
 
-In the browser WebUI, open `⋮ → Update AstrBot` in the upper-right corner, expand `Advanced settings`, and click `Download and Update` under `Update Dashboard to Latest Version Only`. The page refreshes automatically after a successful update. In the desktop app, the update entry opens the desktop application updater.
+In the browser WebUI, open `⋮ → Update AstrBot` in the upper-right corner (in desktop ChatUI, `Settings → General → Check for updates` at the bottom left), expand `Advanced settings`, and click `Download and Update` under `Update Dashboard to Latest Version Only`. The page refreshes automatically after a successful update. In the desktop app, the update entry opens the desktop application updater.
 
 You can also use the `/dashboard_update` command to manually update the admin panel (admin command).
 

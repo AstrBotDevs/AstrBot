@@ -71,6 +71,37 @@
                 @update:model-value="switchLanguage($event)"
               />
             </div>
+            <template v-if="accountActions">
+              <div class="settings-item settings-item-switch">
+                <div>
+                  <div class="settings-item-title">
+                    {{ t("core.header.updateDialog.title") }}
+                  </div>
+                  <div
+                    v-if="chatHeader.updateNotice"
+                    class="settings-item-subtitle"
+                  >
+                    {{ t(chatHeader.updateNotice) }}
+                  </div>
+                </div>
+                <v-btn variant="tonal" @click="openHeaderDialog('update')">
+                  {{ tm("settings.checkUpdate") }}
+                </v-btn>
+              </div>
+              <div class="settings-item settings-item-switch">
+                <div class="settings-item-title">
+                  {{ tm("settings.account") }}
+                </div>
+                <div class="settings-item-actions">
+                  <v-btn variant="tonal" @click="openHeaderDialog('account')">
+                    {{ t("core.header.accountDialog.title") }}
+                  </v-btn>
+                  <v-btn variant="text" color="error" @click="authStore.logout()">
+                    {{ t("core.header.buttons.logout") }}
+                  </v-btn>
+                </div>
+              </div>
+            </template>
           </div>
 
           <div v-else class="settings-list">
@@ -177,10 +208,15 @@ import {
   useModuleI18n,
 } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
+import { useChatHeaderStore } from "@/stores/chatHeader";
+import { useAuthStore } from "@/stores/auth";
 import type { TransportMode } from "@/composables/useMessages";
 
 defineProps<{
   modelValue: boolean;
+  // Update, account and logout, opened through the app header; only where
+  // the header is mounted (not in the standalone chat box).
+  accountActions?: boolean;
   enableStreaming: boolean;
   enableReasoning: boolean;
   sendShortcut: "enter" | "shift_enter";
@@ -203,7 +239,14 @@ const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const { locale, languageOptions, switchLanguage } = useLanguageSwitcher();
 const customizer = useCustomizerStore();
+const chatHeader = useChatHeaderStore();
+const authStore = useAuthStore();
 const activeSection = ref("general");
+
+function openHeaderDialog(dialog: "update" | "account") {
+  emit("update:modelValue", false);
+  chatHeader.OPEN_HEADER_DIALOG(dialog);
+}
 const sections = computed(() => [
   { id: "general", title: tm("settings.general"), icon: "mdi-cog-outline" },
   { id: "chat", title: tm("settings.chat"), icon: "mdi-message-outline" },
@@ -339,6 +382,13 @@ const transportOptions = computed(() => [
 
 .settings-item-switch {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .settings-item :deep(.v-field) {

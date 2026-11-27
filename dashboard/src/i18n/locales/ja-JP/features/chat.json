@@ -8,6 +8,8 @@
     "light": "ライト",
     "dark": "ダーク",
     "system": "システムに合わせる",
+    "checkUpdate": "更新を確認",
+    "account": "アカウント",
     "streaming": "ストリーミング出力",
     "streamingHint": "生成中の回答を順次表示します。ChatUI にのみ適用されます。",
     "reasoning": "思考内容を表示",
