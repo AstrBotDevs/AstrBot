@@ -28,6 +28,8 @@ function setup() {
     computed,
     watch,
     sidebarContent: ref(null),
+    sidebarProjects: ref(null),
+    projectSessionsPagination: reactive({}),
     sessionsExpanded: ref(true),
     sidebarProjectElement: ref(null),
     messagesContainer: ref(null),

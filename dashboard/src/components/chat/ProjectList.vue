@@ -80,9 +80,13 @@
           <div
             v-if="isProjectExpanded(project.project_id)"
             class="project-session-list"
+            :data-project-id="project.project_id"
           >
             <div
-              v-if="loadingProjectIds.includes(project.project_id)"
+              v-if="
+                pagination[project.project_id]?.loading &&
+                !projectSessionList(project.project_id).length
+              "
               class="project-session-empty"
             >
               {{ tm("project.loadingSessions") }}
@@ -97,7 +101,9 @@
                 tabindex="0"
                 @click="$emit('selectSession', session.session_id)"
                 @keydown.enter="$emit('selectSession', session.session_id)"
-                @keydown.space.prevent="$emit('selectSession', session.session_id)"
+                @keydown.space.prevent="
+                  $emit('selectSession', session.session_id)
+                "
               >
                 <span class="project-session-title">
                   {{ sessionTitle(session) }}
@@ -139,9 +145,31 @@
                 />
               </div>
             </template>
-            <div v-else class="project-session-empty">
+            <div
+              v-else-if="!pagination[project.project_id]?.error"
+              class="project-session-empty"
+            >
               {{ tm("project.noSessions") }}
             </div>
+            <v-progress-linear
+              v-if="pagination[project.project_id]?.loading"
+              color="primary"
+              height="2"
+              indeterminate
+              :aria-label="tm('conversation.loading')"
+            />
+            <ChatLoadError
+              v-if="pagination[project.project_id]?.error"
+              :message="tm('conversation.loadFailed')"
+              :loading="pagination[project.project_id]?.loading"
+              @retry="
+                $emit(
+                  'loadSessions',
+                  project.project_id,
+                  pagination[project.project_id].append,
+                )
+              "
+            />
           </div>
         </Transition>
       </div>
@@ -152,6 +180,8 @@
 <script setup lang="ts">
 import { chatPreferences } from "@/utils/chatPreferences";
 import { ref, watch } from "vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
+import type { ProjectSessionsPagination } from "@/composables/useProjects";
 import {
   ChevronDown,
   ChevronRight,
@@ -183,7 +213,7 @@ export interface ProjectSession {
 interface Props {
   projects: Project[];
   projectSessions: Record<string, ProjectSession[]>;
-  loadingProjectIds: string[];
+  pagination: Record<string, ProjectSessionsPagination>;
   selectedProjectId?: string | null;
   activeSessionId?: string | null;
   isSessionRunning?: (sessionId: string) => boolean;
@@ -200,6 +230,7 @@ const emit = defineEmits<{
   editProject: [project: Project];
   deleteProject: [projectId: string];
   toggleProject: [projectId: string, expanded: boolean];
+  loadSessions: [projectId: string, append: boolean];
   selectSession: [sessionId: string];
   editSessionTitle: [sessionId: string, title: string];
   deleteSession: [sessionId: string, projectId: string];
@@ -241,6 +272,28 @@ watch(
   },
   { immediate: true },
 );
+
+function loadMoreSessions(container: HTMLElement) {
+  const top = container.getBoundingClientRect().top;
+  const bottom = top + container.clientHeight;
+  for (const list of container.querySelectorAll<HTMLElement>("[data-project-id]")) {
+    const projectId = list.dataset.projectId!;
+    const pagination = props.pagination[projectId];
+    const listBottom = list.getBoundingClientRect().bottom;
+    if (
+      !isProjectExpanded(projectId) ||
+      !pagination?.hasMore ||
+      pagination.loading ||
+      pagination.error ||
+      listBottom <= top ||
+      listBottom - bottom > 120
+    )
+      continue;
+    emit("loadSessions", projectId, true);
+  }
+}
+
+defineExpose({ loadMoreSessions });
 
 function readExpandedProjectIds() {
   const ids = chatPreferences().global.expandedProjectIds;
