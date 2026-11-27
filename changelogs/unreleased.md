@@ -66,8 +66,10 @@
 - Context compression looks up the context window of the model actually used for the request. Usage before compression starts from the tokens reported for the previous request and adds an estimate for messages added since.
 - 当前模型不能接收音频且未开启语音识别时，模型会收到一条说明，提示用户开启语音识别或换用支持音频的模型，而不是只看到 `[Audio]`。
 - When the current model cannot receive audio and speech recognition is off, the model receives a note asking it to tell the user to enable speech recognition or switch to an audio-capable model, instead of a bare `[Audio]` placeholder.
-- 模型请求失败时附带稳定的错误代码：API 密钥被拒（401/403）为 `providerAuth`，额度或频率限制（429）为 `providerRateLimit`，模型需要 Responses 接口才能使用工具为 `providerToolsRequireResponses`，模型不存在（404）为 `providerModelNotFound`，其他仍为 `provider_error`。ChatUI 的报错卡片据此给出处理建议。
-- Failed model requests carry a stable error code: `providerAuth` for a rejected API key (401/403), `providerRateLimit` for quota or rate limits (429), `providerToolsRequireResponses` when the model needs the Responses API for tools, `providerModelNotFound` for an unknown model (404), and `provider_error` otherwise. ChatUI error cards use it to suggest a fix.
+- 模型请求失败时附带稳定的错误代码：API 密钥被拒（401/403）为 `providerAuth`，额度或频率限制（429）为 `providerRateLimit`，模型需要 Responses 接口才能使用工具为 `providerToolsRequireResponses`，模型不存在（404）为 `providerModelNotFound`，其他仍为 `provider_error`。
+- Failed model requests carry a stable error code: `providerAuth` for a rejected API key (401/403), `providerRateLimit` for quota or rate limits (429), `providerToolsRequireResponses` when the model needs the Responses API for tools, `providerModelNotFound` for an unknown model (404), and `provider_error` otherwise.
+- ChatUI 报错卡片据此新增四种：API 密钥被拒、找不到模型、模型需要改用 OpenAI Responses 提供商类型才能调用工具（三者都带「配置模型」按钮），以及频率限制或额度用尽。
+- ChatUI error cards use these codes for four new cases: a rejected API key, a model that is not found, a model that needs the OpenAI Responses provider type for tool calls (each with a **Configure models** button), and a rate limit or quota.
 
 ### Plugin view registration / 插件视图注册
 

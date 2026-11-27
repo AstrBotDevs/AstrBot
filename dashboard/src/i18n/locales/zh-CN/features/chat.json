@@ -317,6 +317,22 @@
       "title": "这次回复未能完成",
       "description": "请稍后重试，或展开详情查看原因。"
     },
+    "apiKey": {
+      "title": "API 密钥被拒绝",
+      "description": "请检查该提供商的 API 密钥及其权限后重试。"
+    },
+    "rateLimit": {
+      "title": "已达到频率限制或额度上限",
+      "description": "请稍等片刻再试，或检查该提供商的套餐和额度。"
+    },
+    "responsesApi": {
+      "title": "该模型需要通过 Responses 接口使用工具",
+      "description": "请把该模型的提供商类型改为 OpenAI Responses，或在其模型能力中取消勾选「工具使用」。"
+    },
+    "modelNotFound": {
+      "title": "找不到该模型",
+      "description": "请检查提供商配置中的模型名称和 API 地址，或选择其他模型。"
+    },
     "configureModels": "配置模型",
     "details": "查看详情"
   }

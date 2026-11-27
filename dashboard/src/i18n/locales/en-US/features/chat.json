@@ -317,6 +317,22 @@
       "title": "This reply could not be completed",
       "description": "Try again later or open the details to learn more."
     },
+    "apiKey": {
+      "title": "The API key was rejected",
+      "description": "Check the provider's API key and its permissions, then try again."
+    },
+    "rateLimit": {
+      "title": "Rate limit or quota reached",
+      "description": "Wait a moment and try again, or check the plan and quota of this provider."
+    },
+    "responsesApi": {
+      "title": "This model needs the Responses API for tools",
+      "description": "Use the OpenAI Responses provider type for this model, or uncheck Tool use in its model capabilities."
+    },
+    "modelNotFound": {
+      "title": "This model was not found",
+      "description": "Check the model name and API base URL in the provider configuration, or select another model."
+    },
     "configureModels": "Configure models",
     "details": "View details"
   }
