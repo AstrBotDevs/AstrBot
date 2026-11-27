@@ -6,7 +6,10 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
@@ -40,6 +43,7 @@ class Platform(abc.ABC):
         super().__init__()
         # 平台配置
         self.config = config
+        self.astrbot_config_mgr: AstrBotConfigManager | None = None
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
