@@ -2,8 +2,10 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from openai import _base_client
 from openai.types.responses import Response
 
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
@@ -61,7 +63,7 @@ def test_responses_provider_templates_are_independent_and_stateless():
     assert templates["DeepSeek Responses"]["api_base"] == "https://api.deepseek.com/v1"
     assert templates["xAI"]["type"] == "openai_responses"
     assert templates["xAI"]["api_base"] == "https://api.x.ai/v1"
-    assert "xai_native_search" not in templates["xAI"]
+    assert templates["xAI"]["xai_native_search"] is False
 
 
 def test_convert_chat_history_preserves_response_items_and_function_calls():
@@ -397,6 +399,177 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source", "enabled", "streaming"),
+    [
+        ("xai", True, False),
+        ("xai", True, True),
+        ("xai", False, False),
+        ("openai", True, False),
+    ],
+)
+async def test_native_xai_tools_in_serialized_request(
+    source, enabled, streaming, monkeypatch
+):
+    httpx = (
+        _base_client.httpx2 if hasattr(_base_client, "httpx2") else _base_client.httpx
+    )
+    configured = [{"type": "x_search"}]
+    if streaming:
+        configured.append(
+            {"type": "web_search", "filters": {"allowed_domains": ["example.com"]}}
+        )
+    response = _make_response(
+        [
+            {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [
+                    {"type": "output_text", "text": "Answer", "annotations": []}
+                ],
+            }
+        ]
+    ).model_dump(mode="json")
+
+    def handle(request):
+        body = json.loads(request.content)
+        assert body["stream"] == streaming
+        if source == "xai" and enabled:
+            assert [(tool["type"], tool.get("name")) for tool in body["tools"]] == [
+                ("function", "get_weather"),
+                ("x_search", None),
+                ("web_search", None),
+            ]
+            if streaming:
+                assert body["tools"][-1] == configured[-1]
+        else:
+            assert body["tools"] == configured
+        if streaming:
+            event = json.dumps(
+                {
+                    "type": "response.completed",
+                    "sequence_number": 1,
+                    "response": response,
+                }
+            )
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                text=f"data: {event}\n\n",
+            )
+        return httpx.Response(200, json=response)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        monkeypatch.setattr(
+            ProviderOpenAIResponses, "_create_http_client", lambda self, config: client
+        )
+        provider = _make_provider(
+            {
+                "provider": source,
+                "xai_native_search": enabled,
+                "custom_extra_body": {"tools": configured},
+            }
+        )
+        tools = ToolSet(
+            [
+                FunctionTool(
+                    name="get_weather",
+                    description="Weather",
+                    parameters={"type": "object", "properties": {}},
+                )
+            ]
+        )
+        if streaming:
+            responses = [
+                item
+                async for item in provider.text_chat_stream(
+                    prompt="hello", func_tool=tools
+                )
+            ]
+            result = responses[-1]
+        else:
+            result = await provider.text_chat(prompt="hello", func_tool=tools)
+        assert result.completion_text == "Answer"
+        assert provider.provider_config["custom_extra_body"]["tools"] == configured
+
+
+@pytest.mark.asyncio
+async def test_parse_response_extracts_deduplicated_xai_url_and_top_level_citations():
+    provider = _make_provider({"provider": "xai", "xai_native_search": True})
+    annotated = _make_response(
+        [
+            {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "xAI update [[1]](https://x.ai/news) [[1]](https://x.ai/news)",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url": "https://x.ai/news",
+                                "title": "xAI News",
+                                "start_index": 11,
+                                "end_index": 34,
+                            },
+                            {
+                                "type": "url_citation",
+                                "url": "https://x.ai/news",
+                                "title": "xAI News",
+                                "start_index": 35,
+                                "end_index": 58,
+                            },
+                            {
+                                "type": "url_citation",
+                                "url": "https://docs.x.ai/",
+                                "title": "",
+                                "start_index": 0,
+                                "end_index": 1,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+    parsed = await provider._parse_response(annotated, tools=None)
+    assert parsed.web_search_sources == [
+        {"index": "1", "url": "https://x.ai/news", "title": "xAI News"},
+        {"index": "2", "url": "https://docs.x.ai/", "title": "https://docs.x.ai/"},
+    ]
+
+    top_level = _make_response(
+        [
+            {
+                "id": "msg_2",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [
+                    {"type": "output_text", "text": "Summary", "annotations": []}
+                ],
+            }
+        ],
+        citations=["https://x.ai/company", "https://x.ai/company", "https://x.ai/"],
+    )
+    parsed_fallback = await provider._parse_response(top_level, tools=None)
+    assert parsed_fallback.web_search_sources == [
+        {"index": "1", "url": "https://x.ai/company", "title": "https://x.ai/company"},
+        {"index": "2", "url": "https://x.ai/", "title": "https://x.ai/"},
+    ]
+    other = _make_provider()
+    for response in (annotated, top_level):
+        assert not (
+            await other._parse_response(response, tools=None)
+        ).web_search_sources
 
 
 @pytest.mark.asyncio

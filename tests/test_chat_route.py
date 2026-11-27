@@ -702,3 +702,75 @@ async def test_error_cards_survive_stream_completion_and_history(
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_native_web_search_sources_persist_and_emit_refs(chat_service_instance):
+    from astrbot.core.message.components import Json
+    from astrbot.core.message.message_event_result import MessageChain
+    from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+
+    service = chat_service_instance
+    session_id = "xai-refs-session"
+    sources = [{"index": "1", "url": "https://x.ai/news", "title": "xAI News"}]
+    tool_source = {
+        "index": "abcd.1",
+        "url": "https://example.org/tool",
+        "title": "Tool",
+        "snippet": None,
+    }
+    stream = await service.build_chat_stream(
+        "alice", {"message": "hello", "session_id": session_id}
+    )
+    run = next(iter(service.chat_runs.values()))
+    try:
+        for kind, data in [
+            ("tool_call", {"id": "call", "name": "web_search_tavily"}),
+            (
+                "tool_call_result",
+                {"id": "call", "result": json.dumps({"results": [tool_source]})},
+            ),
+        ]:
+            await WebChatMessageEvent._send(
+                run.run_id, MessageChain(chain=[Json(data)], type=kind), session_id
+            )
+        await WebChatMessageEvent._send(
+            run.run_id, MessageChain().message("Answer <ref>abcd.1</ref>"), session_id
+        )
+        await WebChatMessageEvent._send(
+            run.run_id,
+            MessageChain(chain=[Json({"sources": sources})], type="web_search_sources"),
+            session_id,
+        )
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id, {"type": "plain", "chain_type": "agent_stats", "data": "{}"}
+        )
+        while True:
+            frame = await asyncio.wait_for(anext(stream), timeout=1)
+            if (
+                frame.startswith("data: ")
+                and _decode_sse_event(frame)["type"] == "agent_stats"
+            ):
+                break
+        expected = {"used": [tool_source, *sources]}
+        snapshot = service.get_active_chat_runs("alice", session_id)[0]
+        assert snapshot["content"]["refs"] == expected
+        assert service.save_bot_message.await_args.args[3] == {"used": [tool_source]}
+        await WebChatMessageEvent._send(run.run_id, None, session_id)
+        frames = [_decode_sse_event(frame) async for frame in stream]
+        await asyncio.wait_for(run.task, timeout=1)
+        last_save = service.save_bot_message.await_args
+        assert last_save.kwargs["record"] is service.save_bot_message.return_value
+        assert last_save.args[3] == expected
+        assert (
+            next(frame for frame in frames if frame["type"] == "message_saved")["data"][
+                "refs"
+            ]
+            == expected
+        )
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)

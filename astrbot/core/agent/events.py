@@ -222,6 +222,13 @@ class ToolRejected(OutputValue):
     content: tuple[OutputComponent, ...]
 
 
+class WebSearchSources(OutputValue):
+    """Native search citations accompanying a model response."""
+
+    type: Literal["web_search.sources"] = "web_search.sources"
+    sources: tuple[JsonObject, ...]
+
+
 class UsageUpdated(OutputValue):
     """Replace the turn usage and execution metric snapshots."""
 
@@ -247,6 +254,7 @@ RunnerEventPayload: TypeAlias = Annotated[
     | ToolProgress
     | ToolFinished
     | ToolRejected
+    | WebSearchSources
     | UsageUpdated,
     Field(discriminator="type"),
 ]
@@ -263,6 +271,7 @@ RuntimeEventPayload: TypeAlias = Annotated[
     | ToolProgress
     | ToolFinished
     | ToolRejected
+    | WebSearchSources
     | UsageUpdated
     | TurnFinished,
     Field(discriminator="type"),

@@ -469,6 +469,9 @@ class LLMResponse:
     reasoning_signature: str | None = None
     """The signature of the reasoning content, if any."""
 
+    web_search_sources: list[dict[str, Any]] = field(default_factory=list)
+    """Structured web search sources (e.g. xAI url_citation), each with index/url/title."""
+
     raw_completion: (
         ChatCompletion | Response | GenerateContentResponse | AnthropicMessage | None
     ) = None
@@ -504,6 +507,7 @@ class LLMResponse:
         is_chunk: bool = False,
         id: str | None = None,
         usage: TokenUsage | None = None,
+        web_search_sources: list[dict[str, Any]] | None = None,
     ) -> None:
         """初始化 LLMResponse
 
@@ -513,6 +517,7 @@ class LLMResponse:
             result_chain (MessageChain, optional): 返回的消息链. Defaults to None.
             tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
             tools_call_name (List[str], optional): 工具调用名称. Defaults to None.
+            web_search_sources: Native search citations with a URL, title, and index.
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
 
         """
@@ -534,6 +539,7 @@ class LLMResponse:
         self.tools_call_extra_content = tools_call_extra_content
         self.reasoning_content = reasoning_content
         self.reasoning_signature = reasoning_signature
+        self.web_search_sources = web_search_sources or []
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
 

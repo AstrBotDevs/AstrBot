@@ -336,6 +336,25 @@ class BotMessageAccumulator:
         return parsed if isinstance(parsed, dict) else None
 
 
+def merge_native_search_refs(refs: dict, sources: list[dict]) -> dict:
+    """Append native citations while preserving existing tool citation indices.
+
+    Args:
+        refs: Previously collected references for the turn.
+        sources: Native sources in encounter order.
+
+    Returns:
+        History references with one added entry per new URL.
+    """
+    used = list(refs.get("used", []))
+    seen = {ref["url"] for ref in used}
+    for source in sources:
+        if source["url"] not in seen:
+            seen.add(source["url"])
+            used.append(source)
+    return {"used": used} if used else {}
+
+
 def extract_web_search_refs(accumulated_text: str, accumulated_parts: list) -> dict:
     supported = [
         "web_search_baidu",
@@ -1130,6 +1149,7 @@ class ChatService:
             run: Chat run owning the producer queue and durable state.
         """
         reply = BotMessageAccumulator()
+        pending_refs: dict[str, Any] = {}
         bound_view_ids: set[str] = set()
         end_frame = {
             "type": "end",
@@ -1150,8 +1170,9 @@ class ChatService:
             if not (parts or run.refs or run.agent_stats):
                 return
 
+            extracted_refs = run.refs
             try:
-                run.refs = extract_web_search_refs(
+                extracted_refs = extract_web_search_refs(
                     collect_plain_text_from_message_parts(parts), parts
                 )
             except Exception as exc:
@@ -1159,6 +1180,10 @@ class ChatService:
                     f"Failed to extract web search refs: {exc}",
                     exc_info=True,
                 )
+
+            run.refs = merge_native_search_refs(
+                extracted_refs, pending_refs.get("used", [])
+            )
 
             record = await self.save_bot_message(
                 run.session_id,
@@ -1207,6 +1232,7 @@ class ChatService:
                         "id": record.id,
                         "created_at": to_utc_isoformat(record.created_at),
                         "turn_id": run.turn_id,
+                        **({"refs": run.refs} if run.refs else {}),
                     },
                 },
             )
@@ -1241,6 +1267,19 @@ class ChatService:
                         run,
                         {"type": "agent_stats", "data": run.agent_stats},
                     )
+                    continue
+
+                if chain_type == "web_search_sources":
+                    sources = json.loads(result_text)["sources"]
+                    if sources:
+                        used = list(pending_refs.get("used", []))
+                        seen_urls = {ref["url"] for ref in used}
+                        for src in sources:
+                            if src["url"] not in seen_urls:
+                                seen_urls.add(src["url"])
+                                used.append({**src, "index": str(len(used) + 1)})
+                        pending_refs = {"used": used}
+                        run.refs = merge_native_search_refs(run.refs, used)
                     continue
 
                 attachment_saved_payload = None

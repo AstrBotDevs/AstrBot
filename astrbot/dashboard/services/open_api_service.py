@@ -29,6 +29,7 @@ from astrbot.dashboard.services.auth_service import (
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
+    merge_native_search_refs,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -421,6 +422,7 @@ class OpenApiService:
         message_accumulator = BotMessageAccumulator()
         agent_stats = {}
         refs = {}
+        pending_refs: dict[str, Any] = {}
         finalized = False
         stream_error: Exception | None = None
 
@@ -434,17 +436,23 @@ class OpenApiService:
                 The saved history record, or None if there was no output.
             """
             nonlocal refs
-            if not (message_accumulator.has_content() or refs or agent_stats):
+            if not (
+                message_accumulator.has_content() or refs or pending_refs or agent_stats
+            ):
                 return None
             parts = message_accumulator.build_message_parts(final=final)
+            extracted_refs = refs
             try:
-                refs = chat_bridge.extract_web_search_refs(
+                extracted_refs = chat_bridge.extract_web_search_refs(
                     collect_plain_text_from_message_parts(parts), parts
                 )
             except Exception as exc:
                 logger.exception(
                     f"Open API WS failed to extract web search refs: {exc}"
                 )
+            refs = merge_native_search_refs(
+                extracted_refs, pending_refs.get("used", [])
+            )
             record = await chat_bridge.save_bot_message(
                 session_id,
                 parts,
@@ -515,6 +523,17 @@ class OpenApiService:
                     await send_json({"type": "agent_stats", "data": agent_stats})
                     continue
 
+                if chain_type == "web_search_sources":
+                    sources = json.loads(result_text)["sources"]
+                    if sources:
+                        used = list(pending_refs.get("used", []))
+                        seen_urls = {ref["url"] for ref in used}
+                        for src in sources:
+                            if src["url"] not in seen_urls:
+                                seen_urls.add(src["url"])
+                                used.append({**src, "index": str(len(used) + 1)})
+                        pending_refs = {"used": used}
+                    continue
                 if msg_type == "plain":
                     outgoing_text = message_accumulator.add_plain(
                         result_text,
