@@ -70,9 +70,6 @@
   "modelRanking": {
     "title": "Model Usage Ranking"
   },
-  "pluginRanking": {
-    "title": "Plugin token usage"
-  },
   "sessionRanking": {
     "title": "{range} Session Model Usage Top 10",
     "openConversation": "View conversation"
@@ -80,7 +77,6 @@
   "empty": {
     "platformStats": "No platform message statistics available.",
     "modelCalls": "No model call data for {range}.",
-    "pluginCalls": "No plugin requests for {range} yet.",
     "sessionCalls": "No session call data for {range}."
   },
   "chart": {

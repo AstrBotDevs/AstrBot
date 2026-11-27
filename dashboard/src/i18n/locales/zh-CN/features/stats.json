@@ -70,9 +70,6 @@
   "modelRanking": {
     "title": "模型用量排名"
   },
-  "pluginRanking": {
-    "title": "插件用量排名"
-  },
   "sessionRanking": {
     "title": "{range}会话模型用量 Top 10",
     "openConversation": "查看对话"
@@ -80,7 +77,6 @@
   "empty": {
     "platformStats": "当前没有平台消息统计数据。",
     "modelCalls": "{range}还没有模型调用数据。",
-    "pluginCalls": "{range}还没有插件调用数据。",
     "sessionCalls": "{range}还没有会话调用数据。"
   },
   "chart": {

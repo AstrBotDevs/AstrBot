@@ -150,21 +150,17 @@
               </div>
             </section>
 
-            <section
-              v-for="ranking in usageRankings"
-              :key="ranking.title"
-              class="stat-card provider-list-card"
-            >
+            <section class="stat-card provider-list-card">
               <div class="card-head compact">
-                <div class="section-title">{{ ranking.title }}</div>
+                <div class="section-title">{{ t('modelRanking.title') }}</div>
               </div>
-              <div v-if="ranking.items.length" class="provider-list provider-list--scrollable">
-                <div v-for="item in ranking.items" :key="item.id" class="provider-row">
-                  <span class="provider-name">{{ item.id }}</span>
-                  <strong>{{ formatNumber(item.tokens) }}</strong>
+              <div v-if="rangeProviderRanking.length" class="provider-list provider-list--scrollable">
+                <div v-for="provider in rangeProviderRanking" :key="provider.provider_id" class="provider-row">
+                  <span class="provider-name">{{ provider.provider_id }}</span>
+                  <strong>{{ formatNumber(provider.tokens) }}</strong>
                 </div>
               </div>
-              <div v-else class="empty-state">{{ ranking.empty }}</div>
+              <div v-else class="empty-state">{{ t('empty.modelCalls', { range: rangeLabel }) }}</div>
             </section>
           </section>
         </div>
@@ -330,7 +326,6 @@ interface ProviderTokenStatsResponse {
   range_cache_hit_rate: number | null
   range_by_provider: ProviderRankingItem[]
   range_by_umo: UmoRankingItem[]
-  range_by_plugin: Array<{ plugin_id: string; tokens: number; calls: number }>
   today_total_tokens: number
   today_total_calls: number
   today_by_provider: ProviderRankingItem[]
@@ -555,24 +550,7 @@ const providerTrendSeries = computed<ChartSeries>(() =>
   }))
 )
 
-const usageRankings = computed(() => [
-  {
-    title: t('modelRanking.title'),
-    empty: t('empty.modelCalls', { range: rangeLabel.value }),
-    items: (providerStats.value?.range_by_provider ?? []).map((item) => ({
-      id: item.provider_id,
-      tokens: item.tokens,
-    })),
-  },
-  {
-    title: t('pluginRanking.title'),
-    empty: t('empty.pluginCalls', { range: rangeLabel.value }),
-    items: (providerStats.value?.range_by_plugin ?? []).map((item) => ({
-      id: item.plugin_id,
-      tokens: item.tokens,
-    })),
-  },
-])
+const rangeProviderRanking = computed(() => providerStats.value?.range_by_provider ?? [])
 
 const rangeUmoRanking = computed(() =>
   (providerStats.value?.range_by_umo ?? []).slice(0, 10).map((item) => ({
