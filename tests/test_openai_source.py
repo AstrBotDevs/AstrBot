@@ -1,5 +1,6 @@
 import base64
 import builtins
+from contextlib import aclosing
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,14 +8,19 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._models import construct_type
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
+from sqlmodel import select
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.db.po import ChatRequestStat
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.sources import chat_request
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
@@ -1566,7 +1572,10 @@ async def test_parse_openai_completion_reads_nested_data_choices():
 
 
 @pytest.mark.asyncio
-async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
+async def test_query_stream_extracts_usage_from_empty_choices_chunk(
+    monkeypatch, temp_db
+):
+    monkeypatch.setattr(chat_request, "db_helper", temp_db)
     provider = _make_provider()
     try:
         chunks = [
@@ -1648,6 +1657,149 @@ async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch)
         assert final_response.usage.input_other == 62
         assert final_response.usage.input_cached == 2488
         assert final_response.usage.output == 125
+
+        async with aclosing(provider.text_chat_stream(prompt="hello")) as stream:
+            assert (await anext(stream)).is_chunk
+
+        await temp_db.chat_usage_writer.flush()
+        async with temp_db.get_db() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(ChatRequestStat).order_by(ChatRequestStat.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert [(row.status, row.token_output) for row in rows] == [
+            ("completed", 125),
+            ("aborted", None),
+        ]
+        assert rows[0].token_input_other == 62
+        assert rows[0].time_to_first_token is not None
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_normalizes_tool_call_identity_and_index(monkeypatch):
+    """A repeated tool identity with a sparse or omitted index stays one call.
+
+    The SDK concatenates repeated string fields and uses the incoming index as a
+    list position. One call is therefore sent with a replayed identity, a sparse
+    starting index, and continuation frames that omit the index.
+    """
+    provider = _make_provider()
+    tool_set = ToolSet(
+        [
+            FunctionTool(
+                name="read",
+                description="Read a file.",
+                parameters={
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            )
+        ]
+    )
+
+    def chunk(delta: dict, finish_reason: str | None = None) -> ChatCompletionChunk:
+        return ChatCompletionChunk.model_validate(
+            {
+                "id": "chatcmpl-stream",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            }
+        )
+
+    def lenient_chunk(
+        delta: dict, finish_reason: str | None = None
+    ) -> ChatCompletionChunk:
+        """Build a chunk the way the SDK parses streamed JSON, without validation.
+
+        A gateway that omits `index` (the case behind AstrBotDevs/AstrBot#6661)
+        reaches the provider as `index=None`; `model_validate` would reject it before
+        the provider could see it.
+        """
+        return construct_type(
+            type_=ChatCompletionChunk,
+            value={
+                "id": "chatcmpl-stream",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            },
+        )
+
+    async def run(chunks: list[ChatCompletionChunk]) -> LLMResponse:
+        async def fake_stream():
+            for item in chunks:
+                yield item
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                tools=tool_set,
+            )
+        ]
+        return responses[-1]
+
+    try:
+        # Repeated identity, a sparse starting index, and continuation frames
+        # without an index all belong to one call.
+        repeated = await run(
+            [
+                chunk(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "index": 1,
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {"name": "read", "arguments": '{"pa'},
+                            }
+                        ],
+                    }
+                ),
+                lenient_chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {
+                                    "name": "read",
+                                    "arguments": 'th": "x"}',
+                                },
+                            }
+                        ]
+                    }
+                ),
+                lenient_chunk({"tool_calls": [{"function": {"arguments": ""}}]}),
+                chunk({}, "tool_calls"),
+            ]
+        )
+        assert repeated.tools_call_name == ["read"]
+        assert repeated.tools_call_ids == ["call_a"]
+        assert repeated.tools_call_args == [{"path": "x"}]
+
     finally:
         await provider.terminate()
 

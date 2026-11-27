@@ -170,3 +170,26 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
     assert local_skill_path.is_relative_to(skills_root)
     assert local_skill_path == skills_root / "custom-local" / "SKILL.md"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
+
+
+def test_delete_skill_rejects_traversal(monkeypatch, tmp_path: Path):
+    data_dir = tmp_path / "data"
+    skills_root, victim_dir = data_dir / "skills", data_dir / "victim"
+    skills_root.mkdir(parents=True)
+    victim_dir.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path", lambda: str(data_dir)
+    )
+
+    mgr = SkillManager(skills_root=str(skills_root))
+    _write_skill(skills_root, "skill-1.0.0", "local")
+    _write_skill(skills_root, "my skill", "local")
+
+    for bad in ("", ".", "..", ".. ", "../victim", "..\\victim", str(victim_dir)):
+        with pytest.raises(ValueError, match="Invalid skill"):
+            mgr.delete_skill(bad)
+
+    assert victim_dir.exists()
+    for name in ("skill-1.0.0", "my skill"):
+        mgr.delete_skill(name)
+        assert not (skills_root / name).exists()

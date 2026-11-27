@@ -582,7 +582,7 @@ class KookPlatformAdapter(Platform):
     ) -> AstrBotMessage | None:
         if data.type == KookMessageType.SYSTEM:
             if data.extra.type == "message_btn_click":
-                return self._convert_button_interaction(data)
+                return await asyncio.to_thread(self._convert_button_interaction, data)
             return None
 
         abm = AstrBotMessage()

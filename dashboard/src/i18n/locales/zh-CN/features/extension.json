@@ -142,16 +142,12 @@
   },
   "market": {
     "recommended": "🥳 推荐",
-    "allPlugins": "📦 全部插件",
     "category": "分类",
+    "expandCategories": "展开全部分类",
+    "collapseCategories": "收起分类",
+    "refresh": "刷新",
     "categories": {
-      "all": "全部",
-      "ai_tools": "AI 增强",
-      "entertainment": "娱乐",
-      "productivity": "效率",
-      "integrations": "外部集成",
-      "utilities": "生活实用",
-      "other": "其他"
+      "all": "全部"
     },
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",
@@ -223,6 +219,16 @@
       "dataHint": "删除 data/plugin_data、plugins_data 目录下的数据，以及数据库中插件的 KV 数据"
     },
     "install": {
+      "sourceRequired": "请先添加这个插件源，再确认安装插件。继续后，AstrBot 将访问该地址，请仅添加可信的插件源。",
+      "addSourceAndContinue": "添加并继续",
+      "validatingSource": "正在验证插件源…",
+      "savingSource": "正在添加插件源…",
+      "loadingPlugin": "正在查找插件…",
+      "retryPreview": "重试",
+      "marketPluginNotFound": "指定的插件源中没有找到可安装的插件。",
+      "invalidMarketPluginId": "无效的市场插件 ID，应为作者/插件名。",
+      "invalidRegistryUrl": "插件源地址必须是有效的 HTTPS URL。",
+      "linkConflict": "安装链接包含多个安装来源。",
       "title": "安装插件",
       "fromFile": "从文件安装",
       "fromUrl": "从链接安装",

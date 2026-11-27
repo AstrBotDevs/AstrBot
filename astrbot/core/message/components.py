@@ -30,6 +30,7 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import Any, Literal, TypeAlias
 
 from deprecated import deprecated
@@ -71,6 +72,7 @@ class ComponentType(str, Enum):
     ActionRow = "ActionRow"  # a row of interactive controls
     Button = "Button"  # an interactive button
     ButtonInteraction = "ButtonInteraction"  # an inbound button click
+    InteractiveView = "InteractiveView"  # an outbound view reference
     UIInteraction = "UIInteraction"  # an inbound plugin view action
 
     # IM-specific Segment Types
@@ -216,6 +218,9 @@ class Button(BaseMessageComponent):
         }
 
 
+_action_row_deadline_lock = Lock()
+
+
 class ActionRow(BaseMessageComponent):
     """A group of buttons that should be displayed on one row when possible."""
 
@@ -232,8 +237,12 @@ class ActionRow(BaseMessageComponent):
         Returns:
             Unix timestamp for this row's callback expiry, or None if unlimited.
         """
-        if self.action_timeout is not None and self._action_expires_at is None:
-            self._action_expires_at = time.time() + self.action_timeout
+        timeout = self.action_timeout
+        if timeout is not None and self._action_expires_at is None:
+            # Platform workers may render the same row concurrently.
+            with _action_row_deadline_lock:
+                if self._action_expires_at is None:
+                    self._action_expires_at = time.time() + timeout
         return self._action_expires_at
 
     def toDict(self) -> dict:
@@ -260,6 +269,18 @@ class ButtonInteraction(BaseMessageComponent):
     callback_data: str | None = None
 
 
+class InteractiveView(BaseMessageComponent):
+    """An outbound reference to a persisted interactive view."""
+
+    type: ComponentType = ComponentType.InteractiveView
+    view_id: str
+    module: str
+    name: str
+    version: int
+    fallback_text: str
+    title: str = ""
+
+
 class ViewContext(BaseModel):
     """Persisted snapshot of the card that initiated an interaction."""
 
@@ -271,7 +292,7 @@ class ViewContext(BaseModel):
 
 
 class UIInteraction(BaseMessageComponent):
-    """Authenticated user input from a plugin-owned chat view."""
+    """Authenticated user input from a plugin-owned interactive view."""
 
     type: ComponentType = ComponentType.UIInteraction
     action_id: str

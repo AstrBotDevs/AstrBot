@@ -16,8 +16,8 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsRes
 
 from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
+from .chat_request import chat_request
 from .openai_source import ProviderOpenAIOfficial
-from .request_retry import retry_provider_request
 
 
 @register_provider_adapter(
@@ -365,16 +365,23 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         payloads.pop("conversation", None)
         payloads["store"] = False
 
-        response = await retry_provider_request(
+        async with chat_request(
+            self,
             "OpenAI Responses",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.responses.create(
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
+            conversation_id=conversation_id,
             max_attempts=request_max_retries,
-        )
+        ) as (response, request):
+            request.usage = self._extract_response_usage(response)
+            if self._field(response, "status") == "failed":
+                request.status = "error"
+
         if not isinstance(response, Response):
             raise TypeError(
                 f"Responses API returned an unexpected type: {type(response)}: "
@@ -432,74 +439,104 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         payloads.pop("conversation", None)
         payloads["store"] = False
 
-        stream = await retry_provider_request(
+        async with chat_request(
+            self,
             "OpenAI Responses",
+            extra_body.get("model") or payloads.get("model") or self.get_model(),
             lambda: self.client.responses.create(
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
+            streaming=True,
+            conversation_id=conversation_id,
             max_attempts=request_max_retries,
-        )
+        ) as (stream, request):
+            response_id: str | None = None
+            async for event in stream:
+                event_type = self._field(event, "type", "")
+                event_response = self._field(event, "response")
+                if event_response is not None:
+                    response_id = self._field(event_response, "id", response_id)
+                    usage = self._extract_response_usage(event_response)
+                    if usage is not None:
+                        request.usage = usage
 
-        response_id: str | None = None
-        async for event in stream:
-            event_type = self._field(event, "type", "")
-            event_response = self._field(event, "response")
-            if event_response is not None:
-                response_id = self._field(event_response, "id", response_id)
+                if event_type == "error":
+                    code = self._field(event, "code", "stream_error")
+                    message = self._field(event, "message", "Responses stream failed")
+                    raise RuntimeError(
+                        f"Responses API stream failed: {code}: {message}. "
+                        f"response_id={response_id}"
+                    )
 
-            if event_type == "error":
-                code = self._field(event, "code", "stream_error")
-                message = self._field(event, "message", "Responses stream failed")
-                raise RuntimeError(
-                    f"Responses API stream failed: {code}: {message}. "
-                    f"response_id={response_id}"
+                if event_type in {
+                    "response.output_text.delta",
+                    "response.refusal.delta",
+                }:
+                    delta = self._field(event, "delta", "")
+                    if delta:
+                        request.mark_first_token()
+                        yield LLMResponse(
+                            "assistant",
+                            result_chain=MessageChain(chain=[Comp.Plain(str(delta))]),
+                            is_chunk=True,
+                            id=response_id,
+                        )
+                    continue
+
+                if event_type in {
+                    "response.reasoning_text.delta",
+                    "response.reasoning_summary_text.delta",
+                }:
+                    delta = self._field(event, "delta", "")
+                    if delta:
+                        request.mark_first_token()
+                        yield LLMResponse(
+                            "assistant",
+                            reasoning_content=str(delta),
+                            is_chunk=True,
+                            id=response_id,
+                        )
+                    continue
+
+                if event_type in {
+                    "response.completed",
+                    "response.incomplete",
+                    "response.failed",
+                }:
+                    if event_response is None:
+                        raise EmptyModelOutputError(
+                            f"Responses stream terminal event has no response: {event_type}"
+                        )
+                    if event_type == "response.failed":
+                        request.status = "error"
+                    break
+            else:
+                raise EmptyModelOutputError(
+                    f"Responses stream ended without a terminal event. response_id={response_id}"
                 )
+        yield await self._parse_response(event_response, tools)
 
-            if event_type in {
-                "response.output_text.delta",
-                "response.refusal.delta",
-            }:
-                delta = self._field(event, "delta", "")
-                if delta:
-                    yield LLMResponse(
-                        "assistant",
-                        result_chain=MessageChain(chain=[Comp.Plain(str(delta))]),
-                        is_chunk=True,
-                        id=response_id,
-                    )
-                continue
+    def _extract_response_usage(self, response: Response) -> TokenUsage | None:
+        """Normalize an upstream Responses API usage report.
 
-            if event_type in {
-                "response.reasoning_text.delta",
-                "response.reasoning_summary_text.delta",
-            }:
-                delta = self._field(event, "delta", "")
-                if delta:
-                    yield LLMResponse(
-                        "assistant",
-                        reasoning_content=str(delta),
-                        is_chunk=True,
-                        id=response_id,
-                    )
-                continue
+        Args:
+            response: Upstream response or a snapshot from a stream event.
 
-            if event_type in {
-                "response.completed",
-                "response.incomplete",
-                "response.failed",
-            }:
-                if event_response is None:
-                    raise EmptyModelOutputError(
-                        f"Responses stream terminal event has no response: {event_type}"
-                    )
-                yield await self._parse_response(event_response, tools)
-                return
-
-        raise EmptyModelOutputError(
-            f"Responses stream ended without a terminal event. response_id={response_id}"
+        Returns:
+            Normalized token counts, or None when usage was not reported.
+        """
+        usage = self._field(response, "usage")
+        if usage is None:
+            return None
+        input_details = self._field(usage, "input_tokens_details")
+        cached = self._field(input_details, "cached_tokens", 0) or 0
+        return TokenUsage(
+            input_other=(self._field(usage, "input_tokens", 0) or 0) - cached,
+            input_cached=cached,
+            output=self._field(usage, "output_tokens", 0) or 0,
         )
 
     async def _parse_response(
@@ -642,19 +679,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         llm_response.web_search_sources = web_search_sources
 
-        usage = self._field(response, "usage")
-        if usage is not None:
-            input_details = self._field(usage, "input_tokens_details")
-            cached_tokens = self._field(input_details, "cached_tokens", 0) or 0
-            input_tokens = self._field(usage, "input_tokens", 0) or 0
-            output_tokens = self._field(usage, "output_tokens", 0) or 0
-            llm_response.usage = TokenUsage(
-                input_other=input_tokens - cached_tokens,
-                input_cached=cached_tokens,
-                output=output_tokens,
-            )
-        else:
-            llm_response.usage = TokenUsage()
+        llm_response.usage = self._extract_response_usage(response) or TokenUsage()
 
         has_text = bool((llm_response.completion_text or "").strip())
         has_reasoning = bool((llm_response.reasoning_content or "").strip())

@@ -333,7 +333,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         image_path = None
 
         action_rows = [i for i in message.chain if isinstance(i, ActionRow)]
-        reply_markup = cls._build_inline_keyboard(action_rows)
+        reply_markup = None
+        if action_rows:
+            reply_markup = await asyncio.to_thread(
+                cls._build_inline_keyboard, action_rows
+            )
         renderable_indexes = [
             index
             for index, component in enumerate(message.chain)

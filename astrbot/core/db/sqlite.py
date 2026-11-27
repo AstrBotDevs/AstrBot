@@ -139,11 +139,20 @@ class SQLiteDatabase(BaseDatabase):
         super().__init__()
 
         @event.listens_for(self.engine.sync_engine, "connect")
-        def enable_foreign_keys(connection, _record):
-            """Enforce event ownership and ancestry on every pooled connection."""
+        def configure_sqlite_connection(connection, _record):
+            """Apply per-connection SQLite integrity, durability, and memory PRAGMAs."""
             cursor = connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
+            try:
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA temp_store=MEMORY")
+                # Negative cache_size sets KiB (~8 MiB); positive values count 4 KiB pages.
+                cursor.execute("PRAGMA cache_size=-8000")
+                # Leave file caching to the OS page cache so memory stays reclaimable.
+                cursor.execute("PRAGMA mmap_size=0")
+            finally:
+                cursor.close()
 
     async def initialize(self) -> None:
         """Serialize schema migration before allowing application traffic."""
@@ -164,11 +173,6 @@ class SQLiteDatabase(BaseDatabase):
                 )
             )
             await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA busy_timeout=30000"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
@@ -377,6 +381,10 @@ class SQLiteDatabase(BaseDatabase):
             )
             return list(result.scalars().all())
 
+    @deprecated(
+        version="4.30.0",
+        reason="Managed Chat Providers record request usage automatically.",
+    )
     async def insert_provider_stat(
         self,
         *,
@@ -388,7 +396,7 @@ class SQLiteDatabase(BaseDatabase):
         stats: dict | None = None,
         agent_type: str = "internal",
     ) -> ProviderStat:
-        """Insert a provider stat record for a single agent response."""
+        """Insert a legacy provider statistic for an Agent turn."""
         stats = stats or {}
         token_usage = stats.get("token_usage", {})
 
@@ -553,12 +561,16 @@ class SQLiteDatabase(BaseDatabase):
                 base_query = base_query.where(*conditions)
 
             group_by_session = bool(kwargs.get("group_by_session", False))
+            session_key = col(ConversationV3.umo)
+            if group_by_session and kwargs.get("group_webchat"):
+                session_key = case(
+                    (ConversationV3.platform_id == "webchat", "webchat"),
+                    else_=literal("umo:").concat(session_key),
+                )
 
             # Get total count matching the filters
             count_target = (
-                func.distinct(ConversationV3.umo)
-                if group_by_session
-                else ConversationV3.id
+                func.distinct(session_key) if group_by_session else ConversationV3.id
             )
             count_query = select(func.count(count_target))
             if conditions:
@@ -585,7 +597,7 @@ class SQLiteDatabase(BaseDatabase):
                     "session_tie_breaker"
                 )
                 session_query = select(
-                    ConversationV3.umo,
+                    session_key,
                     session_sort,
                     session_tie_breaker,
                 )
@@ -600,22 +612,22 @@ class SQLiteDatabase(BaseDatabase):
                     else session_tie_breaker.desc
                 )
                 session_rows = await session.execute(
-                    session_query.group_by(ConversationV3.umo)
+                    session_query.group_by(session_key)
                     .order_by(session_order())
                     .order_by(session_tie_order())
                     .offset(offset)
                     .limit(page_size)
                 )
-                session_ids = [row[0] for row in session_rows.all()]
-                if not session_ids:
+                session_keys = [row[0] for row in session_rows.all()]
+                if not session_keys:
                     return [], total
                 session_rank = case(
-                    {session_id: index for index, session_id in enumerate(session_ids)},
-                    value=ConversationV3.umo,
-                    else_=len(session_ids),
+                    {key: index for index, key in enumerate(session_keys)},
+                    value=session_key,
+                    else_=len(session_keys),
                 )
                 result_query = (
-                    base_query.where(col(ConversationV3.umo).in_(session_ids))
+                    base_query.where(session_key.in_(session_keys))
                     .order_by(session_rank)
                     .order_by(order())
                     .order_by(tie_breaker())

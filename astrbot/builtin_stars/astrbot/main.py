@@ -36,8 +36,24 @@ class Main(star.Star):
                 self.context.astrbot_config_mgr,
                 self.context,
             )
+            context.conversation_manager.on_current_conversation_deleted = (
+                self.group_chat_context.clear_session
+            )
+            context.conversation_manager.on_platform_conversations_deleted = (
+                self.group_chat_context.clear_platform
+            )
         except BaseException as e:
             logger.error(f"group chat context init failed: {e}")
+
+    async def terminate(self) -> None:
+        manager = self.context.conversation_manager
+        if (
+            self.group_chat_context
+            and manager.on_current_conversation_deleted
+            == self.group_chat_context.clear_session
+        ):
+            manager.on_current_conversation_deleted = None
+            manager.on_platform_conversations_deleted = None
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
     async def handle_empty_mention(self, event: AstrMessageEvent):

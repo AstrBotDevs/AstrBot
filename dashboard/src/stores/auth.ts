@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { useCustomizerStore } from '@/stores/customizer';
 import { chatPreferences } from '@/utils/chatPreferences';
 import { router } from '@/router';
+import { getPluginInstallReturnUrl } from '@/utils/pluginInstallLink.mjs';
 import {
   authApi,
   providerApi,
@@ -49,13 +50,18 @@ export const useAuthStore = defineStore("auth", {
         localStorage.removeItem('password_upgrade_required');
       }
 
-      const onboardingCompleted = await this.checkOnboardingCompleted();
+      const installReturnUrl = getPluginInstallReturnUrl(
+        router,
+        router.currentRoute.value.query.redirect || this.returnUrl,
+      );
       this.returnUrl = null;
       if (passwordWarning) {
-        router.push('/auth/setup');
+        router.replace({ path: '/auth/setup', query: { redirect: installReturnUrl } });
         return;
       }
-      if (onboardingCompleted) {
+      if (installReturnUrl) {
+        router.replace(installReturnUrl);
+      } else if (await this.checkOnboardingCompleted()) {
         router.push('/dashboard/default');
       } else {
         router.push('/welcome');

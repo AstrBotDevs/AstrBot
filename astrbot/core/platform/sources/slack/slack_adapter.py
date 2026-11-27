@@ -24,7 +24,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import (
     BUTTON_ACTION_EXPIRED_MESSAGE,
     ButtonActionExpiredError,
-    decode_button_callback,
+    decode_button_callback_async,
 )
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
@@ -219,7 +219,7 @@ class SlackAdapter(Platform):
             # navigation actions rather than AstrBot callbacks.
             return None
         try:
-            action_id, data = decode_button_callback(encoded_value)
+            action_id, data = await decode_button_callback_async(encoded_value)
         except ButtonActionExpiredError:
             user_id = (payload.get("user") or {}).get("id")
             channel_id = (payload.get("channel") or {}).get("id")

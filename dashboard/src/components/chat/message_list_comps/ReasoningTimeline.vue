@@ -189,6 +189,8 @@ function isIPythonToolCall(tool: Record<string, unknown>) {
 }
 
 function toolCallStatusText(tool: Record<string, unknown>) {
+  // The turn ended before this call returned (see ToolCallCard).
+  if (tool.phase === "unknown") return tm("toolStatus.interrupted");
   if (tool.finished_ts) return tm("toolStatus.done");
   return tm("toolStatus.running");
 }

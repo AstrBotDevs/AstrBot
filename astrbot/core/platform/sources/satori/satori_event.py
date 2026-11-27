@@ -18,7 +18,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
-from astrbot.core.platform.button_interaction import encode_button_callback
+from astrbot.core.platform.button_interaction import encode_button_callback_async
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -382,9 +382,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"图片转换为base64失败: {e}")
 
             elif isinstance(component, File):
-                return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
-                )
+                src = html.escape(component.file, quote=True)
+                name = html.escape(component.name or "文件", quote=True)
+                return f'<file src="{src}" name="{name}"/>'
 
             elif isinstance(component, Record):
                 try:
@@ -434,7 +434,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     theme = theme_map[button.style]
                     if isinstance(button.action, Button.CallbackAction):
                         callback_id = html.escape(
-                            encode_button_callback(
+                            await encode_button_callback_async(
                                 button.id,
                                 button.action.data,
                                 expires_at=component.action_expires_at
@@ -522,9 +522,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     logger.error(f"图片转换为base64失败: {e}")
 
             elif isinstance(component, File):
-                return (
-                    f'<file src="{component.file}" name="{component.name or "文件"}"/>'
-                )
+                src = html.escape(component.file, quote=True)
+                name = html.escape(component.name or "文件", quote=True)
+                return f'<file src="{src}" name="{name}"/>'
 
             elif isinstance(component, Record):
                 try:
@@ -574,7 +574,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     theme = theme_map[button.style]
                     if isinstance(button.action, Button.CallbackAction):
                         callback_id = html.escape(
-                            encode_button_callback(
+                            await encode_button_callback_async(
                                 button.id,
                                 button.action.data,
                                 expires_at=component.action_expires_at
