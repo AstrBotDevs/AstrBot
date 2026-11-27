@@ -17,6 +17,7 @@ from deprecated import deprecated
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -228,7 +229,8 @@ class _PermissionGuardedTool(FunctionTool):
             name=tool.name,
             description=tool.description,
             parameters=getattr(tool, "parameters", {}),
-            execution_timeout=tool.execution_timeout,
+            is_background_task=getattr(tool, "is_background_task", False),
+            execution_timeout=getattr(tool, "execution_timeout", None),
         )
         self._wrapped = tool
         self._mgr = manager
@@ -237,7 +239,7 @@ class _PermissionGuardedTool(FunctionTool):
         self.handler_module_path = getattr(tool, "handler_module_path", None)
 
     def is_available(self) -> bool:
-        if not self.active or not self._wrapped.active:
+        if not self.active or not getattr(self._wrapped, "active", True):
             return False
         if isinstance(self._wrapped, MCPTool):
             runtime = self._mgr.mcp_server_runtime_view.get(
@@ -252,7 +254,12 @@ class _PermissionGuardedTool(FunctionTool):
         error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
-        if not self.is_available():
+        available = (
+            context.is_tool_available(self)
+            if isinstance(context, ContextWrapper)
+            else self.is_available()
+        )
+        if not available:
             return f"error: Tool {self.name} is no longer available."
         return None
 

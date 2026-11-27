@@ -357,6 +357,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
         self.run_context.tools = request.func_tool
+        self.run_context.tool_discovery = None
         self._done_hook_called = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
@@ -374,9 +375,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._light_tool_set: ToolSet | None = None
         self._tool_schema_param_set: ToolSet | None = None
         self._offered_tools: ToolSet | None = None
-        self._tool_discovery: ToolDiscovery[TContext] | None = None
-        if tool_schema_mode == "dynamic" and request.func_tool:
-            self._tool_discovery = ToolDiscovery(request.func_tool)
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
@@ -388,19 +386,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
-        system_prompt = request.system_prompt
-        if self._tool_discovery is not None and self._tool_discovery.catalog:
-            system_prompt = (
-                f"{system_prompt or ''}\nWhen the task needs a capability you do not "
-                f"have, call {self._tool_discovery.name} with a focused search query. "
-                "Use the full definitions in the next round to call discovered tools. "
-                "Search again with different keywords or for another capability when needed. "
-                "Use tools only when they help answer the request."
-            ).strip()
-        if system_prompt:
+        if request.system_prompt:
             messages.insert(
                 0,
-                Message(role="system", content=system_prompt),
+                Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
 
@@ -789,9 +778,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
+        contexts = self.run_context.messages
+        discovery = self.run_context.tool_discovery
+        if discovery is not None and self._offered_tools:
+            hint = (
+                f"When the task needs a capability you do not have, call {discovery.name} "
+                "with a focused search query. Use the full definitions in the next round "
+                "to call discovered tools. Search again if you need more matches or another "
+                "capability. Use tools only when they help answer the request."
+            )
+            if contexts and contexts[0].role == "system":
+                content = contexts[0].content
+                content = (
+                    [*content, TextPart(text=hint)]
+                    if isinstance(content, list)
+                    else f"{content or ''}\n{hint}".strip()
+                )
+                contexts = [
+                    contexts[0].model_copy(update={"content": content}),
+                    *contexts[1:],
+                ]
+            else:
+                contexts = [Message(role="system", content=hint), *contexts]
         async with aclosing(
             self._recorded_responses(
-                payload, contexts=self.run_context.messages, streaming=self.streaming
+                payload, contexts=contexts, streaming=self.streaming
             )
         ) as responses:
             async for response in responses:
@@ -943,7 +954,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return sanitized_contexts
 
     def _func_tool_for_provider(self) -> ToolSet | None:
-        tool_set = self.req.func_tool
+        tool_set = (
+            self.run_context.tools
+            if self.tool_schema_mode == "dynamic"
+            else self.req.func_tool
+        )
         if not tool_set:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
@@ -957,9 +972,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self._light_tool_set is None:
                 self._light_tool_set = tool_set.get_light_tool_set()
             return self._light_tool_set or None
-        if self._tool_discovery is not None:
-            discovery = self._tool_discovery
-            if not discovery.catalog:
+        if self.tool_schema_mode == "dynamic":
+            discovery = self.run_context.tool_discovery
+            if not isinstance(discovery, ToolDiscovery) or not discovery.catalog:
                 return None
             return ToolSet(
                 [
@@ -967,7 +982,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     *(
                         tool
                         for tool in discovery.loaded.values()
-                        if tool.is_available()
+                        if self.run_context.is_tool_available(tool)
                     ),
                 ]
             )
@@ -1248,6 +1263,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
+            if (
+                self.state == AgentState.IDLE
+                and self.tool_schema_mode == "dynamic"
+                and self.run_context.tools
+            ):
+                self.run_context.tool_discovery = ToolDiscovery(self.run_context.tools)
             if self._step_budget_max is not None:
                 self._step_budget_used += 1
             while True:
@@ -1807,7 +1828,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     continue
 
                 if dynamic:
-                    if not func_tool.is_available():
+                    if not self.run_context.is_tool_available(func_tool):
                         raise ValueError(
                             f"Tool {func_tool_name} is no longer available."
                         )
@@ -1851,7 +1872,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
                 if dynamic:
-                    if not func_tool.is_available():
+                    if not self.run_context.is_tool_available(func_tool):
                         raise ValueError(
                             f"Tool {func_tool_name} is no longer available."
                         )

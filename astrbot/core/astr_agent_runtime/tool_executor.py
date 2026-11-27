@@ -150,9 +150,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
-        # Keep the regular MCP/local timeout path; only handoffs need typed dispatch.
-        if isinstance(tool, _PermissionGuardedTool) and isinstance(
-            tool._wrapped, HandoffTool
+        if not run_context.is_tool_available(tool):
+            raise ValueError(f"Tool {tool.name} is no longer available.")
+
+        send_to_user = getattr(run_context.context, "send_to_user", True)
+        # Preserve legacy handoff dispatch outside dynamic mode and keep MCP timeouts.
+        if isinstance(tool, _PermissionGuardedTool) and (
+            (
+                run_context.tool_discovery is not None
+                and isinstance(tool._wrapped, HandoffTool)
+            )
+            or (tool.is_background_task and send_to_user)
         ):
             error = await tool.authorization_error(run_context)
             if error is not None:
@@ -161,12 +169,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     isError=True,
                 )
                 return
-            tool = tool._wrapped
+            if run_context.tool_discovery is not None and isinstance(
+                tool._wrapped, HandoffTool
+            ):
+                tool = tool._wrapped
 
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             # Caller-owned outputs must settle before the turn's stream closes.
-            if is_bg and getattr(run_context.context, "send_to_user", True):
+            if is_bg and send_to_user:
                 async with aclosing(
                     cls._execute_handoff_background(tool, run_context, **tool_args)
                 ) as results:
@@ -188,13 +199,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     yield r
             return
 
-        elif tool.is_background_task and getattr(
-            run_context.context, "send_to_user", True
-        ):
+        elif tool.is_background_task and send_to_user:
             event = run_context.context.event
             if active_event_registry.get_background_stop_signal(event).is_set():
                 return
             task_id = uuid.uuid4().hex
+            run_context = copy(run_context)
 
             async def _run_in_background() -> None:
                 try:
@@ -634,9 +644,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 effective_timeout = max(effective_timeout, yield_time_ms / 1000 + 5)
 
         wrapper = call_local_llm_tool(
-            context=run_context,
-            handler=awaitable,
-            method_name=method_name,
+            run_context,
+            awaitable,
+            method_name,
+            tool,
             **tool_args,
         )
         async with aclosing(wrapper):

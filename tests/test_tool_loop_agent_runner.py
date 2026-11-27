@@ -3461,3 +3461,56 @@ async def test_dynamic_tools_keep_loaded_schema_on_provider_fallback_and_reset()
         pass
 
     assert next_provider.text_chat.await_args.kwargs["func_tool"] is None
+
+
+@pytest.mark.asyncio
+async def test_repeated_discovery_loads_remaining_matches():
+    from astrbot.core.agent.tool_discovery import ToolDiscovery
+
+    catalog = ToolSet(
+        [FunctionTool(f"calendar_{i}", "Find calendar events", {}) for i in range(4)]
+    )
+    context = ContextWrapper(context=None)
+    discovery = ToolDiscovery(catalog)
+
+    first = await discovery.call(context, query="calendar events")
+    second = await discovery.call(context, query="calendar events")
+
+    assert "calendar_3" not in first
+    assert "calendar_3" in second
+    assert len(discovery.loaded) == 4
+
+
+@pytest.mark.asyncio
+async def test_dynamic_catalog_is_built_after_agent_begin():
+    removed = FunctionTool("calendar_old", "Find calendar entries", {})
+    added = FunctionTool("calendar_find", "Find calendar entries", {})
+
+    class CatalogHooks(BaseAgentRunHooks):
+        async def on_agent_begin(self, run_context):
+            run_context.tools.remove_tool(removed.name)
+            run_context.tools.add_tool(added)
+
+    runner = ToolLoopAgentRunner()
+    provider = SequentialToolProvider(["astrbot_search_tools"], [{"query": "calendar"}])
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(
+            prompt="Find calendar entries", func_tool=ToolSet([removed])
+        ),
+        run_context=ContextWrapper(context=SimpleNamespace(event=object())),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=CatalogHooks(),
+        tool_schema_mode="dynamic",
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    results = [
+        message.content
+        for message in runner.run_context.messages
+        if message.role == "tool"
+    ]
+    assert results == ["Loaded tools for the next round: calendar_find."]
+    assert not runner.run_context.is_tool_available(removed)

@@ -11,6 +11,7 @@ _RESULT_LIMIT = 3
 def _terms(text: str) -> set[str]:
     terms = set()
     for word in _SEARCH_TERMS.findall(text.casefold()):
+        # Overlapping Han bigrams allow partial matches without a word segmenter.
         if "\u3400" <= word[0] <= "\u9fff" and len(word) > 1:
             terms.update(word[i : i + 2] for i in range(len(word) - 1))
         elif word not in _STOP_WORDS:
@@ -56,6 +57,7 @@ class ToolDiscovery(FunctionTool[TContext]):
         query = _terms(kwargs["query"])
         ranked = []
         for tool in self.catalog:
+            # Tool names are stronger signals than words in longer descriptions.
             score = 3 * len(query & _terms(tool.name)) + len(
                 query & _terms(tool.description)
             )
@@ -63,14 +65,20 @@ class ToolDiscovery(FunctionTool[TContext]):
                 ranked.append((-score, tool.name, tool))
 
         matches = []
+        already_loaded = False
         for _, name, tool in sorted(ranked, key=lambda item: item[:2]):
-            if not tool.is_available():
+            if not context.is_tool_available(tool):
+                continue
+            if name in self.loaded:
+                already_loaded = True
                 continue
             self.loaded[name] = tool
             matches.append(name)
             if len(matches) == _RESULT_LIMIT:
                 break
         if not matches:
+            if already_loaded:
+                return "No new matching tools. Use the tools already loaded or try other keywords."
             return (
                 "No matching tools. Try a more specific capability or other keywords."
             )
