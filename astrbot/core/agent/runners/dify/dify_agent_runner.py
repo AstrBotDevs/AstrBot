@@ -153,6 +153,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             default="",
         )
         result = ""
+        agent_message_texts: dict[str, str] = {}
 
         # 处理图片上传
         files_payload = []
@@ -195,7 +196,24 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 ):
                     logger.debug(f"dify resp chunk: {chunk}")
                     if chunk["event"] == "message" or chunk["event"] == "agent_message":
-                        result += chunk["answer"]
+                        answer = chunk["answer"]
+                        message_id = chunk.get("message_id", "")
+                        if chunk["event"] == "agent_message":
+                            agent_message_texts[message_id] = (
+                                agent_message_texts.get(message_id, "") + answer
+                            )
+                        else:
+                            # Agent deltas may include process text before the final
+                            # answer. Remove only the longest suffix/prefix overlap
+                            # with the closing message; preserve same-event deltas.
+                            streamed_text = agent_message_texts.pop(message_id, "")
+                            for overlap in range(
+                                min(len(streamed_text), len(answer)), 0, -1
+                            ):
+                                if streamed_text.endswith(answer[:overlap]):
+                                    answer = answer[overlap:]
+                                    break
+                        result += answer
                         if not conversation_id:
                             await sp.put_async(
                                 scope="umo",
@@ -206,11 +224,11 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                             conversation_id = chunk["conversation_id"]
 
                         # 如果是流式响应，发送增量数据
-                        if self.streaming and chunk["answer"]:
+                        if self.streaming and answer:
                             yield AgentResponse(
                                 type="streaming_delta",
                                 data=AgentResponseData(
-                                    chain=MessageChain().message(chunk["answer"])
+                                    chain=MessageChain().message(answer)
                                 ),
                             )
                     elif chunk["event"] == "message_end":
