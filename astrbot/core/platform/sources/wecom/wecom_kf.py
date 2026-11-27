@@ -153,12 +153,17 @@ class WeChatKF(BaseWeChatAPI):
         }
         return self._post("kf/customer/batchget", data=data)
 
-    def get_account_list(self):
-        """获取客服帐号列表
+    def get_account_list(self, offset=0, limit=100):
+        """Get a page of customer-service accounts.
 
-        :return: 接口调用结果
+        Args:
+            offset: Index of the first account.
+            limit: Requested page size, from 1 to 100.
+
+        Returns:
+            The response containing the account list.
         """
-        return self._get("kf/account/list")
+        return self._post("kf/account/list", data={"offset": offset, "limit": limit})
 
     def add_contact_way(self, open_kfid, scene):
         """获取客服帐号链接

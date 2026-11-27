@@ -26,7 +26,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.button_interaction import decode_button_callback_async
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
@@ -198,11 +198,14 @@ class WecomPlatformAdapter(Platform):
 
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
-        self._wechat_kf_seen_text_messages: dict[str, float] = {}
+        self._wechat_kf_seen_text_messages: dict[tuple[str, str, bool, str], float] = {}
+        self._wechat_kf_id: str | None = None
+        self._wechat_kf_scope = ""
+        self._wechat_kf_sync_lock = asyncio.Lock()
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
-            self.config["secret"].strip(),
+            self.config.get("secret", "").strip(),
         )
 
         # 微信客服
@@ -218,52 +221,68 @@ class WecomPlatformAdapter(Platform):
 
         async def callback(msg: BaseMessage) -> None:
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
+                if not self.kf_name:
+                    return
+                if self._wechat_kf_id is None:
+                    raise RuntimeError(
+                        "The configured WeCom customer-service account is not ready"
+                    )
+                kfid = msg._data["OpenKfId"]
+                if kfid != self._wechat_kf_id:
+                    return
+                token = msg._data["Token"]
+                async with self._wechat_kf_sync_lock:
+                    checkpoint = await sp.get_async(
+                        "wecom_kf", self._wechat_kf_scope, "cursor"
+                    )
+                    # The initial read can include three days of account history.
+                    # Keep its cutoff across pages and restarts until caught up.
+                    if isinstance(checkpoint, dict):
+                        cursor = checkpoint["cursor"]
+                        since = checkpoint["since"]
+                    else:
+                        cursor = checkpoint
+                        since = None
+                    while True:
+                        page = await asyncio.to_thread(
+                            self.wechat_kf_api.sync_msg, token, kfid, cursor
+                        )
+                        next_cursor = page["next_cursor"]
+                        has_more = page["has_more"]
+                        if has_more and (not next_cursor or next_cursor == cursor):
+                            raise ValueError("WeCom returned a non-advancing cursor")
 
-                def get_latest_msg_item() -> dict | None:
-                    token = msg._data["Token"]
-                    kfid = msg._data["OpenKfId"]
-                    has_more = 1
-                    ret = {}
-                    while has_more:
-                        ret = self.wechat_kf_api.sync_msg(token, kfid)
-                        has_more = ret["has_more"]
-                    msg_list = ret.get("msg_list", [])
-                    if msg_list:
-                        return msg_list[-1]
-                    return None
+                        for item in page["msg_list"]:
+                            # Origin 3 is customer input. Other origins include staff replies.
+                            if item.get("origin") != 3 or (
+                                since is not None and item["send_time"] < since
+                            ):
+                                continue
+                            item_kfid = item.get("open_kfid") or item.get("OpenKfId")
+                            if item_kfid and item_kfid != kfid:
+                                logger.warning(
+                                    "Ignored a WeCom message for another account"
+                                )
+                                continue
+                            item["open_kfid"] = kfid
+                            await self.convert_wechat_kf_message(item)
 
-                msg_new = await asyncio.get_running_loop().run_in_executor(
-                    None,
-                    get_latest_msg_item,
-                )
-                if msg_new:
-                    await self.convert_wechat_kf_message(msg_new)
+                        if next_cursor and (next_cursor != cursor or since is not None):
+                            checkpoint = (
+                                {"cursor": next_cursor, "since": since}
+                                if has_more and since is not None
+                                else next_cursor
+                            )
+                            await sp.put_async(
+                                "wecom_kf", self._wechat_kf_scope, "cursor", checkpoint
+                            )
+                        if not has_more:
+                            break
+                        cursor = next_cursor
                 return
             await self.convert_message(msg)
 
         self.server.callback = callback
-
-    def _is_duplicate_wechat_kf_text_message(self, session_id: str, text: str) -> bool:
-        normalized_text = text.strip()
-        if not normalized_text:
-            return False
-
-        now = time.monotonic()
-        expired_keys = [
-            key
-            for key, expires_at in self._wechat_kf_seen_text_messages.items()
-            if expires_at <= now
-        ]
-        for key in expired_keys:
-            self._wechat_kf_seen_text_messages.pop(key, None)
-
-        dedup_key = f"{session_id}:{normalized_text}"
-        if dedup_key in self._wechat_kf_seen_text_messages:
-            return True
-        self._wechat_kf_seen_text_messages[dedup_key] = (
-            now + self.WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS
-        )
-        return False
 
     @override
     async def send_by_session(
@@ -307,35 +326,52 @@ class WecomPlatformAdapter(Platform):
 
     @override
     async def run(self) -> None:
-        loop = asyncio.get_running_loop()
-        if self.kf_name:
+        started_at = int(time.time())
+        self._wechat_kf_id = None
+        if self.kf_name and self.config.get("secret", "").strip():
+            matches = set()
+            offset = 0
+            limit = 100
+            while True:
+                page = await asyncio.to_thread(
+                    self.wechat_kf_api.get_account_list, offset, limit
+                )
+                accounts = page["account_list"]
+                matches.update(
+                    account["open_kfid"]
+                    for account in accounts
+                    if account.get("name") == self.kf_name and account.get("open_kfid")
+                )
+                if len(accounts) < limit:
+                    break
+                offset += len(accounts)
+            if len(matches) != 1:
+                raise ValueError(
+                    "Expected one WeCom customer-service account matching kf_name"
+                )
+            kfid = matches.pop()
+            self._wechat_kf_scope = (
+                f"{self.meta().id}:{self.config['corpid'].strip()}:{kfid}"
+            )
+            if not await sp.get_async("wecom_kf", self._wechat_kf_scope, "cursor"):
+                await sp.put_async(
+                    "wecom_kf",
+                    self._wechat_kf_scope,
+                    "cursor",
+                    {"cursor": "", "since": started_at},
+                )
+            self._wechat_kf_id = kfid
             try:
-                acc_list = (
-                    await loop.run_in_executor(
-                        None,
-                        self.wechat_kf_api.get_account_list,
+                kf_url = (
+                    await asyncio.to_thread(
+                        self.wechat_kf_api.add_contact_way,
+                        kfid,
+                        "astrbot_placeholder",
                     )
-                ).get("account_list", [])
-                logger.debug(f"获取到微信客服列表: {acc_list!s}")
-                for acc in acc_list:
-                    name = acc.get("name", None)
-                    if name != self.kf_name:
-                        continue
-                    open_kfid = acc.get("open_kfid", None)
-                    if not open_kfid:
-                        logger.error("获取微信客服失败，open_kfid 为空。")
-                    logger.debug(f"Found open_kfid: {open_kfid!s}")
-                    kf_url = (
-                        await loop.run_in_executor(
-                            None,
-                            self.wechat_kf_api.add_contact_way,
-                            open_kfid,
-                            "astrbot_placeholder",
-                        )
-                    ).get("url", "")
-                    logger.info(
-                        f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
-                    )
+                ).get("url", "")
+                logger.info(
+                    f"Scan this QR code in WeChat to contact customer service: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
+                )
             except Exception as e:
                 logger.error(e)
 
@@ -477,9 +513,14 @@ class WecomPlatformAdapter(Platform):
         abm.type = MessageType.FRIEND_MESSAGE
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
         abm.message_str = ""
+        dedup_key = None
         if msgtype == "text":
             text_data = msg.get("text", {})
             text = text_data.get("content", "").strip()
+            msgid = msg.get("msgid")
+            dedup_value = msgid or text
+            abm.message = [Plain(text=text)]
+            abm.message_str = text
             menu_id = text_data.get("menu_id")
             if isinstance(menu_id, str) and menu_id:
                 try:
@@ -497,6 +538,7 @@ class WecomPlatformAdapter(Platform):
                         "callback as a regular text message."
                     )
                 else:
+                    dedup_value = msgid
                     abm.message = [
                         ButtonInteraction(
                             action_id=action_id,
@@ -507,17 +549,19 @@ class WecomPlatformAdapter(Platform):
                         )
                     ]
                     abm.message_str = action_id
-                    await self.handle_msg(abm)
-                    return abm
-            if self._is_duplicate_wechat_kf_text_message(abm.session_id, text):
-                logger.debug(
-                    "忽略 15 秒内重复微信客服文本消息 session_id=%s text=%s",
-                    abm.session_id,
-                    text,
-                )
-                return None
-            abm.message = [Plain(text=text)]
-            abm.message_str = text
+            if dedup_value:
+                now = time.monotonic()
+                self._wechat_kf_seen_text_messages = {
+                    key: expiry
+                    for key, expiry in self._wechat_kf_seen_text_messages.items()
+                    if expiry > now
+                }
+                dedup_key = (abm.self_id, abm.session_id, bool(msgid), dedup_value)
+                if dedup_key in self._wechat_kf_seen_text_messages:
+                    logger.debug(
+                        "Ignored a duplicate WeCom customer-service text message."
+                    )
+                    return None
         elif msgtype == "image":
             media_id = msg.get("image", {}).get("media_id", "")
             resp: Response = await asyncio.get_running_loop().run_in_executor(
@@ -553,9 +597,11 @@ class WecomPlatformAdapter(Platform):
                     default_suffix=".wav",
                 ).to_path(target_format="wav")
             except Exception as e:
-                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
+                logger.warning(
+                    "Could not transcode WeCom customer-service audio; using the original AMR: %s",
+                    e,
+                )
                 path_wav = path
-                return
 
             abm.message = [Record(file=path_wav, url=path_wav)]
         elif msgtype == "file":
@@ -585,6 +631,10 @@ class WecomPlatformAdapter(Platform):
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
         await self.handle_msg(abm)
+        if dedup_key is not None:
+            self._wechat_kf_seen_text_messages[dedup_key] = (
+                time.monotonic() + self.WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS
+            )
         return abm
 
     def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
