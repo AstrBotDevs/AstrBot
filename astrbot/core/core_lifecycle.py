@@ -445,24 +445,61 @@ class AstrBotCoreLifecycle:
             logger.warning(f"释放数据库引擎失败: {e}")
 
     async def restart(self) -> None:
-        """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        """Restart the core lifecycle after gracefully stopping active components."""
+        if temp_dir_cleaner := getattr(self, "temp_dir_cleaner", None):
+            await temp_dir_cleaner.stop()
+
+        curr_tasks = list(getattr(self, "curr_tasks", ()))
+        for task in curr_tasks:
+            task.cancel()
+
         if event_bus := getattr(self, "event_bus", None):
             await event_bus.close()
+
+        if cron_manager := getattr(self, "cron_manager", None):
+            await cron_manager.shutdown()
+
         context = getattr(self, "star_context", None)
         if isinstance(context, Context):
             await context.agent.close()
         if self.subagents is not None:
             await self.subagents.close()
+
+        if plugin_manager := getattr(self, "plugin_manager", None):
+            for plugin in plugin_manager.context.get_all_stars():
+                try:
+                    await plugin_manager._terminate_plugin(plugin)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"Plugin {plugin.name} did not terminate cleanly ({e!s}), "
+                        "which may lead to resource leaks.",
+                    )
+
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
-        from astrbot.core.utils.trace_store import close_trace_store
-
-        await asyncio.to_thread(close_trace_store)
         if sp.db_helper is self.db:
             await sp.close()
         self.dashboard_shutdown_event.set()
+
+        for task in curr_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"Task {task.get_name()} failed during restart: {e}")
+
+        from astrbot.core.utils.trace_store import close_trace_store
+
+        await asyncio.to_thread(close_trace_store)
         await self.db.chat_usage_writer.close()
+        try:
+            await self.db.engine.dispose()
+        except Exception as e:
+            logger.warning(f"Failed to dispose database engine: {e}")
+
         threading.Thread(
             target=restart_process,
             name="restart",
