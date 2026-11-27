@@ -176,6 +176,10 @@ async def append_video_attachment(
     else:
         text = f"[Video Attachment: name {video_name}, path {video_path}]"
 
+    # Collect the resolved path so providers that declare the `video` modality
+    # receive the video itself. The text part above is kept for every other
+    # provider, and for the persisted history where the video block is dropped.
+    req.video_urls.append(video_path)
     req.extra_user_content_parts.append(TextPart(text=text))
 
 
