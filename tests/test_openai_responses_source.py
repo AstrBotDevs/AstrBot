@@ -570,3 +570,65 @@ async def test_parse_response_extracts_deduplicated_xai_url_and_top_level_citati
         assert not (
             await other._parse_response(response, tools=None)
         ).web_search_sources
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_sanitizes_legacy_tool_call_history():
+    provider = _make_provider()
+    contexts = [
+        {"role": "user", "content": "turn 1"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "search",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": '{"q":"a"}'},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "search", "content": "first"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                "malformed",
+                {
+                    "id": "unanswered",
+                    "type": "function",
+                    "function": {"name": "skip", "arguments": "{}"},
+                },
+                {
+                    "id": "search",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": '{"q":"b"}'},
+                },
+            ],
+        },
+        {"role": "tool", "tool_call_id": "search", "content": "second"},
+        {"role": "tool", "tool_call_id": "orphan_call", "content": "stale"},
+    ]
+
+    payloads, _ = await provider._prepare_chat_payload(
+        prompt="follow up",
+        contexts=contexts,
+    )
+
+    function_calls = [
+        item for item in payloads["input"] if item.get("type") == "function_call"
+    ]
+    function_outputs = [
+        item for item in payloads["input"] if item.get("type") == "function_call_output"
+    ]
+    assert len(function_calls) == 2
+    assert len(function_outputs) == 2
+    assert function_calls[0]["call_id"] == "search"
+    assert function_calls[1]["call_id"] != "search"
+    assert [item["call_id"] for item in function_outputs] == [
+        function_calls[0]["call_id"],
+        function_calls[1]["call_id"],
+    ]
+    assert [item["output"] for item in function_outputs] == ["first", "second"]
+    # Caller-owned context list must remain untouched.
+    assert contexts[3]["tool_calls"][2]["id"] == "search"

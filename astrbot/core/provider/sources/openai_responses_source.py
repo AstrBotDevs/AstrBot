@@ -63,8 +63,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
     ) -> list[dict]:
         """Convert AstrBot's OpenAI chat history to Responses input items.
 
-        The conversion preserves function call IDs and serialized reasoning output
-        items so the complete history can be replayed without server-side state.
+        The conversion sanitizes legacy tool-call history and preserves valid
+        function call IDs and serialized reasoning output items so the complete
+        history can be replayed without server-side state.
 
         Args:
             messages: AstrBot context in OpenAI Chat Completions format.
@@ -72,6 +73,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Returns:
             A list of Responses API input items.
         """
+        sanitized_payload: dict[str, Any] = {"messages": copy.deepcopy(messages)}
+        self._sanitize_assistant_messages(sanitized_payload)
+        messages = sanitized_payload["messages"]
+
         response_input: list[dict] = []
         host = (self.client.base_url.host or "").rstrip(".").lower()
         is_deepseek = (
