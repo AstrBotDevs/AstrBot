@@ -365,21 +365,45 @@ class SQLiteDatabase(BaseDatabase):
             return count if count is not None else 0
 
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
-        """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        """Get platform statistics within the specified offset in seconds.
+
+        Args:
+            offset_sec: Lookback window in seconds from the current local time.
+
+        Returns:
+            Aggregated ``PlatformStat`` rows grouped by platform ID and type,
+            ordered by latest timestamp descending.
+        """
         async with self.get_db() as session:
             session: AsyncSession
             now = datetime.now()
             start_time = now - timedelta(seconds=offset_sec)
-            result = await session.execute(
-                text("""
-                SELECT * FROM platform_stats
-                WHERE timestamp >= :start_time
-                GROUP BY platform_id
-                ORDER BY timestamp DESC
-                """),
-                {"start_time": start_time},
+            latest_ts = func.max(col(PlatformStat.timestamp)).label("timestamp")
+            total_count = func.sum(col(PlatformStat.count)).label("count")
+            stmt = (
+                select(
+                    latest_ts,
+                    col(PlatformStat.platform_id),
+                    col(PlatformStat.platform_type),
+                    total_count,
+                )
+                .where(col(PlatformStat.timestamp) >= start_time)
+                .group_by(
+                    col(PlatformStat.platform_id),
+                    col(PlatformStat.platform_type),
+                )
+                .order_by(desc(latest_ts))
             )
-            return list(result.scalars().all())
+            result = await session.execute(stmt)
+            return [
+                PlatformStat(
+                    timestamp=row.timestamp,
+                    platform_id=row.platform_id,
+                    platform_type=row.platform_type,
+                    count=int(row.count or 0),
+                )
+                for row in result.all()
+            ]
 
     @deprecated(
         version="4.30.0",
