@@ -36,13 +36,6 @@ _SECRET_KV_RE = re.compile(
 _URL_QUERY_RE = re.compile(r"(https?://[^\s?'\"<>]+)\?[^\s'\"<>]+")
 
 
-def _make_provider_ref(provider: object) -> weakref.ReferenceType[object] | None:
-    try:
-        return weakref.ref(provider)
-    except TypeError:
-        return None
-
-
 @dataclass
 class _RerankCooldownState:
     open_until: float
@@ -52,13 +45,28 @@ class _RerankCooldownState:
     provider_ref_id: int
 
     def matches_provider(self, provider: object) -> bool:
+        """Check whether this cooldown state belongs to the given provider instance.
+
+        Args:
+            provider: Rerank provider instance to compare against.
+
+        Returns:
+            True if the cooldown state tracks the same provider instance.
+        """
         if self.provider_ref is not None:
             return self.provider_ref() is provider
         return self.provider_ref_id == id(provider)
 
 
 def _extract_http_status(exc: BaseException) -> int | None:
-    """Extract an HTTP status code from an exception or its cause/context chain."""
+    """Extract an HTTP status code from an exception or its cause/context chain.
+
+    Args:
+        exc: Exception raised by a rerank provider call.
+
+    Returns:
+        The extracted HTTP status code (100-599), or None if unavailable.
+    """
     seen: set[int] = set()
     current: BaseException | None = exc
     while current is not None and id(current) not in seen:
@@ -85,7 +93,15 @@ def _extract_http_status(exc: BaseException) -> int | None:
 
 
 def _sanitize_error_summary(exc: BaseException, *, max_len: int = 200) -> str:
-    """Produce a concise, single-line, credential-free summary for logs."""
+    """Produce a concise, single-line, credential-free summary for logs.
+
+    Args:
+        exc: Exception to summarize.
+        max_len: Maximum summary length before truncation.
+
+    Returns:
+        Sanitized single-line error description.
+    """
     text = " ".join(str(exc).split())
     text = _BEARER_RE.sub("Bearer ***", text)
     text = _SECRET_KV_RE.sub(r"\1\2***", text)
@@ -98,6 +114,15 @@ def _sanitize_error_summary(exc: BaseException, *, max_len: int = 200) -> str:
 def _resolve_rerank_provider_id(
     rerank_provider: RerankProvider, explicit_id: str | None = None
 ) -> str:
+    """Resolve a stable identifier for a rerank provider instance.
+
+    Args:
+        rerank_provider: Rerank provider instance.
+        explicit_id: Optional configured provider ID from the knowledge base.
+
+    Returns:
+        A string identifier used as the cooldown key.
+    """
     if explicit_id:
         return str(explicit_id)
     meta_fn = getattr(rerank_provider, "meta", None)
@@ -153,14 +178,16 @@ class RetrievalManager:
             sparse_retriever: 稀疏检索器
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例
-            rerank_auth_cooldown_seconds: Rerank 遇到 401/402/403 时的初始冷却秒数
-            rerank_auth_max_cooldown_seconds: Rerank 连续认证/欠费失败时的最大冷却秒数
+            rerank_auth_cooldown_seconds: Initial cooldown in seconds when rerank returns HTTP 401/402/403.
+            rerank_auth_max_cooldown_seconds: Maximum cooldown in seconds for consecutive auth/billing failures.
 
         """
         self.sparse_retriever = sparse_retriever
         self.rank_fusion = rank_fusion
         self.kb_db = kb_db
-        self._rerank_auth_cooldown_seconds = max(1.0, float(rerank_auth_cooldown_seconds))
+        self._rerank_auth_cooldown_seconds = max(
+            1.0, float(rerank_auth_cooldown_seconds)
+        )
         self._rerank_auth_max_cooldown_seconds = max(
             self._rerank_auth_cooldown_seconds,
             float(rerank_auth_max_cooldown_seconds),
@@ -170,7 +197,16 @@ class RetrievalManager:
     def _is_rerank_in_cooldown(
         self, provider_id: str, rerank_provider: RerankProvider, now: float
     ) -> float:
-        """Return remaining cooldown seconds (>0) if the provider circuit is open."""
+        """Return remaining cooldown seconds (>0) if the provider circuit is open.
+
+        Args:
+            provider_id: Resolved rerank provider identifier.
+            rerank_provider: Active rerank provider instance.
+            now: Current monotonic timestamp in seconds.
+
+        Returns:
+            Remaining cooldown seconds, or 0.0 if the provider is not in cooldown.
+        """
         state = self._rerank_cooldowns.get(provider_id)
         if state is None:
             return 0.0
@@ -191,7 +227,17 @@ class RetrievalManager:
         status_code: int,
         now: float,
     ) -> float:
-        """Open or extend the recoverable cooldown circuit for auth/billing HTTP errors."""
+        """Open or extend the recoverable cooldown circuit for auth/billing HTTP errors.
+
+        Args:
+            provider_id: Resolved rerank provider identifier.
+            rerank_provider: Failing rerank provider instance.
+            status_code: HTTP 401, 402, or 403 status code returned by the provider.
+            now: Current monotonic timestamp in seconds.
+
+        Returns:
+            The applied cooldown duration in seconds.
+        """
         prev = self._rerank_cooldowns.get(provider_id)
         if prev is not None and prev.matches_provider(rerank_provider):
             cooldown = min(
@@ -200,19 +246,30 @@ class RetrievalManager:
             )
         else:
             cooldown = self._rerank_auth_cooldown_seconds
+        try:
+            provider_ref: weakref.ReferenceType[object] | None = weakref.ref(
+                rerank_provider
+            )
+        except TypeError:
+            provider_ref = None
         self._rerank_cooldowns[provider_id] = _RerankCooldownState(
             open_until=now + cooldown,
             cooldown_seconds=cooldown,
             status_code=status_code,
-            provider_ref=_make_provider_ref(rerank_provider),
+            provider_ref=provider_ref,
             provider_ref_id=id(rerank_provider),
         )
         return cooldown
 
     def _record_rerank_success(self, provider_id: str) -> None:
+        """Clear cooldown state when a rerank provider succeeds again.
+
+        Args:
+            provider_id: Resolved rerank provider identifier.
+        """
         if self._rerank_cooldowns.pop(provider_id, None) is not None:
             logger.info(
-                f"Rerank 提供商 '{provider_id}' 在冷却探测后已恢复正常，重新启用重排序。"
+                f"Rerank provider '{provider_id}' recovered after cooldown probe; re-enabling rerank."
             )
 
     async def retrieve(
@@ -343,7 +400,8 @@ class RetrievalManager:
             remaining = self._is_rerank_in_cooldown(provider_id, first_rerank, now)
             if remaining > 0:
                 logger.debug(
-                    f"Rerank 提供商 '{provider_id}' 处于认证/欠费冷却中（剩余约 {int(remaining)}s），跳过重排序并使用融合结果"
+                    f"Rerank provider '{provider_id}' is in auth/billing cooldown "
+                    f"(~{int(remaining)}s remaining); skipping rerank and using fused results."
                 )
             else:
                 try:
@@ -362,12 +420,14 @@ class RetrievalManager:
                             provider_id, first_rerank, status_code, time.monotonic()
                         )
                         logger.warning(
-                            f"Rerank 提供商 '{provider_id}' 返回 HTTP {status_code}（认证/额度异常），"
-                            f"已进入冷却熔断 {int(cooldown)}s 并使用融合结果: {summary}"
+                            f"Rerank provider '{provider_id}' returned HTTP {status_code} "
+                            f"(auth/billing error); entering {int(cooldown)}s cooldown "
+                            f"and falling back to fused results: {summary}"
                         )
                     else:
                         logger.warning(
-                            f"Rerank 执行失败，已跳过重排序并使用融合结果: {type(e).__name__}: {summary}"
+                            f"Rerank failed; skipping rerank and falling back to fused results: "
+                            f"{type(e).__name__}: {summary}"
                         )
 
         return retrieval_results[:top_m_final]
