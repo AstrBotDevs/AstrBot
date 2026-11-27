@@ -4,13 +4,15 @@ import enum
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
-from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
-from google.genai.types import GenerateContentResponse
-from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.responses import Response
+
+if TYPE_CHECKING:
+    from anthropic.types import Message as AnthropicMessage
+    from google.genai.types import GenerateContentResponse
+    from openai.types.chat.chat_completion import ChatCompletion
+    from openai.types.responses import Response
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
