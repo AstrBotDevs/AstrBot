@@ -1352,6 +1352,10 @@
         "description": "Temp Directory Size Limit (MB)",
         "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
       },
+      "backup_dir": {
+        "description": "Backup Export Directory",
+        "hint": "Custom directory for storing and exporting backup archives. Leave blank to use the default directory (data/backups). Relative paths resolve under the data directory; absolute paths are also supported."
+      },
       "trace_enable": {
         "description": "Enable Trace Recording",
         "hint": "Trace each user command and AI call."

@@ -7,6 +7,192 @@
             </v-card-title>
 
             <v-card-text class="pa-6">
+                <!-- 备份导出目录设置条 -->
+                <div class="backup-dir-card mb-4">
+                    <div class="backup-dir-card__header">
+                        <div class="backup-dir-card__title-group">
+                            <v-icon size="18" color="primary">mdi-folder-cog-outline</v-icon>
+                            <span class="backup-dir-card__title">
+                                {{ t('features.settings.backup.settings.title') }}
+                            </span>
+                            <v-chip
+                                size="x-small"
+                                :color="backupDirBadgeColor"
+                                variant="tonal"
+                                :ripple="false"
+                                class="non-interactive-chip"
+                            >
+                                {{ backupDirBadgeText }}
+                            </v-chip>
+                        </div>
+
+                        <div v-if="!editingBackupDir" class="backup-dir-card__header-actions">
+                            <v-btn
+                                v-if="backupSettings.effective_backup_dir"
+                                icon="mdi-content-copy"
+                                variant="text"
+                                size="x-small"
+                                :title="t('features.settings.backup.settings.copyPath')"
+                                :aria-label="t('features.settings.backup.settings.copyPath')"
+                                @click="copyBackupDir"
+                            />
+                            <v-btn
+                                size="small"
+                                variant="tonal"
+                                color="primary"
+                                prepend-icon="mdi-pencil-outline"
+                                :disabled="cannotEditBackupDir"
+                                @click="startEditingBackupDir"
+                            >
+                                {{ t('features.settings.backup.settings.edit') }}
+                            </v-btn>
+                        </div>
+                    </div>
+
+                    <v-progress-linear
+                        v-if="loadingSettings"
+                        indeterminate
+                        color="primary"
+                        height="2"
+                        class="mt-2"
+                    />
+
+                    <template v-else-if="!editingBackupDir">
+                        <div
+                            v-if="backupSettings.effective_backup_dir || backupSettings.default_backup_dir"
+                            class="backup-dir-card__path"
+                        >
+                            <code>{{ backupSettings.effective_backup_dir || backupSettings.default_backup_dir }}</code>
+                        </div>
+
+                        <v-alert
+                            v-if="!backupSettings.is_valid && backupSettings.validation_error"
+                            type="error"
+                            variant="tonal"
+                            density="compact"
+                            class="mt-2"
+                        >
+                            {{ backupSettings.validation_error }}
+                        </v-alert>
+
+                        <v-alert
+                            v-else-if="settingsError"
+                            type="error"
+                            variant="tonal"
+                            density="compact"
+                            class="mt-2"
+                        >
+                            {{ settingsError }}
+                        </v-alert>
+
+                        <div
+                            v-else-if="backupSettings.env_override"
+                            class="backup-dir-card__note text-caption text-medium-emphasis mt-2"
+                        >
+                            <v-icon size="14" class="mr-1">mdi-information-outline</v-icon>
+                            <span>{{ t('features.settings.backup.settings.envOverrideHint') }}</span>
+                        </div>
+
+                        <div
+                            v-else-if="isProcessing || backupSettings.has_active_tasks"
+                            class="backup-dir-card__note text-caption text-medium-emphasis mt-2"
+                        >
+                            <v-icon size="14" class="mr-1">mdi-clock-outline</v-icon>
+                            <span>{{ t('features.settings.backup.settings.activeTaskHint') }}</span>
+                        </div>
+                    </template>
+
+                    <template v-else>
+                        <div class="backup-dir-card__input-row mt-3">
+                            <v-text-field
+                                v-model="backupDirInput"
+                                :label="t('features.settings.backup.settings.inputLabel')"
+                                :placeholder="t('features.settings.backup.settings.inputPlaceholder', { dir: backupSettings.default_backup_dir || 'data/backups' })"
+                                :rules="[backupDirValidationRule]"
+                                variant="outlined"
+                                density="compact"
+                                clearable
+                                hide-details="auto"
+                                :disabled="savingSettings || isProcessing"
+                                class="backup-dir-card__input"
+                                @keyup.enter="saveBackupDir"
+                            />
+                            <v-btn
+                                v-if="canPickBackupDirectory"
+                                variant="tonal"
+                                color="primary"
+                                height="40"
+                                prepend-icon="mdi-folder-open-outline"
+                                :loading="pickingBackupDirectory"
+                                :disabled="savingSettings || isProcessing"
+                                @click="handlePickBackupDirectory"
+                            >
+                                {{ t('features.settings.backup.settings.browse') }}
+                            </v-btn>
+                        </div>
+
+                        <div class="backup-dir-card__hints mt-2">
+                            <div class="backup-dir-card__note text-caption text-medium-emphasis">
+                                <v-icon size="14" class="mr-1">mdi-information-outline</v-icon>
+                                <span>
+                                    {{ t('features.settings.backup.settings.hintDefault', { dir: backupSettings.default_backup_dir || 'data/backups' }) }}
+                                </span>
+                            </div>
+                            <div class="backup-dir-card__note text-caption text-medium-emphasis mt-1">
+                                <v-icon size="14" class="mr-1">mdi-folder-alert-outline</v-icon>
+                                <span>{{ t('features.settings.backup.settings.hintNoAutoMove') }}</span>
+                            </div>
+                        </div>
+
+                        <v-alert
+                            v-if="settingsError"
+                            type="error"
+                            variant="tonal"
+                            density="compact"
+                            class="mt-2"
+                        >
+                            {{ settingsError }}
+                        </v-alert>
+
+                        <div class="backup-dir-card__actions mt-3">
+                            <div>
+                                <v-btn
+                                    v-if="backupSettings.is_custom || (backupDirInput || '').trim()"
+                                    variant="text"
+                                    size="small"
+                                    color="secondary"
+                                    prepend-icon="mdi-restore"
+                                    :disabled="savingSettings || isProcessing"
+                                    @click="resetBackupDirToDefault"
+                                >
+                                    {{ t('features.settings.backup.settings.resetDefault') }}
+                                </v-btn>
+                            </div>
+                            <div class="d-flex align-center ga-2">
+                                <v-btn
+                                    variant="text"
+                                    size="small"
+                                    color="grey-darken-1"
+                                    :disabled="savingSettings"
+                                    @click="cancelEditingBackupDir"
+                                >
+                                    {{ t('core.common.cancel') }}
+                                </v-btn>
+                                <v-btn
+                                    color="primary"
+                                    variant="tonal"
+                                    size="small"
+                                    :loading="savingSettings"
+                                    :disabled="savingSettings || isProcessing || !canSaveBackupDir"
+                                    @click="saveBackupDir"
+                                >
+                                    {{ t('core.common.save') }}
+                                </v-btn>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
                 <!-- 选项卡 -->
                 <v-tabs v-model="activeTab" color="primary" class="mb-4">
                     <v-tab value="export">
@@ -52,7 +238,13 @@
                         <div v-else-if="exportStatus === 'completed'" class="text-center py-8">
                             <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.export.completed') }}</h3>
-                            <p class="mb-4">{{ exportResult?.filename }}</p>
+                            <p class="mb-2">{{ exportResult?.filename }}</p>
+                            <p
+                                v-if="exportResult?.path"
+                                class="backup-saved-path text-caption text-medium-emphasis mb-4"
+                            >
+                                {{ t('features.settings.backup.export.savedPath', { path: exportResult.path }) }}
+                            </p>
                             <v-btn color="primary" variant="tonal" @click="downloadBackup(exportResult?.filename)" class="mr-2">
                                 <v-icon class="mr-2">mdi-download</v-icon>
                                 {{ t('features.settings.backup.export.download') }}
@@ -313,9 +505,9 @@
                         </div>
 
                         <!-- 提示信息 -->
-                        <p class="text-caption text-grey text-center mt-4">
+                        <p class="text-caption text-grey text-center mt-4 backup-ftp-hint">
                             <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-                            {{ t('features.settings.backup.list.ftpHint') }}
+                            {{ t('features.settings.backup.list.ftpHintWithDir', { dir: backupSettings.effective_backup_dir || 'data/backups' }) }}
                         </p>
                     </v-window-item>
                 </v-window>
@@ -382,17 +574,42 @@ import { ref, computed, watch } from 'vue'
 import { backupApi } from '@/api/v1'
 import { useChunkedUpload } from '@/composables/useChunkedUpload'
 import { useI18n } from '@/i18n/composables'
+import { useToastStore } from '@/stores/toast'
+import { copyToClipboard } from '@/utils/clipboard'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
+import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
 import WaitingForRestart from './WaitingForRestart.vue'
 
-const { t } = useI18n()
+const emit = defineEmits(['settings-updated'])
 
+const { t } = useI18n()
+const toastStore = useToastStore()
 const confirmDialog = useConfirmDialog()
 
 const isOpen = ref(false)
 const activeTab = ref('export')
 const wfr = ref(null)
+
+// 备份目录设置状态
+const loadingSettings = ref(false)
+const savingSettings = ref(false)
+const editingBackupDir = ref(false)
+const backupDirInput = ref('')
+const settingsError = ref('')
+const canPickBackupDirectory = ref(false)
+const pickingBackupDirectory = ref(false)
+const backupSettings = ref({
+    backup_dir: '',
+    effective_backup_dir: '',
+    default_backup_dir: '',
+    is_custom: false,
+    source: 'default',
+    env_override: false,
+    has_active_tasks: false,
+    is_valid: true,
+    validation_error: null
+})
 
 // 导出状态
 const exportStatus = ref('idle') // idle, processing, completed, failed
@@ -443,6 +660,55 @@ const isProcessing = computed(() => {
            importStatus.value === 'uploading'
 })
 
+const cannotEditBackupDir = computed(() => {
+    return loadingSettings.value ||
+           savingSettings.value ||
+           isProcessing.value ||
+           backupSettings.value.env_override ||
+           backupSettings.value.has_active_tasks
+})
+
+const backupDirBadgeText = computed(() => {
+    if (backupSettings.value.env_override) {
+        return t('features.settings.backup.settings.envBadge')
+    }
+    if (backupSettings.value.is_custom) {
+        return t('features.settings.backup.settings.customBadge')
+    }
+    return t('features.settings.backup.settings.defaultBadge')
+})
+
+const backupDirBadgeColor = computed(() => {
+    if (backupSettings.value.env_override) return 'info'
+    if (backupSettings.value.is_custom) return 'primary'
+    return 'secondary'
+})
+
+const backupDirValidationRule = (value) => {
+    if (!value) return true
+    if (/[\x00-\x1f]/.test(value)) {
+        return t('features.settings.backup.settings.invalidControlChars')
+    }
+    return true
+}
+
+const canSaveBackupDir = computed(() => {
+    const trimmed = (backupDirInput.value || '').trim()
+    if (backupDirValidationRule(trimmed) !== true) {
+        return false
+    }
+    if (!backupSettings.value.is_valid) {
+        return true
+    }
+    return trimmed !== (backupSettings.value.backup_dir || '')
+})
+
+watch(backupDirInput, () => {
+    if (settingsError.value) {
+        settingsError.value = ''
+    }
+})
+
 // 版本检查相关的计算属性
 const versionAlertType = computed(() => {
     const status = checkResult.value?.version_status
@@ -473,9 +739,15 @@ const versionAlertMessage = computed(() => {
 })
 
 // 监听对话框打开
-watch(isOpen, (newVal) => {
+watch(isOpen, async (newVal) => {
     if (newVal) {
+        canPickBackupDirectory.value = false
+        loadBackupSettings()
         loadBackupList()
+        const runtimeInfo = await getDesktopRuntimeInfo()
+        canPickBackupDirectory.value =
+            runtimeInfo.isDesktopRuntime &&
+            typeof runtimeInfo.bridge?.pickDirectory === 'function'
     } else {
         resetAll()
     }
@@ -488,6 +760,146 @@ watch(activeTab, (newVal) => {
     }
 })
 
+const showBackupToast = (message, color = 'success') => {
+    toastStore.add({
+        message,
+        color,
+        timeout: 3000
+    })
+}
+
+const applyBackupSettings = (data) => {
+    if (!data || typeof data !== 'object') return
+    backupSettings.value = {
+        backup_dir: data.backup_dir || '',
+        effective_backup_dir: data.effective_backup_dir || '',
+        default_backup_dir: data.default_backup_dir || '',
+        is_custom: Boolean(data.is_custom),
+        source: data.source || 'default',
+        env_override: Boolean(data.env_override),
+        has_active_tasks: Boolean(data.has_active_tasks),
+        is_valid: data.is_valid !== false,
+        validation_error: data.validation_error || null
+    }
+}
+
+const loadBackupSettings = async () => {
+    loadingSettings.value = true
+    settingsError.value = ''
+    try {
+        const response = await backupApi.getSettings()
+        if (response.data.status === 'ok') {
+            applyBackupSettings(response.data.data)
+        } else {
+            settingsError.value = response.data.message || t('features.settings.backup.settings.loadFailed')
+        }
+    } catch (error) {
+        settingsError.value =
+            error?.response?.data?.message ||
+            error?.message ||
+            t('features.settings.backup.settings.loadFailed')
+    } finally {
+        loadingSettings.value = false
+    }
+}
+
+const startEditingBackupDir = () => {
+    if (cannotEditBackupDir.value) return
+    backupDirInput.value = backupSettings.value.backup_dir || ''
+    settingsError.value = ''
+    editingBackupDir.value = true
+}
+
+const cancelEditingBackupDir = () => {
+    editingBackupDir.value = false
+    backupDirInput.value = backupSettings.value.backup_dir || ''
+    settingsError.value = ''
+}
+
+const handlePickBackupDirectory = async () => {
+    const pickDirectory = window.astrbotDesktop?.pickDirectory
+    if (!canPickBackupDirectory.value || !pickDirectory || pickingBackupDirectory.value) {
+        return
+    }
+    pickingBackupDirectory.value = true
+    try {
+        const initialPath =
+            (backupDirInput.value || '').trim() ||
+            backupSettings.value.effective_backup_dir ||
+            null
+        const selectedPath = await pickDirectory(initialPath)
+        if (selectedPath) {
+            backupDirInput.value = selectedPath
+        }
+    } catch (error) {
+        console.warn('[backup-dialog] Failed to pick backup directory.', error)
+    } finally {
+        pickingBackupDirectory.value = false
+    }
+}
+
+const persistBackupDir = async (nextDir, isReset = false) => {
+    if (savingSettings.value || isProcessing.value) return
+    const trimmed = (nextDir || '').trim()
+    const validationResult = backupDirValidationRule(trimmed)
+    if (validationResult !== true) {
+        settingsError.value = validationResult
+        return
+    }
+
+    savingSettings.value = true
+    settingsError.value = ''
+    try {
+        const response = await backupApi.updateSettings({
+            backup_dir: trimmed
+        })
+        if (response.data.status !== 'ok') {
+            settingsError.value =
+                response.data.message || t('features.settings.backup.settings.saveFailed')
+            return
+        }
+        applyBackupSettings(response.data.data)
+        backupDirInput.value = backupSettings.value.backup_dir || ''
+        editingBackupDir.value = false
+        emit('settings-updated', { ...backupSettings.value })
+        showBackupToast(
+            isReset || !trimmed
+                ? t('features.settings.backup.settings.resetSuccess')
+                : t('features.settings.backup.settings.saveSuccess'),
+            'success'
+        )
+        await loadBackupList()
+    } catch (error) {
+        settingsError.value =
+            error?.response?.data?.message ||
+            error?.message ||
+            t('features.settings.backup.settings.saveFailed')
+    } finally {
+        savingSettings.value = false
+    }
+}
+
+const saveBackupDir = async () => {
+    if (!canSaveBackupDir.value) return
+    await persistBackupDir(backupDirInput.value || '', false)
+}
+
+const resetBackupDirToDefault = async () => {
+    await persistBackupDir('', true)
+}
+
+const copyBackupDir = async () => {
+    const path = backupSettings.value.effective_backup_dir
+    if (!path) return
+    const ok = await copyToClipboard(path)
+    showBackupToast(
+        ok
+            ? t('features.settings.backup.settings.copySuccess')
+            : t('features.settings.backup.settings.copyFailed'),
+        ok ? 'success' : 'error'
+    )
+}
+
 // 加载备份列表
 const loadBackupList = async () => {
     loadingList.value = true
@@ -495,8 +907,14 @@ const loadBackupList = async () => {
         const response = await backupApi.list()
         if (response.data.status === 'ok') {
             backupList.value = response.data.data.items || []
+            if (response.data.data.backup_dir && !backupSettings.value.effective_backup_dir) {
+                backupSettings.value.effective_backup_dir = response.data.data.backup_dir
+            }
+        } else {
+            backupList.value = []
         }
     } catch (error) {
+        backupList.value = []
         console.error('Failed to load backup list:', error)
     } finally {
         loadingList.value = false
@@ -505,6 +923,7 @@ const loadBackupList = async () => {
 
 // 开始导出
 const startExport = async () => {
+    editingBackupDir.value = false
     exportStatus.value = 'processing'
     exportProgress.value = { current: 0, total: 100, message: '' }
 
@@ -519,6 +938,7 @@ const startExport = async () => {
     } catch (error) {
         exportStatus.value = 'failed'
         exportError.value = error.message || 'Export failed'
+        loadBackupSettings()
     }
 }
 
@@ -542,10 +962,12 @@ const pollExportProgress = async () => {
             } else if (data.status === 'completed') {
                 exportStatus.value = 'completed'
                 exportResult.value = data.result
+                loadBackupSettings()
                 loadBackupList()
             } else if (data.status === 'failed') {
                 exportStatus.value = 'failed'
                 exportError.value = data.error || 'Export failed'
+                loadBackupSettings()
             } else {
                 setTimeout(pollExportProgress, 1000)
             }
@@ -569,6 +991,7 @@ const resetExport = () => {
 const uploadAndCheck = async () => {
     if (!importFile.value) return
 
+    editingBackupDir.value = false
     importStatus.value = 'uploading'
     uploadMessageOverride.value = ''
 
@@ -578,10 +1001,12 @@ const uploadAndCheck = async () => {
             importStatus.value = 'failed'
             importError.value = uploader.errorMessage.value
         }
+        loadBackupSettings()
         return
     }
 
     uploadedFilename.value = result.filename
+    loadBackupSettings()
     await checkUploadedBackup()
 }
 
@@ -597,10 +1022,12 @@ const resumeAndCheck = async () => {
             importStatus.value = 'failed'
             importError.value = uploader.errorMessage.value
         }
+        loadBackupSettings()
         return
     }
 
     uploadedFilename.value = result.filename
+    loadBackupSettings()
     await checkUploadedBackup()
 }
 
@@ -637,6 +1064,7 @@ const checkUploadedBackup = async () => {
 const confirmImport = async () => {
     if (!uploadedFilename.value) return
 
+    editingBackupDir.value = false
     importStatus.value = 'processing'
     importProgress.value = { current: 0, total: 100, message: '' }
 
@@ -652,6 +1080,7 @@ const confirmImport = async () => {
     } catch (error) {
         importStatus.value = 'failed'
         importError.value = error.response?.data?.message || error.message || 'Import failed'
+        loadBackupSettings()
     }
 }
 
@@ -674,9 +1103,11 @@ const pollImportProgress = async () => {
                 setTimeout(pollImportProgress, 1000)
             } else if (data.status === 'completed') {
                 importStatus.value = 'completed'
+                loadBackupSettings()
             } else if (data.status === 'failed') {
                 importStatus.value = 'failed'
                 importError.value = data.error || 'Import failed'
+                loadBackupSettings()
             } else {
                 setTimeout(pollImportProgress, 1000)
             }
@@ -684,6 +1115,7 @@ const pollImportProgress = async () => {
     } catch (error) {
         importStatus.value = 'failed'
         importError.value = error.message || 'Failed to get import progress'
+        loadBackupSettings()
     }
 }
 
@@ -691,6 +1123,9 @@ const pollImportProgress = async () => {
 const resetImport = async () => {
     // 取消并清理可能存在的上传会话（包括失败后可续传的会话）
     await uploader.cancel()
+    if (isOpen.value) {
+        loadBackupSettings()
+    }
 
     importStatus.value = 'idle'
     importFile.value = null
@@ -865,6 +1300,8 @@ const restartAstrBot = async () => {
 
 // 重置所有状态
 const resetAll = async () => {
+    editingBackupDir.value = false
+    settingsError.value = ''
     resetExport()
     await resetImport()
     activeTab.value = 'export'
@@ -885,6 +1322,84 @@ defineExpose({ open })
 </script>
 
 <style scoped>
+.backup-dir-card {
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    border-radius: 12px;
+    background: rgba(var(--v-theme-on-surface), 0.02);
+    padding: 12px 14px;
+}
+
+.backup-dir-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.backup-dir-card__title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.backup-dir-card__title {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.backup-dir-card__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.backup-dir-card__path {
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(var(--v-theme-on-surface), 0.04);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    word-break: break-all;
+}
+
+.backup-dir-card__input-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.backup-dir-card__input {
+    flex: 1 1 280px;
+}
+
+.backup-dir-card__note {
+    display: flex;
+    align-items: flex-start;
+    line-height: 1.45;
+}
+
+.backup-dir-card__note .v-icon {
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.backup-dir-card__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.backup-saved-path,
+.backup-ftp-hint {
+    word-break: break-all;
+}
+
 .v-list-item {
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }

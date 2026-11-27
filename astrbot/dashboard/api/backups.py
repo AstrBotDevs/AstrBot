@@ -9,6 +9,7 @@ from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     BackupImportRequest,
     BackupRenameRequest,
+    BackupSettingsUpdateRequest,
     BackupUploadInitRequest,
     BackupUploadSessionRequest,
 )
@@ -50,7 +51,13 @@ def _ok_result(result):
 def _safe_backup_filename(filename: str | None) -> str:
     if not filename:
         raise BackupServiceError("缺少参数 filename")
-    if ".." in filename or "/" in filename or "\\" in filename:
+    if (
+        "\x00" in filename
+        or ".." in filename
+        or "/" in filename
+        or "\\" in filename
+        or filename.startswith(".")
+    ):
         raise BackupServiceError("文件名包含非法路径字符")
     return filename
 
@@ -301,6 +308,46 @@ async def status_dashboard_backup_upload(
     return await _run(
         lambda: service.upload_status(_model_dict(payload), owner=username),
         prefix="查询上传状态失败",
+    )
+
+
+@router.get("/backups/settings")
+async def get_backup_settings(
+    _auth: AuthContext = Depends(require_system_scope),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(service.get_backup_settings, prefix="获取备份设置失败")
+
+
+@legacy_router.get("/settings")
+async def get_dashboard_backup_settings(
+    _username: str = Depends(require_dashboard_user),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(service.get_backup_settings, prefix="获取备份设置失败")
+
+
+@router.put("/backups/settings")
+async def update_backup_settings(
+    payload: BackupSettingsUpdateRequest,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.update_backup_settings({"backup_dir": payload.backup_dir}),
+        prefix="更新备份设置失败",
+    )
+
+
+@legacy_router.post("/settings")
+async def update_dashboard_backup_settings(
+    payload: BackupSettingsUpdateRequest,
+    _username: str = Depends(require_dashboard_user),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.update_backup_settings({"backup_dir": payload.backup_dir}),
+        prefix="更新备份设置失败",
     )
 
 

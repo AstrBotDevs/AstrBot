@@ -4977,6 +4977,30 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/backups/settings:
+    get:
+      tags: [Backups]
+      summary: Get backup settings
+      operationId: getBackupSettings
+      x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    put:
+      tags: [Backups]
+      summary: Update backup settings
+      operationId: updateBackupSettings
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupSettingsUpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/backups/tasks/{task_id}:
     get:
       tags: [Backups]
@@ -7163,6 +7187,14 @@ components:
         confirmed:
           type: boolean
           default: true
+      additionalProperties: false
+
+    BackupSettingsUpdateRequest:
+      type: object
+      properties:
+        backup_dir:
+          type: string
+          nullable: true
       additionalProperties: false
 
     UpdateRequest:

@@ -501,7 +501,7 @@
     </div>
 
     <WaitingForRestart ref="wfr" />
-    <BackupDialog ref="backupDialog" />
+    <BackupDialog ref="backupDialog" @settings-updated="handleBackupSettingsUpdated" />
     <ChangelogDialog v-model="changelogDialog" />
     <DashboardTwoFactorDialog
         v-model="configSave2faDialogVisible"
@@ -1134,6 +1134,22 @@ const restartAstrBot = async () => {
 const openBackupDialog = () => {
     if (backupDialog.value) {
         backupDialog.value.open();
+    }
+};
+
+const handleBackupSettingsUpdated = (settings) => {
+    const nextBackupDir = typeof settings?.backup_dir === 'string' ? settings.backup_dir : '';
+    if (systemConfigData.value && typeof systemConfigData.value === 'object') {
+        systemConfigData.value.backup_dir = nextBackupDir;
+    }
+    try {
+        const snapshot = JSON.parse(systemConfigLastSavedSnapshot.value || '{}');
+        if (snapshot && typeof snapshot === 'object') {
+            snapshot.backup_dir = nextBackupDir;
+            systemConfigLastSavedSnapshot.value = JSON.stringify(snapshot);
+        }
+    } catch {
+        systemConfigLastSavedSnapshot.value = JSON.stringify(systemConfigData.value || {});
     }
 };
 

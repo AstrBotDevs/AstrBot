@@ -194,6 +194,29 @@
     "dialog": {
       "title": "备份管理"
     },
+    "settings": {
+      "title": "备份导出目录",
+      "defaultBadge": "默认",
+      "customBadge": "自定义",
+      "envBadge": "环境变量",
+      "edit": "修改目录",
+      "copyPath": "复制路径",
+      "copySuccess": "已复制备份目录路径",
+      "copyFailed": "复制路径失败",
+      "inputLabel": "自定义备份导出目录",
+      "inputPlaceholder": "留空恢复默认：{dir}",
+      "browse": "选择目录",
+      "resetDefault": "恢复默认",
+      "hintDefault": "留空时使用默认目录（{dir}）；相对路径以 data 目录为基准，支持绝对路径。",
+      "hintNoAutoMove": "更改目录仅影响新的导出与列表展示，旧目录中已有的备份文件不会被自动移动或删除。",
+      "envOverrideHint": "当前由环境变量 ASTRBOT_BACKUP_DIR 指定，无法在此页面修改。",
+      "activeTaskHint": "当前有备份导出、导入或上传任务正在进行，完成后再修改目录。",
+      "saveSuccess": "备份导出目录已更新",
+      "resetSuccess": "已恢复默认备份目录",
+      "loadFailed": "加载备份目录设置失败",
+      "saveFailed": "更新备份目录失败",
+      "invalidControlChars": "目录路径不能包含控制字符"
+    },
     "tabs": {
       "export": "导出备份",
       "import": "导入备份",
@@ -207,6 +230,7 @@
       "processing": "正在导出...",
       "wait": "请稍候，正在打包数据...",
       "completed": "导出完成！",
+      "savedPath": "保存路径：{path}",
       "download": "下载备份",
       "another": "创建新备份",
       "failed": "导出失败",
@@ -263,7 +287,8 @@
       "renameRequired": "请输入文件名",
       "renameInvalidChars": "文件名包含非法字符",
       "renameFailed": "重命名失败",
-      "ftpHint": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 data/backups 目录"
+      "ftpHint": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 data/backups 目录",
+      "ftpHintWithDir": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 {dir} 目录"
     }
   },
   "apiKey": {

@@ -300,6 +300,7 @@ DEFAULT_CONFIG = {
     "log_file_path": "logs/astrbot.log",
     "log_file_max_mb": 20,
     "temp_dir_max_size": 1024,
+    "backup_dir": "",
     "trace_enable": False,
     "trace_db_path": "logs/traces.db",
     "trace_db_max_mb": 80,
@@ -3416,6 +3417,7 @@ CONFIG_METADATA_2 = {
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
             "temp_dir_max_size": {"type": "int"},
+            "backup_dir": {"type": "string"},
             "trace_enable": {"type": "bool"},
             "trace_db_path": {"type": "string"},
             "trace_db_max_mb": {"type": "int"},
@@ -5133,6 +5135,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "临时目录大小上限 (MB)",
                         "type": "int",
                         "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
+                    },
+                    "backup_dir": {
+                        "description": "备份导出目录",
+                        "type": "string",
+                        "hint": "自定义备份文件的存储与导出目录。留空使用默认目录（data/backups）；相对路径以 data 目录为基准，支持绝对路径。",
                     },
                     "trace_enable": {
                         "description": "启用追踪记录",
