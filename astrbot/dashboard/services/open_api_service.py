@@ -29,6 +29,7 @@ from astrbot.dashboard.services.auth_service import (
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     collect_plain_text_from_message_parts,
+    merge_native_search_refs,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -440,7 +441,7 @@ class OpenApiService:
             ):
                 return None
             parts = message_accumulator.build_message_parts(final=final)
-            extracted_refs: dict[str, Any] = {}
+            extracted_refs = refs
             try:
                 extracted_refs = chat_bridge.extract_web_search_refs(
                     collect_plain_text_from_message_parts(parts), parts
@@ -449,14 +450,9 @@ class OpenApiService:
                 logger.exception(
                     f"Open API WS failed to extract web search refs: {exc}"
                 )
-            if pending_refs:
-                merged = list(extracted_refs.get("used", []))
-                seen_urls = {ref["url"] for ref in merged}
-                merged.extend(
-                    ref for ref in pending_refs["used"] if ref["url"] not in seen_urls
-                )
-                extracted_refs = {"used": merged}
-            refs = extracted_refs
+            refs = merge_native_search_refs(
+                extracted_refs, pending_refs.get("used", [])
+            )
             record = await chat_bridge.save_bot_message(
                 session_id,
                 parts,

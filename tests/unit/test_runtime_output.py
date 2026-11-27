@@ -247,8 +247,13 @@ async def test_failed_turn_preserves_error_identity_and_partial_reply(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("platform", ["webchat", "telegram"])
-async def test_present_turn_forwards_web_search_sources_only_to_webchat(platform):
+@pytest.mark.parametrize(
+    ("platform", "emit_output"),
+    [("webchat", True), ("telegram", True), ("webchat", False)],
+)
+async def test_present_turn_forwards_web_search_sources_only_to_webchat(
+    platform, emit_output
+):
     sources = ({"index": "1", "url": "https://x.ai/news", "title": "xAI News"},)
 
     class SearchSession(OutputSession):
@@ -268,10 +273,15 @@ async def test_present_turn_forwards_web_search_sources_only_to_webchat(platform
     agent_input.event.send = AsyncMock()
     turn = await session.run_turn(agent_input)
 
-    chains = [chain async for chain in present_turn(turn, streaming=False)]
+    chains = [
+        chain
+        async for chain in present_turn(turn, streaming=False, emit_output=emit_output)
+    ]
 
-    assert [chain.get_plain_text() for chain in chains] == ["Answer"]
-    if platform == "webchat":
+    assert [chain.get_plain_text() for chain in chains] == (
+        ["Answer"] if emit_output else []
+    )
+    if platform == "webchat" and emit_output:
         agent_input.event.send.assert_awaited_once()
         sent_chain = agent_input.event.send.await_args.args[0]
         assert sent_chain.type == "web_search_sources"

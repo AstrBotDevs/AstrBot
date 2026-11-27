@@ -1384,6 +1384,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     await self._finalize_aborted_step()
                     return
+                if requery_resp is not llm_resp and requery_resp.web_search_sources:
+                    previous_urls = {
+                        source["url"] for source in llm_resp.web_search_sources
+                    }
+                    new_sources = tuple(
+                        source
+                        for source in requery_resp.web_search_sources
+                        if source["url"] not in previous_urls
+                    )
+                    if new_sources:
+                        yield WebSearchSources(sources=new_sources)
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(

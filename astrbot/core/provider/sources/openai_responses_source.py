@@ -295,11 +295,14 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return payloads, context_query
 
-    def _build_response_tools(self, tools: ToolSet | None) -> list[dict]:
+    def _build_response_tools(
+        self, tools: ToolSet | None, extra_body: dict
+    ) -> list[dict]:
         """Build function tools and optionally include xAI native search.
 
         Args:
             tools: Function tools exposed to the model.
+            extra_body: Request-local body from which configured xAI tools are consumed.
 
         Returns:
             Tool definitions for the Responses request.
@@ -313,7 +316,16 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         if self.provider_config.get("provider") == "xai" and bool(
             self.provider_config.get("xai_native_search", False)
         ):
-            response_tools.append({"type": "web_search"})
+            configured = extra_body.pop("tools", None) or []
+            configured_names = {
+                tool["name"] for tool in configured if tool["type"] == "function"
+            }
+            response_tools = [
+                tool for tool in response_tools if tool["name"] not in configured_names
+            ]
+            response_tools.extend(configured)
+            if not any(tool["type"] == "web_search" for tool in configured):
+                response_tools.append({"type": "web_search"})
 
         return response_tools
 
@@ -338,15 +350,15 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
-        response_tools = self._build_response_tools(tools)
-        if response_tools:
-            payloads["tools"] = response_tools
-            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
-
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+
+        response_tools = self._build_response_tools(tools, extra_body)
+        if response_tools:
+            payloads["tools"] = response_tools
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         for key in list(payloads):
             if key not in self.default_params:
@@ -412,15 +424,15 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        response_tools = self._build_response_tools(tools)
-        if response_tools:
-            payloads["tools"] = response_tools
-            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
-
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
+
+        response_tools = self._build_response_tools(tools, extra_body)
+        if response_tools:
+            payloads["tools"] = response_tools
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         for key in list(payloads):
             if key not in self.default_params:
@@ -581,6 +593,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         serialized_reasoning_items: list[dict] = []
         web_search_sources: list[dict[str, Any]] = []
         seen_source_urls: set[str] = set()
+        is_xai = self.provider_config.get("provider") == "xai"
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
@@ -589,6 +602,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                     content_type = self._field(content, "type")
                     if content_type == "output_text":
                         text_parts.append(str(self._field(content, "text", "")))
+                        if not is_xai:
+                            continue
                         for annotation in self._field(content, "annotations", []) or []:
                             if self._field(annotation, "type") != "url_citation":
                                 continue
@@ -664,7 +679,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         if llm_response.tools_call_args:
             llm_response.role = "tool"
 
-        if not web_search_sources:
+        if is_xai and not web_search_sources:
             for url in self._field(response, "citations", []) or []:
                 if not url or url in seen_source_urls:
                     continue

@@ -1808,6 +1808,7 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
                 return LLMResponse(
                     role="assistant",
                     completion_text="Let me check.",
+                    web_search_sources=[{"url": "https://example.org/first"}],
                     tools_call_name=["test_tool"],
                     tools_call_args=[{}],
                     tools_call_ids=["select_tool"],
@@ -1820,6 +1821,10 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
                 if use_result_chain
                 else None,
                 reasoning_content=reasoning,
+                web_search_sources=[
+                    {"url": "https://example.org/first"},
+                    {"url": "https://example.org/next"},
+                ],
             )
 
     provider = RequeryReplyProvider()
@@ -1837,11 +1842,14 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
         tool_schema_mode="skills_like",
     )
     original_step = runner.step
+    sources = []
     final_events = []
     hooks_at_emission = []
 
     async def recorded_step():
         async for response in original_step():
+            if response.type == "web_search.sources":
+                sources.extend(item["url"] for item in response.sources)
             if response.type == "message.completed" and any(
                 getattr(part, "text", None) == final_text for part in response.content
             ):
@@ -1858,6 +1866,7 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
             show_reasoning=show_reasoning,
         )
     ]
+    assert sources == ["https://example.org/first", "https://example.org/next"]
     assert sum(chain.get_plain_text() == final_text for chain in chains) == 1
     assert sum(chain.get_plain_text() == "Let me check." for chain in chains) == 1
     assert sum(chain.get_plain_text() == reasoning for chain in chains) == int(

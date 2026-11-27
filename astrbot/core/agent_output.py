@@ -222,7 +222,7 @@ async def present_turn(
                         )
                     )
         elif isinstance(payload, WebSearchSources):
-            if event.get_platform_name() == "webchat":
+            if emit_output and event.get_platform_name() == "webchat":
                 await event.send(
                     MessageChain(
                         type="web_search_sources",
