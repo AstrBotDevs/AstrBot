@@ -185,6 +185,11 @@ import { useModuleI18n } from '@/i18n/composables';
 import { useProviderSources } from '@/composables/useProviderSources';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 
+export interface SavedModelResult {
+  providerId: string;
+  modelName: string;
+}
+
 defineProps<{ disabled?: boolean }>();
 const emit = defineEmits<{ 'update:busy': [value: boolean] }>();
 const { tm } = useModuleI18n('features/provider');
@@ -226,6 +231,7 @@ const modelOptions = computed(() => [...new Set([
 ])]);
 const ready = computed(() => !!selectedProviderSource.value && !!String(model.value || '').trim() && !loadingSources.value && !loadingDefault.value && !loadingModels.value && !testing.value);
 watch([loadingModels, testing], ([modelsLoading, isTesting]) => emit('update:busy', modelsLoading || isTesting));
+
 watch(loadingSources, async (loading, _, onCleanup) => {
   if (loading || choice.value) return;
   let active = true;
@@ -269,22 +275,54 @@ function choose(value: string | null) {
   model.value = sourceProviders.value.find(p => p.enable !== false)?.model || '';
 }
 
-async function save(): Promise<string | undefined> {
+async function save(assignDefault = false): Promise<SavedModelResult | undefined> {
   if (!selectedProviderSource.value || !String(model.value || '').trim() || loadingSources.value || loadingDefault.value || loadingModels.value) return;
   error.value = '';
   try {
     if (isSourceModified.value && !await saveProviderSource()) return;
     const name = String(model.value).trim();
     const existing = sourceProviders.value.find(p => p.model === name);
-    if (existing?.enable !== false && existing?.id) return existing.id;
-    const config = buildModelProviderConfig(name);
-    if (!config) return;
-    const result = existing
-      ? await providerApi.update(existing.id, { ...existing, enable: true })
-      : await providerApi.createInSource(String(config.provider_source_id), config);
-    if (result.data.status !== 'ok') throw new Error(result.data.message || tm('providerSources.saveError'));
-    await loadConfig();
-    return existing?.id || config.id;
+    let savedId = existing?.enable !== false ? existing?.id : undefined;
+    if (!savedId) {
+      const config = buildModelProviderConfig(name);
+      if (!config) return;
+      const result = existing
+        ? await providerApi.update(existing.id, { ...existing, enable: true })
+        : await providerApi.createInSource(String(config.provider_source_id), config);
+      if (result.data.status !== 'ok') throw new Error(result.data.message || tm('providerSources.saveError'));
+      await loadConfig();
+      savedId = existing?.id || config.id;
+    }
+
+    const sourceTypes = new Map(displayedProviderSources.value.map(source => [source.id, source.provider_type]));
+    const provider = providers.value.find((p) => {
+      const type =
+        p.provider_type ||
+        sourceTypes.get(p.provider_source_id) ||
+        (String(p.type || '').includes('chat_completion') ? 'chat_completion' : '');
+      return p.id && (!savedId || p.id === savedId) && p.enable !== false && type === 'chat_completion';
+    });
+    if (!provider) throw new Error(t('guide.modelPending'));
+
+    let providerId = String(savedId || provider.id);
+    if (assignDefault) {
+      const profile = await configProfileApi.get('default');
+      if (profile.data.status !== 'ok') {
+        throw new Error(profile.data.message || t('onboard.providerLoadFailed'));
+      }
+      const config = profile.data.data?.config as Record<string, any> | undefined;
+      const defaultModel = config?.agent_runner?.config?.model;
+      if (config?.agent_runner?.runner_type === 'local' && defaultModel && !defaultModel.provider_id) {
+        defaultModel.provider_id = provider.id;
+        const result = await configProfileApi.update('default', config);
+        if (result.data.status !== 'ok') {
+          throw new Error(result.data.message || t('onboard.providerUpdateFailed'));
+        }
+      }
+      providerId = String(savedId || defaultModel?.provider_id || provider.id);
+    }
+
+    return { providerId, modelName: String(provider.model || name) };
   } catch (cause: any) {
     error.value = cause?.response?.data?.message || cause?.message || tm('providerSources.saveError');
   }
@@ -296,9 +334,9 @@ async function test(): Promise<boolean> {
   error.value = '';
   clearTestFeedback();
   try {
-    const providerId = await save();
-    if (!providerId) return false;
-    const response = await providerApi.test(providerId);
+    const saved = await save(false);
+    if (!saved?.providerId) return false;
+    const response = await providerApi.test(saved.providerId);
     if (response.data.status === 'ok' && response.data.data?.status === 'available') {
       testStatus.value = 'success';
       testMessage.value = t('guide.testSuccess');

@@ -705,7 +705,7 @@ import { useCustomizerStore } from "@/stores/customizer";
 import ProviderPage from "@/views/ProviderPage.vue";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 const OnboardingSetup = defineAsyncComponent(
-  () => import("@/components/OnboardingSetup.vue"),
+  () => import("@/components/onboarding/OnboardingSetup.vue"),
 );
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
