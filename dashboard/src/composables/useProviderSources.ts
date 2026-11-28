@@ -419,7 +419,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       minimax_tts_api: 'text_to_speech',
       volcengine_tts: 'text_to_speech',
       system_one_decision: 'decision',
-      openai_decision: 'decision'
+      openai_decision: 'decision',
+      gemini_decision: 'decision'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }
