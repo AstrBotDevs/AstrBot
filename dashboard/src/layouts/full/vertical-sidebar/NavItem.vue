@@ -5,8 +5,8 @@ import { useRoute } from 'vue-router';
 import { AppWindow, CircleHelp, Pin, PinOff, Puzzle, User, X } from '@lucide/vue';
 import { useDisplay } from 'vuetify';
 
-const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinnedTos: Array });
-const emit = defineEmits(['togglePin']);
+const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinnedTos: Array, openInDialog: Boolean });
+const emit = defineEmits(['togglePin', 'navigate']);
 const { t } = useI18n();
 const route = useRoute();
 const { smAndDown: isMobile } = useDisplay();
@@ -83,6 +83,8 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
         :rail="rail"
         :pinnable="pinnable"
         :pinned-tos="pinnedTos"
+        :open-in-dialog="openInDialog"
+        @navigate="(i) => emit('navigate', i)"
         @toggle-pin="(i) => emit('togglePin', i)"
       />
     </template>
@@ -93,10 +95,11 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     :disabled="!rail && (!item.pluginInfo || isMobile)"
     location="right"
     :open-delay="0"
-    :content-class="rail ? 'sidebar-rail-tooltip' : 'plugin-page-hover-card'"
+    :content-class="item.pluginInfo ? 'plugin-page-hover-card' : 'sidebar-rail-tooltip'"
   >
     <template v-slot:activator="{ props: tooltipProps }">
-      <v-list-item v-bind="tooltipProps" :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''"
+      <v-list-item v-bind="tooltipProps" :to="item.type === 'external' || openInDialog ? undefined : item.to"
+        @click="openInDialog && item.type !== 'external' && emit('navigate', item)" :href="item.type === 'external' ? item.to : ''"
         :active="isItemActive" rounded class="dashboard-nav-item" color="secondary" :disabled="item.disabled"
         :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle" :aria-label="itemTitle">
         <template v-slot:prepend>
@@ -173,8 +176,8 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
         </template>
       </v-list-item>
     </template>
-    <span v-if="rail">{{ itemTitle }}</span>
-    <div v-else-if="item.pluginInfo" class="plugin-hover-card">
+    <span v-if="!item.pluginInfo">{{ itemTitle }}</span>
+    <div v-else class="plugin-hover-card">
       <div class="plugin-hover-card__title">{{ itemTitle }}</div>
       <div class="plugin-hover-card__row">
         <Puzzle :size="13" class="plugin-hover-card__icon" />

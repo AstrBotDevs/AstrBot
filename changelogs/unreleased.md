@@ -21,6 +21,11 @@
 - 「插件 → 管理行为 → 函数工具」现在只列出插件工具。Agent 运行时工具由配置文件的 AI 功能设置控制，MCP 工具可在「插件 → MCP」查看。
 - Extensions → Handlers → Function Tools now lists plugin tools. Configure Agent runtime tools in the profile's AI capability settings and view MCP tools under Extensions → MCP Servers.
 
+### Desktop chat navigation / 桌面端聊天导航
+
+- 桌面端在聊天中点击主导航的站内入口时，通过对话框打开对应页面，保留当前会话。**返回导航** 从原聊天图标移到图标栏顶部的 AstrBot 标志。
+- Desktop chat opens internal navigation pages in a dialog over the current conversation. **Back to navigation** moves from the Chat icon to the AstrBot logo at the top of the rail.
+
 ### ChatUI history / ChatUI 历史记录
 
 - 一轮回复只保存为一条历史记录：流式分段、工具调用和按钮卡片都更新同一条记录，刷新后不再拆成多个气泡（SSE 与 WebSocket 相同）。已拆开的旧记录不会合并。

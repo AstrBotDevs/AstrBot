@@ -38,7 +38,7 @@
                     {{ tm('list.create') }}
                 </v-btn>
                 <v-btn class="mb-4 ml-4" prepend-icon="mdi-cog" variant="tonal" color="success"
-                    @click="$router.push('/extension?open_config=astrbot_plugin_knowledge_base')">
+                    @click="pageRouter.push('/extension?open_config=astrbot_plugin_knowledge_base')">
                     {{ tm('list.config') }}
                 </v-btn>
                 <v-btn class="mb-4 ml-4" prepend-icon="mdi-update" variant="tonal" color="warning"
@@ -432,6 +432,7 @@
 </template>
 
 <script>
+import { useRouter } from 'vue-router';
 import { pluginApi, pluginExtensionApi, providerApi } from '@/api/v1';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
@@ -444,7 +445,7 @@ export default {
     },
     setup() {
         const { tm } = useModuleI18n('features/alkaid/knowledge-base');
-        return { tm };
+        return { tm, pageRouter: useRouter() };
     },
     data() {
         return {
