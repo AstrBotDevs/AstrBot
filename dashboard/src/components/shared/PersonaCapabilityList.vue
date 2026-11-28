@@ -104,6 +104,9 @@ const partiallySelected = computed(
 
         <v-list-item-title class="capability-list__item-title">
           <span>{{ item.name }}</span>
+          <v-chip v-if="item.badge" size="x-small" variant="tonal">
+            {{ item.badge }}
+          </v-chip>
         </v-list-item-title>
         <v-list-item-subtitle v-if="item.meta || item.description">
           <span v-if="item.meta">{{ item.meta }}</span>

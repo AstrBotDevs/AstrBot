@@ -26,6 +26,12 @@ const decisions = ref({});
 const removed = ref([]);
 const conflict = ref("");
 const removeChoice = "remove";
+const sourceLabels = computed(() => ({
+  mcp: "MCP",
+  plugin: tm("personaQuickPreview.pluginSource"),
+  local: tm("personaQuickPreview.localSource"),
+  sandbox: tm("personaQuickPreview.presetSource"),
+}));
 const catalog = computed(() => ({
   tools: (props.availableTools ?? [])
     .filter((tool) => ["plugin", "mcp"].includes(tool.origin) && tool.resource)
@@ -47,7 +53,7 @@ const catalog = computed(() => ({
       label:
         skill.plugin_display_name ||
         skill.plugin_name ||
-        tm("personaQuickPreview.localSource"),
+        sourceLabels.value[skill.resource.source],
     })),
 }));
 
@@ -187,13 +193,7 @@ const groups = computed(() =>
             disabled: eligible.length === 0,
             configurable: !group.individual && eligible.length > 0,
             description: group.individual ? item.description : "",
-            badge:
-              item.source === "mcp"
-                ? "MCP"
-                : item.source === "plugin"
-                ? tm("personaQuickPreview.pluginSource")
-                : tm("personaQuickPreview.localSource"),
-            badgeTone: item.source,
+            badge: sourceLabels.value[item.source],
             meta: group.individual
               ? ""
               : tm(
