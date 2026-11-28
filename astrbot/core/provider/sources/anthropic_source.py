@@ -1,5 +1,6 @@
 import base64
 import builtins
+import hashlib
 import json
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
@@ -179,6 +180,18 @@ class ProviderAnthropic(Provider):
                 "type": "enabled",
             }
 
+    @staticmethod
+    def _normalize_tool_call_id(tool_call_id: str) -> str:
+        """Anthropic rejects tool_use ids longer than 64 chars.
+
+        OpenAI-compatible providers may produce longer ids, so shorten them
+        deterministically; tool_use and tool_result then still match.
+        """
+        if isinstance(tool_call_id, str) and len(tool_call_id) > 64:
+            digest = hashlib.sha1(tool_call_id.encode("utf-8")).hexdigest()[:32]
+            return f"toolu_{digest}"
+        return tool_call_id
+
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
 
@@ -233,7 +246,7 @@ class ProviderAnthropic(Provider):
                                     )
                                     else tool_call["function"]["arguments"]
                                 ),
-                                "id": tool_call["id"],
+                                "id": self._normalize_tool_call_id(tool_call["id"]),
                             },
                         )
                 new_messages.append(
@@ -245,7 +258,9 @@ class ProviderAnthropic(Provider):
             elif message["role"] == "tool":
                 tool_result_block = {
                     "type": "tool_result",
-                    "tool_use_id": message["tool_call_id"],
+                    "tool_use_id": self._normalize_tool_call_id(
+                        message["tool_call_id"]
+                    ),
                     "content": message["content"] or "<empty response>",
                 }
                 last_message = new_messages[-1] if new_messages else None
