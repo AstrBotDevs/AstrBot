@@ -3,9 +3,10 @@
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
 
+import asyncio
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
 from astrbot import logger
 from astrbot.core.db.vec_db.base import Result
@@ -15,9 +16,6 @@ from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriev
 from astrbot.core.provider.provider import RerankProvider
 
 from ..kb_helper import KBHelper
-
-if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 @dataclass
@@ -109,38 +107,35 @@ class RetrievalManager:
 
         kb_ids = new_kb_ids
 
-        # 1. 稠密检索
-        time_start = time.time()
-        dense_results = await self._dense_retrieve(
-            query=query,
-            kb_ids=kb_ids,
-            kb_options=kb_options,
+        # 1 & 2. 稠密检索与稀疏检索并发执行
+        time_start = time.monotonic()
+        dense_results, sparse_results = await asyncio.gather(
+            self._dense_retrieve(
+                query=query,
+                kb_ids=kb_ids,
+                kb_options=kb_options,
+            ),
+            self.sparse_retriever.retrieve(
+                query=query,
+                kb_ids=kb_ids,
+                kb_options=kb_options,
+            ),
         )
-        time_end = time.time()
+        time_end = time.monotonic()
         logger.debug(
-            f"Dense retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(dense_results)} results.",
-        )
-
-        # 2. 稀疏检索
-        time_start = time.time()
-        sparse_results = await self.sparse_retriever.retrieve(
-            query=query,
-            kb_ids=kb_ids,
-            kb_options=kb_options,
-        )
-        time_end = time.time()
-        logger.debug(
-            f"Sparse retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(sparse_results)} results.",
+            f"Hybrid retrieval across {len(kb_ids)} bases took "
+            f"{time_end - time_start:.2f}s and returned "
+            f"{len(dense_results)} dense / {len(sparse_results)} sparse results.",
         )
 
         # 3. 结果融合
-        time_start = time.time()
+        time_start = time.monotonic()
         fused_results = await self.rank_fusion.fuse(
             dense_results=dense_results,
             sparse_results=sparse_results,
             top_k=top_k_fusion,
         )
-        time_end = time.time()
+        time_end = time.monotonic()
         logger.debug(
             f"Rank fusion took {time_end - time_start:.2f}s and returned {len(fused_results)} results.",
         )
@@ -200,43 +195,96 @@ class RetrievalManager:
     ):
         """稠密检索 (向量相似度)
 
-        为每个知识库使用独立的向量数据库进行检索,然后合并结果。
+        为每个知识库并发执行向量数据库检索，并在共享同一个 Embedding Provider
+        的 FAISS 知识库间复用单次查询向量计算，然后合并结果。
 
         Args:
             query: 查询文本
             kb_ids: 知识库 ID 列表
-            top_k: 返回结果数量
+            kb_options: 每个知识库的检索配置
 
         Returns:
             List[Result]: 检索结果列表
 
         """
-        all_results: list[Result] = []
+        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
+        providers_by_key: dict[int, Any] = {}
+        kb_provider_key: dict[str, int] = {}
+        active_kbs: list[tuple[str, dict[str, Any]]] = []
         for kb_id in kb_ids:
-            if kb_id not in kb_options:
+            opt = kb_options.get(kb_id)
+            if not opt:
                 continue
-            try:
-                vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
-                dense_k = int(kb_options[kb_id]["top_k_dense"])
-                vec_results = await vec_db.retrieve(
-                    query=query,
-                    k=dense_k,
-                    fetch_k=dense_k * 2,
-                    rerank=False,  # 稠密检索阶段不进行 rerank
-                    metadata_filters={"kb_id": kb_id},
-                )
+            active_kbs.append((kb_id, opt))
+            vec_db = opt.get("vec_db")
+            if isinstance(vec_db, FaissVecDB):
+                provider = getattr(vec_db, "embedding_provider", None)
+                if provider is not None:
+                    key = id(provider)
+                    providers_by_key.setdefault(key, provider)
+                    kb_provider_key[kb_id] = key
 
-                all_results.extend(vec_results)
-            except Exception as e:
+        provider_embeddings: dict[int, list[float]] = {}
+        provider_errors: dict[int, Exception] = {}
+        if providers_by_key:
+            provider_keys = list(providers_by_key)
+            emb_outcomes = await asyncio.gather(
+                *(providers_by_key[key].get_embedding(query) for key in provider_keys),
+                return_exceptions=True,
+            )
+            for key, outcome in zip(provider_keys, emb_outcomes):
+                if isinstance(outcome, BaseException):
+                    if isinstance(outcome, Exception):
+                        provider_errors[key] = outcome
+                    else:
+                        raise outcome
+                else:
+                    provider_embeddings[key] = outcome
+
+        retrievable_kbs: list[tuple[str, dict[str, Any]]] = []
+        for kb_id, opt in active_kbs:
+            key = kb_provider_key.get(kb_id)
+            if key is not None and key in provider_errors:
+                err = provider_errors[key]
                 logger.error(
-                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e}",
-                    exc_info=True,
+                    f"知识库 {kb_id} 稠密检索失败: {type(err).__name__}: {err}",
+                    exc_info=(type(err), err, err.__traceback__),
                 )
-                # skip the faulty KB and continue
+                continue
+            retrievable_kbs.append((kb_id, opt))
 
-        # 按相似度排序并返回 top_k
+        async def _retrieve_one(kb_id: str, opt: dict[str, Any]) -> list[Result]:
+            vec_db = opt["vec_db"]
+            dense_k = int(opt["top_k_dense"])
+            kwargs: dict[str, Any] = {
+                "query": query,
+                "k": dense_k,
+                "fetch_k": dense_k * 2,
+                "rerank": False,
+                "metadata_filters": {"kb_id": kb_id},
+            }
+            if kb_id in kb_provider_key:
+                kwargs["query_embedding"] = provider_embeddings[kb_provider_key[kb_id]]
+            return await vec_db.retrieve(**kwargs)
+
+        all_results: list[Result] = []
+        outcomes = await asyncio.gather(
+            *(_retrieve_one(kb_id, opt) for kb_id, opt in retrievable_kbs),
+            return_exceptions=True,
+        )
+        for (kb_id, _), outcome in zip(retrievable_kbs, outcomes):
+            if isinstance(outcome, BaseException):
+                if not isinstance(outcome, Exception):
+                    raise outcome
+                logger.error(
+                    f"知识库 {kb_id} 稠密检索失败: {type(outcome).__name__}: {outcome}",
+                    exc_info=(type(outcome), outcome, outcome.__traceback__),
+                )
+                continue
+            all_results.extend(outcome)
+
         all_results.sort(key=lambda x: x.similarity, reverse=True)
-        # return all_results[: len(all_results) // len(kb_ids)]
         return all_results
 
     async def _rerank(

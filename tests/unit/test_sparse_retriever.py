@@ -1,6 +1,8 @@
+import asyncio
 import importlib
 import json
 import sys
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -162,3 +164,77 @@ async def test_sparse_retriever_preserves_per_kb_fts_ranks():
 
     ranks = {result.chunk_id: result.rank for result in results}
     assert ranks == {"large-1": 1, "large-2": 2, "small-exact": 1}
+
+
+@pytest.mark.asyncio
+async def test_sparse_retriever_queries_multiple_kbs_concurrently():
+    """Multiple KB FTS searches should run concurrently rather than sequentially."""
+    both_entered = asyncio.Event()
+    in_flight = 0
+
+    class BarrierFTSStorage:
+        def __init__(self, doc_id: str, kb_id: str):
+            self.doc_id = doc_id
+            self.kb_id = kb_id
+
+        async def search_sparse(self, query_tokens: list[str], limit: int):
+            nonlocal in_flight
+            in_flight += 1
+            if in_flight == 2:
+                both_entered.set()
+            await asyncio.wait_for(both_entered.wait(), timeout=1.0)
+            in_flight -= 1
+            return [{**make_doc(self.doc_id, "apple", 0, self.kb_id), "score": -1.0}]
+
+    retriever = SparseRetriever(kb_db=None)
+    results = await retriever.retrieve(
+        query="apple",
+        kb_ids=["kb-1", "kb-2"],
+        kb_options={
+            "kb-1": {
+                "vec_db": SimpleNamespace(
+                    document_storage=BarrierFTSStorage("c1", "kb-1")
+                ),
+                "top_k_sparse": 5,
+            },
+            "kb-2": {
+                "vec_db": SimpleNamespace(
+                    document_storage=BarrierFTSStorage("c2", "kb-2")
+                ),
+                "top_k_sparse": 5,
+            },
+        },
+    )
+
+    assert {result.chunk_id for result in results} == {"c1", "c2"}
+
+
+@pytest.mark.asyncio
+async def test_sparse_retriever_bm25_fallback_runs_off_event_loop_thread(monkeypatch):
+    """BM25 tokenization and scoring must run in a worker thread via to_thread."""
+    main_thread_id = threading.get_ident()
+    scoring_thread_ids: list[int] = []
+    orig_score = sparse_retriever._score_bm25_chunks
+
+    def spy_score(query, chunks, stopwords, top_k_sparse):
+        scoring_thread_ids.append(threading.get_ident())
+        return orig_score(query, chunks, stopwords, top_k_sparse)
+
+    monkeypatch.setattr(sparse_retriever, "_score_bm25_chunks", spy_score)
+
+    storage = FallbackStorage()
+    retriever = SparseRetriever(kb_db=None)
+    results = await retriever.retrieve(
+        query="apple",
+        kb_ids=["kb-1"],
+        kb_options={
+            "kb-1": {
+                "vec_db": SimpleNamespace(document_storage=storage),
+                "top_k_sparse": 1,
+            }
+        },
+    )
+
+    assert [result.chunk_id for result in results] == ["chunk-1"]
+    assert len(scoring_thread_ids) == 1
+    assert scoring_thread_ids[0] != main_thread_id
