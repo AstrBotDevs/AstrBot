@@ -141,6 +141,7 @@ async def build_main_agent(
         event,
         plugin_tools=plugin_tools,
         plugin_skills=plugin_skills,
+        guard_registered_tools=config.tool_schema_mode == "dynamic",
     )
 
     # Add session context before capability instructions.

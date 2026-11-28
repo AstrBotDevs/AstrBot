@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import inspect
 import json
 import os
 import threading
 import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+from contextlib import aclosing
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -17,6 +19,7 @@ from deprecated import deprecated
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -228,7 +231,8 @@ class _PermissionGuardedTool(FunctionTool):
             name=tool.name,
             description=tool.description,
             parameters=getattr(tool, "parameters", {}),
-            execution_timeout=tool.execution_timeout,
+            is_background_task=getattr(tool, "is_background_task", False),
+            execution_timeout=getattr(tool, "execution_timeout", None),
         )
         self._wrapped = tool
         self._mgr = manager
@@ -236,46 +240,78 @@ class _PermissionGuardedTool(FunctionTool):
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
 
-    async def call(self, context: Any, **kwargs: Any) -> Any:
-        import inspect as _inspect
+    def is_available(self) -> bool:
+        """Check that the wrapped registration is still active.
 
+        Returns:
+            Whether this exact registration can still be used.
+        """
+        if not self.active or not getattr(self._wrapped, "active", True):
+            return False
+        if isinstance(self._wrapped, MCPTool):
+            runtime = self._mgr.mcp_server_runtime_view.get(
+                self._wrapped.mcp_server_name
+            )
+            if runtime is not None and runtime.shutdown_event.is_set():
+                return False
+        return self._mgr.get_func(self.name) is self._wrapped
+
+    async def authorization_error(self, context: Any) -> str | None:
+        """Check execution permission and the current registration.
+
+        Args:
+            context: Execution context of the caller.
+
+        Returns:
+            A denial message, or None if authorized.
+        """
         error = await self._mgr._check_tool_permission(self.name, context)
         if error is not None:
             return error
+        available = (
+            context.is_tool_available(self)
+            if isinstance(context, ContextWrapper)
+            else self.is_available()
+        )
+        if not available:
+            return f"error: Tool {self.name} is no longer available."
+        return None
 
-        # @filter.llm_tool decorated tools have a handler attribute, which is the actual callable.
-        if self._wrapped.handler is not None:
-            event = context.context.event
-            result = self._wrapped.handler(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
+    async def invoke(self, context: Any, **kwargs: Any) -> Any:
+        """Authorize a tool invocation without consuming its generator results.
 
-        # If the tool has a "call" method that is not the default FunctionTool.call, invoke it.
-        call_override = getattr(type(self._wrapped), "call", None)
-        if call_override is not None and call_override is not FunctionTool.call:
-            return await self._wrapped.call(context, **kwargs)
+        Args:
+            context: Execution context of the caller.
+            **kwargs: Arguments for the wrapped tool.
 
-        # Compatibility fallback: if the tool has a "run" method, invoke it. This is for legacy tools that don't use the new handler/call interface.
-        run = getattr(self._wrapped, "run", None)
-        if run is not None:
-            event = context.context.event
-            result = run(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
+        Returns:
+            The tool result, its async generator, or a denial message.
+        """
+        error = await self.authorization_error(context)
+        if error is not None:
+            return error
 
-        return "error: tool has no callable handler"
+        wrapped = self._wrapped
+        if handler := getattr(wrapped, "handler", None):
+            result = handler(context.context.event, **kwargs)
+        elif getattr(type(wrapped), "call", None) not in (None, FunctionTool.call):
+            result = wrapped.call(context, **kwargs)
+        elif run := getattr(wrapped, "run", None):
+            result = run(context.context.event, **kwargs)
+        else:
+            return "error: tool has no callable handler"
+        return await result if inspect.isawaitable(result) else result
+
+    async def call(self, context: Any, **kwargs: Any) -> Any:
+        result = await self.invoke(context, **kwargs)
+        if inspect.isasyncgen(result):
+            # Direct callers still expect one result; the native executor uses invoke().
+            async with aclosing(result):
+                last = None
+                async for last in result:
+                    pass
+            return last
+        return result
 
 
 class FunctionToolManager:
@@ -387,17 +423,25 @@ class FunctionToolManager:
                 self.func_list.pop(i)
                 break
 
-    def get_func(self, name) -> FuncTool | None:
+    def get_func(self, name, *, guarded: bool = False) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
         # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
         for f in reversed(self.func_list):
             if f.name == name and getattr(f, "active", True):
-                return f
+                return _PermissionGuardedTool(f, self) if guarded else f
         # 退化则拿最后一个同名工具
         for f in reversed(self.func_list):
             if f.name == name:
-                return f
+                return _PermissionGuardedTool(f, self) if guarded else f
         return None
+
+    def guard_registered_tool(self, tool: FunctionTool) -> FunctionTool:
+        """Wrap a registry object without rebinding unrelated tools by name."""
+        if not isinstance(tool, _PermissionGuardedTool) and any(
+            registered is tool for registered in self.func_list
+        ):
+            return _PermissionGuardedTool(tool, self)
+        return tool
 
     def _default_permission(self, tool_name: str) -> str:
         """Compute the fallback permission for a plugin or MCP tool.

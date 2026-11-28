@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -34,7 +35,9 @@ from astrbot.core.agent.message import (
     dump_messages,
 )
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool_discovery import ToolDiscovery
 from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
+from astrbot.core.agent.tool_validation import validate_tool_arguments
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
 from astrbot.core.provider.entities import (
@@ -354,6 +357,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.run_end_reason = None
         self.run_context.run_error = None
         self.run_context.tools = request.func_tool
+        self.run_context.dynamic_tools = tool_schema_mode == "dynamic"
         self._done_hook_called = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
@@ -370,6 +374,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_schema_mode = tool_schema_mode
         self._light_tool_set: ToolSet | None = None
         self._tool_schema_param_set: ToolSet | None = None
+        self._offered_tools: ToolSet | None = None
+        self._tool_discovery: ToolDiscovery | None = None
 
         # append existing messages in the run context
         messages = load_messages(request.contexts or [])
@@ -609,6 +615,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         error = None
         settled = False
 
+        def final_response(response: LLMResponse) -> LLMResponse:
+            if (
+                self.tool_schema_mode == "dynamic"
+                and self.run_context.run_end_reason == "max_steps"
+                and response.tools_call_name
+                and response.role != "err"
+            ):
+                # Keep wire definitions stable, but never dispatch a call made after the budget.
+                response = copy.copy(response)
+                response.role = "assistant"
+                response.tools_call_name = []
+                response.tools_call_args = []
+                response.tools_call_ids = []
+                response.tools_call_extra_content = {}
+                if not response.completion_text:
+                    response.completion_text = (
+                        "I reached the tool-call limit before I could finish. "
+                        "You can ask me to continue."
+                    )
+            return response
+
         async def settle() -> None:
             nonlocal settled
             if settled:
@@ -719,7 +746,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if response.usage is not None:
                             partial_usage = response.usage
                         if not response.is_chunk:
-                            final = response
+                            final = response = final_response(response)
                             status = (
                                 TurnStatus.FAILED
                                 if response.role == "err"
@@ -734,7 +761,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     self.provider.text_chat(**payload), interrupt_for_steering=True
                 )
                 if response is not None:
-                    final = response
+                    final = response = final_response(response)
                     status = (
                         TurnStatus.FAILED
                         if response.role == "err"
@@ -758,8 +785,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        # Search results only affect the next request, not this response's other calls.
+        self._offered_tools = self._func_tool_for_provider()
         payload = {
-            "func_tool": self._func_tool_for_provider(),
+            "func_tool": self._offered_tools,
             "session_id": self.req.session_id,
             "conversation_id": (
                 self.req.conversation.cid if self.req.conversation else None
@@ -771,9 +800,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
+        contexts = self.run_context.messages
+        if self._tool_discovery is not None and self._offered_tools:
+            hint = (
+                "Use astrbot_search_tools to find tools for a capability. Call "
+                "astrbot_describe_tool for a tool's schema, then use astrbot_call_tool "
+                "with a JSON object string matching that schema. If you already know the tool name, "
+                "you can describe it without searching. Use tools only when needed."
+            )
+            if contexts and contexts[0].role == "system":
+                content = contexts[0].content
+                content = (
+                    [*content, TextPart(text=hint)]
+                    if isinstance(content, list)
+                    else f"{content or ''}\n{hint}".strip()
+                )
+                contexts = [
+                    contexts[0].model_copy(update={"content": content}),
+                    *contexts[1:],
+                ]
+            else:
+                contexts = [Message(role="system", content=hint), *contexts]
         async with aclosing(
             self._recorded_responses(
-                payload, contexts=self.run_context.messages, streaming=self.streaming
+                payload, contexts=contexts, streaming=self.streaming
             )
         ) as responses:
             async for response in responses:
@@ -926,6 +976,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         tool_set = self.req.func_tool
+        if self.tool_schema_mode == "dynamic":
+            discovery = self._tool_discovery
+            tool_set = discovery.tools if discovery and discovery.catalog else None
         if not tool_set:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
@@ -1216,6 +1269,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
+            if (
+                self.state == AgentState.IDLE
+                and self.tool_schema_mode == "dynamic"
+                and self.run_context.tools
+            ):
+                if isinstance(self.tool_executor, BaseFunctionToolExecutor):
+                    self.run_context.tools = self.tool_executor.prepare_tools(
+                        self.run_context.tools, self.run_context
+                    )
+                self._tool_discovery = ToolDiscovery(self.run_context.tools)
             if self._step_budget_max is not None:
                 self._step_budget_used += 1
             while True:
@@ -1696,6 +1759,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        dynamic = self.tool_schema_mode == "dynamic"
+        discovery = self._tool_discovery if dynamic else None
+        # A describe in this response must not unlock a call in the same batch.
+        described = discovery.described.copy() if discovery is not None else {}
+
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -1709,7 +1777,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 func_tool_args,
             )
             try:
-                if not req.func_tool:
+                if not dynamic and not req.func_tool:
                     if self._events.active:
                         await self._events.emit(
                             ToolRejected(
@@ -1725,7 +1793,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                     return
 
-                func_tool = req.func_tool.get_tool(func_tool_name)
+                tool_set = self._offered_tools if dynamic else req.func_tool
+                func_tool = tool_set.get_tool(func_tool_name) if tool_set else None
 
                 #  Some API may return None for tools with no parameters
                 if func_tool_args is None:
@@ -1734,7 +1803,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 if not func_tool or not func_tool.active:
                     available_tools = [
-                        tool.name for tool in req.func_tool if tool.active
+                        tool.name for tool in (tool_set or ()) if tool.active
                     ]
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     if self._events.active:
@@ -1759,6 +1828,45 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
                     )
                     continue
+
+                if discovery is not None:
+                    await validate_tool_arguments(func_tool.parameters, func_tool_args)
+                    if func_tool_name == "astrbot_search_tools":
+                        _append_tool_call_result(
+                            func_tool_id,
+                            discovery.search(self.run_context, func_tool_args["query"]),
+                        )
+                        continue
+                    if func_tool_name == "astrbot_describe_tool":
+                        _append_tool_call_result(
+                            func_tool_id,
+                            discovery.describe(
+                                self.run_context, func_tool_args["name"]
+                            ),
+                        )
+                        continue
+                    # Preserve the outer wire call in history, but use the real tool for
+                    # validation, hooks, execution, and events.
+                    name = func_tool_args["name"]
+                    try:
+                        arguments = json.loads(func_tool_args["arguments"])
+                    except (ValueError, RecursionError) as exc:
+                        raise ValueError(
+                            "Tool arguments must be a valid JSON object string."
+                        ) from exc
+                    if not isinstance(arguments, dict):
+                        raise ValueError("Tool arguments must decode to an object.")
+                    func_tool_name, func_tool_args = name, arguments
+                    func_tool = described.get(func_tool_name)
+                    if func_tool is None:
+                        raise ValueError(
+                            "Describe the tool in a previous response before calling it."
+                        )
+                    if not self.run_context.is_tool_available(func_tool):
+                        raise ValueError(
+                            f"Tool {func_tool_name} is no longer available."
+                        )
+                    await validate_tool_arguments(func_tool.parameters, func_tool_args)
 
                 valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
@@ -1796,6 +1904,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
+
+                if dynamic:
+                    if not self.run_context.is_tool_available(func_tool):
+                        raise ValueError(
+                            f"Tool {func_tool_name} is no longer available."
+                        )
+                    await validate_tool_arguments(func_tool.parameters, valid_params)
 
                 executor = self._recorded_tool_results(
                     func_tool, str(func_tool_id), valid_params

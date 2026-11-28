@@ -101,7 +101,7 @@ class MainAgentBuildConfig:
         misc = runner_config.get("misc", {})
         file_extract = settings.get("file_extract", {})
         tool_schema_mode = misc.get("tool_schema_mode", "full")
-        if tool_schema_mode not in ("skills_like", "full"):
+        if tool_schema_mode not in ("skills_like", "full", "dynamic"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to full",
                 tool_schema_mode,

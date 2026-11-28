@@ -82,6 +82,7 @@ async def apply_persona(
     *,
     plugin_tools: ToolSet | None = None,
     plugin_skills: list[SkillInfo] | None = None,
+    guard_registered_tools: bool = False,
 ) -> None:
     """Apply the selected persona, initial dialogue, skills, and registered tools.
 
@@ -92,6 +93,7 @@ async def apply_persona(
         event: Event identifying the current session.
         plugin_tools: Core-authorized tools before persona selection.
         plugin_skills: Core-authorized skills before persona selection.
+        guard_registered_tools: Guard explicitly selected registry tools at execution time.
     """
     event.set_extra("_trace_persona_id", None)
     if req.system_prompt is None:
@@ -157,11 +159,12 @@ async def apply_persona(
         persona_toolset = ToolSet()
         if persona["tools"]:
             for tool_name in persona["tools"]:
-                tool = (
-                    plugin_tools.get_tool(tool_name)
-                    if plugin_tools is not None
-                    else tmgr.get_func(tool_name)
-                )
+                if plugin_tools is not None:
+                    tool = plugin_tools.get_tool(tool_name)
+                elif guard_registered_tools:
+                    tool = tmgr.get_func(tool_name, guarded=True)
+                else:
+                    tool = tmgr.get_func(tool_name)
                 if tool and tool.active:
                     persona_toolset.add_tool(tool)
     if not req.func_tool:

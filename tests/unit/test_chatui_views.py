@@ -494,6 +494,7 @@ async def test_message_handlers_can_create_cards_without_tools(views, coroutine)
 
 @pytest.mark.asyncio
 async def test_tool_returns_text_to_model_and_sends_card(views):
+    from astrbot.core.agent.run_context import ContextWrapper
     from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 
     _, event, _, _ = views
@@ -520,9 +521,7 @@ async def test_tool_returns_text_to_model_and_sends_card(views):
         handler=handler,
         handler_module_path=__name__,
     )
-    context = SimpleNamespace(
-        context=SimpleNamespace(event=event), tool_call_timeout=10
-    )
+    context = ContextWrapper(context=SimpleNamespace(event=event), tool_call_timeout=10)
     results = [
         result async for result in FunctionToolExecutor._execute_local(tool, context)
     ]

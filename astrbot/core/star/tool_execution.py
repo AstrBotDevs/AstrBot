@@ -9,6 +9,7 @@ import mcp
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.utils.async_generator import iterate_in_task
@@ -23,6 +24,7 @@ async def call_local_llm_tool(
     ],
     method_name: str,
     *args,
+    tool: FunctionTool | None = None,
     **kwargs,
 ) -> T.AsyncGenerator[T.Any, None]:
     """执行本地 LLM 工具的处理函数并处理其返回结果"""
@@ -32,6 +34,11 @@ async def call_local_llm_tool(
 
     event = context.context.event
 
+    def check_availability() -> None:
+        if tool is not None and not context.is_tool_available(tool):
+            raise ValueError(f"Tool {tool.name} is no longer available.")
+
+    check_availability()
     try:
         if method_name == "run" or method_name == "decorator_handler":
             ready_to_call = handler(event, *args, **kwargs)
@@ -80,10 +87,22 @@ async def call_local_llm_tool(
     if not ready_to_call:
         return
 
+    is_awaitable = inspect.isawaitable(ready_to_call)
+    if is_awaitable:
+        ready_to_call = await ready_to_call
+
     if inspect.isasyncgen(ready_to_call):
+
+        async def checked_results():
+            async with aclosing(ready_to_call):
+                # Async generators actually start in the iterator's separate task.
+                check_availability()
+                async for item in ready_to_call:
+                    yield item
+
         _has_yielded = False
         try:
-            async with aclosing(iterate_in_task(ready_to_call)) as results:
+            async with aclosing(iterate_in_task(checked_results())) as results:
                 async for ret in results:
                     # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
                     # 返回值只能是 MessageEventResult 或者 None（无返回值）
@@ -102,9 +121,8 @@ async def call_local_llm_tool(
         except Exception as e:
             logger.error(f"Previous Error: {trace_}")
             raise e
-    elif inspect.iscoroutine(ready_to_call):
-        # 如果只是一个协程, 直接执行
-        ret = await ready_to_call
+    elif is_awaitable:
+        ret = ready_to_call
         if isinstance(ret, MessageEventResult | CommandResult):
             event.set_result(ret)
             yield

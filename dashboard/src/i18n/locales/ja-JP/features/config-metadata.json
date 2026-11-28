@@ -586,10 +586,11 @@
             },
             "tool_schema_mode": {
               "description": "ツールスキーマモード",
-              "hint": "skills-like は最初にツール名と説明を渡し、その後にパラメーターを渡します。full は完全なパラメーターを一度に渡します。",
+              "hint": "Skills-like は説明とパラメーターを二段階で渡します。Full は完全なツール定義を渡します。Dynamic は検索で見つけたツールを読み込みます。",
               "labels": [
                 "Skills-like（2 段階）",
-                "Full（完全なパラメーター）"
+                "Full（完全なパラメーター）",
+                "Dynamic（オンデマンド）"
               ]
             },
             "tool_call_timeout": {

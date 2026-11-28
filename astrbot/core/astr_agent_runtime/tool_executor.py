@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from contextlib import aclosing
 from copy import copy
+from functools import partial
 
 import mcp
 
@@ -40,6 +41,7 @@ from astrbot.core.message.interactive_ui import ViewResult, emit_view
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
+from astrbot.core.provider.func_tool_manager import _PermissionGuardedTool
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.tool_execution import call_local_llm_tool
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -65,6 +67,27 @@ BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT = (
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    @classmethod
+    def prepare_tools(
+        cls, tools: ToolSet, run_context: ContextWrapper[AstrAgentContext]
+    ) -> ToolSet:
+        """Keep registry permissions on tools passed as raw objects by callers.
+
+        Args:
+            tools: Candidate tools supplied by the caller.
+            run_context: Context providing the tool registry.
+
+        Returns:
+            A tool catalog with registered objects wrapped for authorization.
+        """
+        ctx = getattr(run_context.context, "context", None)
+        manager = (
+            ctx.get_llm_tool_manager()
+            if hasattr(ctx, "get_llm_tool_manager")
+            else llm_tools
+        )
+        return ToolSet([manager.guard_registered_tool(tool) for tool in tools])
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -150,10 +173,29 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        if not run_context.is_tool_available(tool):
+            raise ValueError(f"Tool {tool.name} is no longer available.")
+
+        send_to_user = getattr(run_context.context, "send_to_user", True)
+        # Preserve legacy handoff dispatch outside dynamic mode and keep MCP timeouts.
+        if isinstance(tool, _PermissionGuardedTool) and (
+            (run_context.dynamic_tools and isinstance(tool._wrapped, HandoffTool))
+            or (tool.is_background_task and send_to_user)
+        ):
+            error = await tool.authorization_error(run_context)
+            if error is not None:
+                yield mcp.types.CallToolResult(
+                    content=[mcp.types.TextContent(type="text", text=error)],
+                    isError=True,
+                )
+                return
+            if run_context.dynamic_tools and isinstance(tool._wrapped, HandoffTool):
+                tool = tool._wrapped
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             # Caller-owned outputs must settle before the turn's stream closes.
-            if is_bg and getattr(run_context.context, "send_to_user", True):
+            if is_bg and send_to_user:
                 async with aclosing(
                     cls._execute_handoff_background(tool, run_context, **tool_args)
                 ) as results:
@@ -175,13 +217,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     yield r
             return
 
-        elif tool.is_background_task and getattr(
-            run_context.context, "send_to_user", True
-        ):
+        elif tool.is_background_task and send_to_user:
             event = run_context.context.event
             if active_event_registry.get_background_stop_signal(event).is_set():
                 return
             task_id = uuid.uuid4().hex
+            run_context = copy(run_context)
 
             async def _run_in_background() -> None:
                 try:
@@ -289,7 +330,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         toolset.add_tool(resolved)
                 elif isinstance(tool, FunctionTool):
                     toolset.add_tool(tool)
-            return None if toolset.empty() else toolset
+            prepared = cls.prepare_tools(toolset, run_context)
+            return None if prepared.empty() else prepared
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -374,12 +416,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         config = ctx.get_config(umo=umo)
         prov_settings: dict = config.get("provider_settings", {})
-        agent_max_step = int(
-            config.get("agent", {})
-            .get("config", {})
-            .get("misc", {})
-            .get("max_steps", 128)
-        )
+        misc_config = config.get("agent", {}).get("config", {}).get("misc", {})
+        agent_max_step = int(misc_config.get("max_steps", 128))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -391,6 +429,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             contexts=contexts,
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
+            tool_schema_mode=(
+                "dynamic"
+                if misc_config.get("tool_schema_mode") == "dynamic"
+                else "full"
+            ),
             stream=stream,
             agent_context=AstrAgentContext(
                 context=ctx,
@@ -593,7 +636,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         awaitable = None
         method_name = ""
-        if tool.handler:
+        if isinstance(tool, _PermissionGuardedTool):
+            awaitable = tool.invoke
+            method_name = "call"
+        elif tool.handler:
             awaitable = tool.handler
             method_name = "decorator_handler"
         elif is_override_call:
@@ -620,10 +666,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 effective_timeout = max(effective_timeout, yield_time_ms / 1000 + 5)
 
         wrapper = call_local_llm_tool(
-            context=run_context,
-            handler=awaitable,
-            method_name=method_name,
-            **tool_args,
+            run_context,
+            partial(awaitable, **tool_args),
+            method_name,
+            tool=tool,
         )
         plugin_id = plugin_id_for_callback(awaitable, tool.handler_module_path)
         async with aclosing(wrapper):

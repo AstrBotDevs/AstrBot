@@ -4456,9 +4456,13 @@ CONFIG_METADATA_3 = {
                     "agent.config.misc.tool_schema_mode": {
                         "description": "工具调用模式",
                         "type": "string",
-                        "options": ["skills_like", "full"],
-                        "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
-                        "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+                        "options": ["skills_like", "full", "dynamic"],
+                        "labels": [
+                            "Skills-like（两阶段）",
+                            "Full（完整参数）",
+                            "Dynamic（按需加载）",
+                        ],
+                        "hint": "Skills-like 分两阶段发送工具描述和参数。Full 发送完整工具定义。Dynamic 让模型先搜索工具，再加载相关定义。",
                         "condition": {
                             "agent.runtime": "astrbot",
                         },
