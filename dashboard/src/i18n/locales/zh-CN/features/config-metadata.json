@@ -525,7 +525,7 @@
         },
         "identifier": {
           "description": "用户识别",
-          "hint": "在用户提示词前带上用户 ID 信息。"
+          "hint": "在用户消息上下文中附带发送者的用户 ID 与昵称信息。"
         },
         "group_name_display": {
           "description": "显示群名称",

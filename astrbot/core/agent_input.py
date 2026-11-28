@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
+import unicodedata
 import zoneinfo
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
@@ -88,9 +89,42 @@ def append_system_reminders(
     """
     system_parts: list[str] = []
     if cfg.get("identifier"):
-        user_id = event.message_obj.sender.user_id
-        user_nickname = event.message_obj.sender.nickname
-        system_parts.append(f"User ID: {user_id}, Nickname: {user_nickname}")
+        sender = getattr(event.message_obj, "sender", None)
+        raw_user_id = getattr(sender, "user_id", None) if sender is not None else None
+        raw_nickname = getattr(sender, "nickname", None) if sender is not None else None
+        user_id = (
+            " ".join(
+                "".join(
+                    " " if unicodedata.category(ch) == "Cc" else ch
+                    for ch in str(raw_user_id)
+                    if unicodedata.category(ch) != "Cf"
+                ).split()
+            )
+            .replace("<", "＜")
+            .replace(">", "＞")[:64]
+            if raw_user_id is not None
+            else ""
+        )
+        nickname = (
+            " ".join(
+                "".join(
+                    " " if unicodedata.category(ch) == "Cc" else ch
+                    for ch in str(raw_nickname)
+                    if unicodedata.category(ch) != "Cf"
+                ).split()
+            )
+            .replace("<", "＜")
+            .replace(">", "＞")[:64]
+            if raw_nickname is not None
+            else ""
+        )
+        if user_id or nickname:
+            sender_payload = json.dumps(
+                {"user_id": user_id, "nickname": nickname},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            system_parts.append(f"Sender: {sender_payload}")
 
     if cfg.get("group_name_display") and event.message_obj.group_id:
         if not event.message_obj.group:

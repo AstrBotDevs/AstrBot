@@ -609,7 +609,7 @@
         },
         "identifier": {
           "description": "ユーザー識別",
-          "hint": "ユーザープロンプトの前にユーザー ID を付加します。"
+          "hint": "ユーザーメッセージのコンテキストに送信者のユーザー ID とニックネームを含めます。"
         },
         "group_name_display": {
           "description": "グループ名を表示",

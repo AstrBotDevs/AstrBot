@@ -3631,7 +3631,8 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     kb_name = knowledge_base_build.KnowledgeBaseQueryTool().name
     assert (kb_name in names) == agentic_kb
     assert retrieve.await_count == int(not agentic_kb)
-    assert "User ID: user123" in req.extra_user_content_parts[0].text
+    assert '"user_id":"user123"' in req.extra_user_content_parts[0].text
+    assert '"nickname":"TestUser"' in req.extra_user_content_parts[0].text
     if not agentic_kb:
         assert "Knowledge marker" in req.extra_user_content_parts[1].text
     assert req.contexts[0] == {"role": "assistant", "content": "Opening"}
