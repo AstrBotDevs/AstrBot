@@ -4,7 +4,8 @@
   <UpgradeRecoveryDialog />
 
   <!-- 全局唯一 snackbar -->
-  <v-snackbar v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.color"
+  <!-- Keyed by toast: a snackbar that stays open for the next queued toast never restarts its timer. -->
+  <v-snackbar v-if="toastStore.current" :key="toastStore.current.id" v-model="snackbarShow" :color="toastStore.current.color"
     :timeout="toastStore.current.timeout" :multi-line="toastStore.current.multiLine"
     :location="toastStore.current.location" close-on-back>
     <div class="app-snackbar-message">
