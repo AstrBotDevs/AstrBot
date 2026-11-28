@@ -813,3 +813,136 @@ class TestGetNextRunTime:
         next_run = cron_manager._get_next_run_time("non-existent")
 
         assert next_run is None
+
+
+class TestCronManagerLifecycleAndValidation:
+    """Tests for pre-persistence validation, task tracking, and shutdown draining."""
+
+    @pytest.mark.asyncio
+    async def test_add_jobs_validate_before_persisting(self, cron_manager, mock_db):
+        """Invalid schedules must fail before persisting rows or handlers."""
+        with pytest.raises(CronJobSchedulingError):
+            await cron_manager.add_active_job(
+                name="Bad Active",
+                cron_expression="not a valid cron",
+                payload={"session": "test:FriendMessage:u"},
+            )
+        mock_db.create_cron_job.assert_not_awaited()
+
+        handler = MagicMock()
+        with pytest.raises(CronJobSchedulingError):
+            await cron_manager.add_basic_job(
+                name="Bad Basic",
+                cron_expression="61 9 * * *",
+                handler=handler,
+            )
+        mock_db.create_cron_job.assert_not_awaited()
+        assert cron_manager._basic_handlers == {}
+
+    @pytest.mark.asyncio
+    async def test_add_basic_job_rolls_back_db_when_scheduling_fails(
+        self, cron_manager, mock_db
+    ):
+        """If scheduling fails after insert, remove the row and basic handler."""
+        bad_stored_job = CronJob(
+            job_id="bad-stored-id",
+            name="Bad Stored",
+            job_type="basic",
+            cron_expression="invalid cron returned from db",
+            enabled=True,
+        )
+        mock_db.create_cron_job.return_value = bad_stored_job
+        handler = MagicMock()
+
+        with pytest.raises(CronJobSchedulingError):
+            await cron_manager.add_basic_job(
+                name="Bad Stored",
+                cron_expression="0 9 * * *",
+                handler=handler,
+            )
+
+        assert "bad-stored-id" not in cron_manager._basic_handlers
+        mock_db.delete_cron_job.assert_awaited_once_with("bad-stored-id")
+
+    @pytest.mark.asyncio
+    async def test_shutdown_drains_running_and_next_run_tasks_without_db_writes(
+        self, cron_manager, mock_db, sample_cron_job, mock_context
+    ):
+        """shutdown() cancels and waits for active job tasks and next_run writers."""
+        mock_db.list_cron_jobs.return_value = []
+        await cron_manager.start(mock_context)
+
+        started = asyncio.Event()
+        release_blocker = asyncio.Event()
+
+        async def blocking_handler(**_kwargs):
+            started.set()
+            await release_blocker.wait()
+
+        mock_db.get_cron_job.return_value = sample_cron_job
+        cron_manager._basic_handlers[sample_cron_job.job_id] = blocking_handler
+
+        next_run_started = asyncio.Event()
+
+        async def slow_update(*args, **kwargs):
+            if "next_run_time" in kwargs and len(kwargs) == 1:
+                next_run_started.set()
+                await asyncio.Future()
+
+        mock_db.update_cron_job.side_effect = slow_update
+
+        cron_manager._schedule_next_run_update("other-job-id", None)
+        await asyncio.wait_for(next_run_started.wait(), 2)
+
+        run_task = asyncio.create_task(cron_manager._run_job(sample_cron_job.job_id))
+        await asyncio.wait_for(started.wait(), 2)
+
+        await cron_manager.shutdown()
+
+        assert run_task.done()
+        assert cron_manager._running_tasks == {}
+        assert cron_manager._next_run_tasks == {}
+        # Cancelled run during shutdown must not overwrite DB status in finally.
+        statuses = [
+            call.kwargs.get("status")
+            for call in mock_db.update_cron_job.await_args_list
+        ]
+        assert "cancelled" not in statuses
+
+    @pytest.mark.asyncio
+    async def test_delete_job_cancels_next_run_update_and_skips_status_write(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """delete_job cancels queued next_run updates and skips final status write."""
+        update_started = asyncio.Event()
+
+        async def blocking_update(*args, **kwargs):
+            if "next_run_time" in kwargs and len(kwargs) == 1:
+                update_started.set()
+                await asyncio.Future()
+
+        mock_db.update_cron_job.side_effect = blocking_update
+        mock_db.get_cron_job.return_value = sample_cron_job
+
+        started = asyncio.Event()
+
+        async def blocking_handler(**_kwargs):
+            started.set()
+            await asyncio.Future()
+
+        cron_manager._basic_handlers[sample_cron_job.job_id] = blocking_handler
+        run_task = asyncio.create_task(cron_manager._run_job(sample_cron_job.job_id))
+        await asyncio.wait_for(started.wait(), 2)
+
+        cron_manager._schedule_next_run_update(sample_cron_job.job_id, None)
+        await asyncio.wait_for(update_started.wait(), 2)
+
+        await cron_manager.delete_job(sample_cron_job.job_id)
+
+        assert run_task.cancelled()
+        assert sample_cron_job.job_id not in cron_manager._next_run_tasks
+        statuses = [
+            call.kwargs.get("status")
+            for call in mock_db.update_cron_job.await_args_list
+        ]
+        assert "cancelled" not in statuses
