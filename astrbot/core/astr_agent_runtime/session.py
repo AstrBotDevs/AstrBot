@@ -16,6 +16,7 @@ from astrbot.core.agent.runtime import (
     AgentSessionRef,
     AgentTurn,
     InputReceipt,
+    SessionState,
     TurnResult,
     TurnStatus,
 )
@@ -47,6 +48,11 @@ class NativeAgentSession(AgentSession):
         self.runtime = runtime
         self._runner: AgentRunner | None = None
         self._steering: list[tuple[FollowUpTicket, InputReceipt]] = []
+
+    def _on_turn_settled(self) -> None:
+        if self.state == SessionState.IDLE and hasattr(self.runtime, "on_session_idle"):
+            key = ("main" if self.is_main else "subagent", self.id)
+            self.runtime.on_session_idle(key, self)
 
     def _build_config(self, turn: AgentTurn) -> MainAgentBuildConfig:
         """Resolve the native settings for the upcoming turn.

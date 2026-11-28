@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from astrbot import logger
@@ -36,11 +37,14 @@ class AgentResultDelivery:
         store: SubAgentStore,
         callers: dict[AgentScope, AgentCaller],
         runtimes: dict[str, AgentRuntime],
+        *,
+        on_scope_settled: Callable[[AgentScope], None] | None = None,
     ) -> None:
         self.store = store
         self.callers = callers
         self.context: Context | None = None
         self.runtimes = runtimes
+        self._on_scope_settled = on_scope_settled
         self._notifications: dict[
             tuple[AgentScope, AgentSessionRef], asyncio.Task[None]
         ] = {}
@@ -226,6 +230,8 @@ class AgentResultDelivery:
         finally:
             if not queued:
                 self._notifications.pop((scope, parent), None)
+                if self._on_scope_settled is not None:
+                    self._on_scope_settled(scope)
 
     def _wakeup_event(
         self,

@@ -58,8 +58,14 @@ class SubAgentService:
         self._workers: dict[str, asyncio.Task[None]] = {}
         self._deliveries: dict[str, set[asyncio.Task[None]]] = {}
         self._callers: OrderedDict[AgentScope, AgentCaller] = OrderedDict()
+        self._pending_evict_scopes: set[AgentScope] = set()
         self._task_callers: dict[tuple[str, int], AgentCaller] = {}
-        self.delivery = AgentResultDelivery(store, self._callers, self.runtimes)
+        self.delivery = AgentResultDelivery(
+            store,
+            self._callers,
+            self.runtimes,
+            on_scope_settled=self.on_scope_settled,
+        )
         self._changed = asyncio.Condition()
         self._slots = asyncio.Condition()
         self._running: dict[str, int] = {}
@@ -137,6 +143,7 @@ class SubAgentService:
             context,
             limits=previous.limits if previous is not None else {},
         )
+        self._pending_evict_scopes.discard(caller.scope)
         self._callers[caller.scope] = caller
         self._callers.move_to_end(caller.scope)
         self._evict_idle_callers(keep=caller.scope)
@@ -168,14 +175,49 @@ class SubAgentService:
                 self._callers.pop(scope, None)
 
     def evict_umo(self, umo: str) -> None:
-        """Remove cached idle callers belonging to a deleted UMO.
+        """Remove cached callers belonging to a deleted UMO once their work settles.
 
         Args:
             umo: Unified message origin whose conversations were removed.
         """
         for scope in list(self._callers):
-            if scope.umo == umo and not self._scope_has_active_work(scope):
+            if scope.umo != umo:
+                continue
+            if not self._scope_has_active_work(scope):
+                self._pending_evict_scopes.discard(scope)
                 self._callers.pop(scope, None)
+            else:
+                self._pending_evict_scopes.add(scope)
+
+    def evict_scope(self, umo: str, conversation_id: str) -> None:
+        """Remove the cached caller for a deleted conversation once its work settles.
+
+        Args:
+            umo: Unified message origin owning the deleted conversation.
+            conversation_id: Deleted conversation identifier.
+        """
+        scope = AgentScope(umo, conversation_id)
+        if scope not in self._callers:
+            return
+        if not self._scope_has_active_work(scope):
+            self._pending_evict_scopes.discard(scope)
+            self._callers.pop(scope, None)
+        else:
+            self._pending_evict_scopes.add(scope)
+
+    def on_scope_settled(self, scope: AgentScope) -> None:
+        """Finish deferred caller eviction or capacity trim after active work finishes.
+
+        Args:
+            scope: Conversation scope whose worker or delivery notification finished.
+        """
+        if self._closing or self._scope_has_active_work(scope):
+            return
+        if scope in self._pending_evict_scopes:
+            self._pending_evict_scopes.discard(scope)
+            self._callers.pop(scope, None)
+            return
+        self._evict_idle_callers()
 
     async def spawn(
         self,
@@ -731,6 +773,7 @@ class SubAgentService:
                 await self.store.save(agent)
             elif any(item.state == AgentState.PENDING for item in agent.turns):
                 self._schedule(agent, self._callers.get(agent.scope, caller))
+            self.on_scope_settled(agent.scope)
 
     async def close(self) -> None:
         """Stop active executions, flush records, then close agent runtime resources."""

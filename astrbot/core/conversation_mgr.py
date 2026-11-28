@@ -54,6 +54,9 @@ class ConversationManager:
 
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
         self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
+        self._on_conversation_deleted_callbacks: list[
+            Callable[[str, str], Awaitable[None]]
+        ] = []
 
     async def create_event_writer(
         self,
@@ -243,6 +246,37 @@ class ConversationManager:
                     f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
                 )
 
+    def register_on_conversation_deleted(
+        self,
+        callback: Callable[[str, str], Awaitable[None]],
+    ) -> None:
+        """Register a callback invoked after an individual conversation is deleted.
+
+        Args:
+            callback: Async callback receiving ``(unified_msg_origin, conversation_id)``.
+        """
+        self._on_conversation_deleted_callbacks.append(callback)
+
+    async def _trigger_conversation_deleted(
+        self, unified_msg_origin: str, conversation_id: str
+    ) -> None:
+        """Invoke callbacks registered for single-conversation deletions.
+
+        Args:
+            unified_msg_origin: Session identifier owning the deleted conversation.
+            conversation_id: Deleted conversation ID.
+        """
+        for callback in self._on_conversation_deleted_callbacks:
+            try:
+                await callback(unified_msg_origin, conversation_id)
+            except Exception as e:
+                from astrbot.core import logger
+
+                logger.error(
+                    f"Conversation deletion callback failed "
+                    f"(session={unified_msg_origin}, cid={conversation_id}): {e}",
+                )
+
     def to_legacy_conversation(
         self,
         record: ConversationData,
@@ -340,6 +374,7 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
         """
+        deleted_cid: str | None = None
         async with self._selection_locks.acquire_lock(unified_msg_origin):
             curr_cid = await asyncio.wait_for(
                 self._load_selection(unified_msg_origin), DELETION_TIMEOUT_SECONDS
@@ -361,6 +396,7 @@ class ConversationManager:
             await self._delete_records(
                 unified_msg_origin, conversation_id, curr_cid == conversation_id
             )
+            deleted_cid = conversation_id
             if curr_cid == conversation_id:
                 if self.on_current_conversation_deleted:
                     self.on_current_conversation_deleted(unified_msg_origin)
@@ -369,6 +405,8 @@ class ConversationManager:
                     sp.session_remove(unified_msg_origin, "sel_conv_id"),
                     DELETION_TIMEOUT_SECONDS,
                 )
+        if deleted_cid is not None:
+            await self._trigger_conversation_deleted(unified_msg_origin, deleted_cid)
 
     async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话
