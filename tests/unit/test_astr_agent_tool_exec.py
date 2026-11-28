@@ -464,6 +464,99 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        '\n\n<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name="exec">payload',
+        "<｜DSML｜tool_calls>payload",
+    ],
+)
+async def test_execute_handoff_rejects_unparsed_dsml_envelope(envelope, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
+        SimpleNamespace,
+    )
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        return SimpleNamespace(completion_text=envelope)
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context)
+    )
+    tool = SimpleNamespace(
+        provider_id=None,
+        agent=SimpleNamespace(tools=[], instructions="", begin_dialogs=[]),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert results[0].isError is True
+    text = results[0].content[0].text
+    assert "unparsed tool-call envelope" in text
+    assert "payload" not in text
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_allows_dsml_documentation(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.AstrAgentContext",
+        SimpleNamespace,
+    )
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        return SimpleNamespace(
+            completion_text="The <｜DSML｜tool_calls> token is valid documentation."
+        )
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context)
+    )
+    tool = SimpleNamespace(
+        provider_id=None,
+        agent=SimpleNamespace(tools=[], instructions="", begin_dialogs=[]),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert not results[0].isError
+    assert "valid documentation" in results[0].content[0].text
+
+
+@pytest.mark.asyncio
 async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_file(
     monkeypatch: pytest.MonkeyPatch,
 ):
