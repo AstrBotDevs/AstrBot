@@ -267,7 +267,7 @@ class SystemOneDecisionProvider(DecisionProvider):
                     and isinstance(legend, Mapping)
                     and dict(legend) == expected_legend
                     and set(probabilities) == set(expected_legend)
-                    and math.isclose(sum(probabilities.values()), 1.0)
+                    and sum(probabilities.values()) > 0
                 ):
                     summary = _summarize_response(raw_answer)
                     logger.warning(
@@ -277,9 +277,11 @@ class SystemOneDecisionProvider(DecisionProvider):
                         f"System One endpoint returned an invalid score answer "
                         f"for {head}: {summary}"
                     )
+                # Providers may return rounded values that do not add up to 1.
+                total = sum(probabilities.values())
                 answers[head] = DecisionScoreAnswer(
                     probabilities={
-                        level: float(probability)
+                        level: probability / total
                         for level, probability in probabilities.items()
                     },
                     confidence=float(confidence),
@@ -310,7 +312,7 @@ class SystemOneDecisionProvider(DecisionProvider):
                     and valid_numbers
                     and set(probabilities) == set(question.criteria)
                     and choice in question.criteria
-                    and math.isclose(sum(probabilities.values()), 1.0)
+                    and sum(probabilities.values()) > 0
                     and math.isclose(probabilities[choice], max(probabilities.values()))
                 ):
                     summary = _summarize_response(raw_answer)
@@ -322,11 +324,12 @@ class SystemOneDecisionProvider(DecisionProvider):
                         f"System One endpoint returned an invalid choice answer "
                         f"for {head}: {summary}"
                     )
+                total = sum(probabilities.values())
                 answers[head] = DecisionChoiceAnswer(
                     choice=choice,
-                    probability=float(probabilities[choice]),
+                    probability=probabilities[choice] / total,
                     probabilities={
-                        option_id: float(probability)
+                        option_id: probability / total
                         for option_id, probability in probabilities.items()
                     },
                     confidence=float(confidence),
