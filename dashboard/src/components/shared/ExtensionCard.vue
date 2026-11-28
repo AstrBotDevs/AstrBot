@@ -464,6 +464,16 @@ const openView = () => {
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-history"
+            @click.stop="viewChangelog"
+          >
+            <v-list-item-title>{{
+              tm("pluginChangelog.menuTitle")
+            }}</v-list-item-title>
+          </v-list-item>
+
           <v-tooltip
             location="left"
             :disabled="canUpdateExtension"

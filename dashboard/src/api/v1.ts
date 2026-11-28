@@ -1385,6 +1385,17 @@ export const pluginApi = {
       openApiV1.getPluginChangelogById({ query: { plugin_id: pluginId } }),
     );
   },
+  changelogRemote(
+    pluginId: string,
+    params?: { proxy?: string; repo?: string },
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.getPluginChangelogRemote({
+        path: { plugin_id: pluginId },
+        query: { proxy: params?.proxy || "", repo: params?.repo || "" },
+      }),
+    );
+  },
   market(params?: {
     page?: number;
     page_size?: number;

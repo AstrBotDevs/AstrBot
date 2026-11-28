@@ -272,6 +272,7 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `GET` | `/api/v1/plugins/{plugin_id}` | — |
 | `DELETE` | `/api/v1/plugins/{plugin_id}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/changelog` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/changelog/remote` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/config` | — |
 | `PUT` | `/api/v1/plugins/{plugin_id}/config` | — |
 | `DELETE` | `/api/v1/plugins/{plugin_id}/config-files` | — |

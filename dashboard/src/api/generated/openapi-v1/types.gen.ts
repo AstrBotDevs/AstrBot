@@ -2203,6 +2203,26 @@ export type GetPluginChangelogResponse = (string);
 
 export type GetPluginChangelogError = unknown;
 
+export type GetPluginChangelogRemoteData = {
+    path: {
+        plugin_id: string;
+    };
+    query?: {
+        /**
+         * Optional URL-prefix mirror for reaching GitHub raw files.
+         */
+        proxy?: string;
+        /**
+         * Preferred repository URL of the pending update source.
+         */
+        repo?: string;
+    };
+};
+
+export type GetPluginChangelogRemoteResponse = (string);
+
+export type GetPluginChangelogRemoteError = unknown;
+
 export type ReloadPluginData = {
     path: {
         plugin_id: string;

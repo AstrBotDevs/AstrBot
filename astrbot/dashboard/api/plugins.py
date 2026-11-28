@@ -1112,6 +1112,20 @@ async def get_plugin_changelog(
     )
 
 
+@router.get("/plugins/{plugin_id}/changelog/remote")
+async def get_plugin_changelog_remote(
+    plugin_id: str,
+    proxy: str = Query(""),
+    repo: str = Query(""),
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        lambda: service.get_plugin_changelog_remote(plugin_id, proxy=proxy, repo=repo),
+        log_label="/api/plugin/changelog/remote",
+    )
+
+
 @router.post("/plugins/{plugin_id}/reload")
 async def reload_plugin(
     plugin_id: str,

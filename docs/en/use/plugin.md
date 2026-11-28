@@ -132,6 +132,7 @@ On the **Installed** page, you can:
 | Action | When to use it |
 | --- | --- |
 | Update | Download the author's new code. Read the changes first and back up configuration and data for important plugins. |
+| Changelog | View the plugin changelog. The **View Changelog** button in the update confirmation dialog fetches the latest CHANGELOG from the repository, while the **View Changelog** entry in a plugin card's `···` menu reads the locally installed file. |
 | Reload | Load the existing code again, for example after fixing dependencies or editing code. Reloading does not download a new version. |
 | Open / Close plugin | Activate or stop the plugin. Close it when you temporarily do not need it, keeping its files for later use. |
 | Handlers | Inspect the commands, tools, and other handlers registered by the plugin. |
