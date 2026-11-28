@@ -1,9 +1,11 @@
 """备份功能单元测试"""
 
+import asyncio
 import hashlib
 import json
 import os
 import re
+import threading
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +49,7 @@ from astrbot.core.message.interactive_ui import (
 )
 from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.version_comparator import VersionComparator
+from astrbot.dashboard.api.backups import list_backups, list_dashboard_backups
 from astrbot.dashboard.services.backup_service import (
     CHUNK_SIZE,
     MAX_BACKUP_TOTAL_BYTES,
@@ -111,6 +114,92 @@ def mock_kb_manager():
     kb_manager.kb_db = kb_db
 
     return kb_manager
+
+
+def _write_listed_backup(backup_dir: Path, name: str) -> None:
+    with zipfile.ZipFile(backup_dir / name, "w") as archive:
+        archive.writestr(
+            "manifest.json",
+            json.dumps({"origin": "exported", "astrbot_version": "4.0.0"}),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("legacy", "filenames"),
+    [(False, ("alpha.zip", "beta.zip")), (True, ("gamma.zip",))],
+    ids=["current-route", "legacy-route"],
+)
+async def test_backup_list_reads_zip_manifests_off_the_event_loop(
+    temp_backup_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    legacy: bool,
+    filenames: tuple[str, ...],
+) -> None:
+    for filename in filenames:
+        _write_listed_backup(temp_backup_dir, filename)
+
+    original_read = zipfile.ZipFile.read
+    manifest_reads: list[tuple[str, int]] = []
+
+    def record_manifest_thread(
+        archive: zipfile.ZipFile, name: str | zipfile.ZipInfo, pwd: bytes | None = None
+    ) -> bytes:
+        if name == "manifest.json":
+            manifest_reads.append(
+                (Path(str(archive.filename)).name, threading.get_ident())
+            )
+        return original_read(archive, name, pwd)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", record_manifest_thread)
+    service = BackupService.__new__(BackupService)
+    service.backup_dir = str(temp_backup_dir)
+    service.ensure_cleanup_task_started = lambda: None
+
+    loop_thread = threading.get_ident()
+    if legacy:
+        response = await list_dashboard_backups(
+            page=1, page_size=10, _username="admin", service=service
+        )
+    else:
+        response = await list_backups(
+            page=1, page_size=10, _auth=object(), service=service
+        )
+
+    assert response["status"] == "ok"
+    assert response["data"]["total"] == len(filenames)
+    assert sorted(name for name, _ in manifest_reads) == sorted(filenames)
+    assert all(thread != loop_thread for _, thread in manifest_reads)
+
+
+@pytest.mark.asyncio
+async def test_backup_list_starts_upload_cleanup_on_the_event_loop(
+    temp_backup_dir: Path,
+) -> None:
+    _write_listed_backup(temp_backup_dir, "delta.zip")
+    started_threads: list[int] = []
+
+    async def noop_cleanup() -> None:
+        return None
+
+    def record_cleanup_thread() -> None:
+        started_threads.append(threading.get_ident())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Like the production scheduler, this cannot start a task on a worker.
+            return
+        loop.create_task(noop_cleanup())
+
+    service = BackupService.__new__(BackupService)
+    service.backup_dir = str(temp_backup_dir)
+    service.ensure_cleanup_task_started = record_cleanup_thread
+
+    loop_thread = threading.get_ident()
+    response = await list_backups(page=1, page_size=10, _auth=object(), service=service)
+
+    assert response["status"] == "ok"
+    assert started_threads and started_threads[0] == loop_thread
 
 
 class TestImportResult:
