@@ -75,7 +75,8 @@ def test_wakeup_keeps_target_identity_separate_from_its_source(source, message_t
     assert event.source_id == "source-id"
     assert event.message_str == event.message_obj.message_str == "Continue the task."
     assert event.get_messages()[0].text == "Continue the task."
-    assert event.get_sender_id() == "astrbot"
+    assert event.get_self_id() == "astrbot"
+    assert event.get_sender_id() == "target-session"
     assert event.get_sender_name() == "System"
     assert event.role == "member"
     assert event.is_wake and event.is_at_or_wake_command
