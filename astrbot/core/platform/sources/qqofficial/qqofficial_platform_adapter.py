@@ -460,7 +460,10 @@ class QQOfficialPlatformAdapter(Platform):
                 "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
                 session.session_id,
             )
-            return
+            raise RuntimeError(
+                f"No cached msg_id for session {session.session_id}, "
+                "QQ Official cannot send a message to it proactively"
+            )
 
         use_md = getattr(message_chain, "use_markdown_", None)
         if use_md is False:
