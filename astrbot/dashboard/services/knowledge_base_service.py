@@ -200,6 +200,9 @@ class KnowledgeBaseService:
                         progress_callback=progress_callback,
                     )
                     uploaded_docs.append(doc.model_dump())
+                    self.upload_progress[task_id].setdefault(
+                        "uploaded_file_indices", []
+                    ).append(file_idx)
                 except Exception as exc:
                     logger.error(f"上传文档 {file_info['file_name']} 失败: {exc}")
                     failed_docs.append(
@@ -290,6 +293,9 @@ class KnowledgeBaseService:
                         pre_chunked_text=chunks,
                     )
                     uploaded_docs.append(doc.model_dump())
+                    self.upload_progress[task_id].setdefault(
+                        "uploaded_file_indices", []
+                    ).append(file_idx)
                 except Exception as exc:
                     logger.error(f"导入文档 {file_name} 失败: {exc}")
                     failed_docs.append(

@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -342,8 +343,75 @@ async def test_list_documents_total_comes_from_count_documents():
     kb_helper.count_documents.return_value = 42
 
     result = await service.list_documents(
-        kb_id="kb1", page=1, page_size=10, search="  foo  ",
+        kb_id="kb1",
+        page=1,
+        page_size=10,
+        search="  foo  ",
     )
 
     assert result["total"] == 42
     kb_helper.count_documents.assert_awaited_once_with(search="foo")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source_kind", ["files", "imports"])
+async def test_background_upload_reports_persisted_file_indices(source_kind, tmp_path):
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.upload_progress = {}
+    service.upload_tasks = {}
+    observed = []
+
+    async def upload_document(**kwargs):
+        observed.append(
+            service.upload_progress["task"].get("uploaded_file_indices", []).copy()
+        )
+        return KBDocument(
+            doc_id=f"doc-{len(observed)}",
+            kb_id="kb",
+            doc_name=kwargs["file_name"],
+            file_type="txt",
+            file_size=1,
+            file_path="",
+        )
+
+    kb_helper = SimpleNamespace(upload_document=upload_document)
+    if source_kind == "files":
+        staging_dir = tmp_path / "staging"
+        staging_dir.mkdir()
+        files = []
+        for name in ["a.txt", "b.txt"]:
+            path = staging_dir / name
+            path.write_text(name)
+            files.append(
+                {
+                    "file_name": name,
+                    "file_type": "txt",
+                    "temp_file_path": str(path),
+                }
+            )
+        await service.background_upload_task(
+            "task",
+            kb_helper,
+            files,
+            staging_dir,
+            512,
+            50,
+            32,
+            3,
+            3,
+        )
+    else:
+        await service.background_import_task(
+            "task",
+            kb_helper,
+            [
+                {"file_name": "a.txt", "chunks": ["a"]},
+                {"file_name": "b.txt", "chunks": ["b"]},
+            ],
+            32,
+            3,
+            3,
+        )
+
+    assert observed == [[], [0]]
+    assert service.upload_progress["task"]["uploaded_file_indices"] == [0, 1]

@@ -1550,7 +1550,7 @@ export const knowledgeApi = {
   },
   task(taskId: string) {
     return typed<any>(
-      openApiV1.getKnowledgeTask({ path: { task_id: taskId } }),
+      openApiV1.getKnowledgeTask({ path: { task_id: taskId }, timeout: 15000 }),
     );
   },
   document(kbId: string, documentId: string) {
