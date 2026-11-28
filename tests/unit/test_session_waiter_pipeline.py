@@ -2,13 +2,16 @@
 
 import asyncio
 import copy
+from contextlib import aclosing
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.builtin_stars.astrbot.group_chat_context import GroupChatContext
+from astrbot.builtin_stars.astrbot.main import Main
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.message.components import Plain
+from astrbot.core.message.components import At, Image, Plain
 from astrbot.core.pipeline.process_stage import stage as processing
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.waking_check import stage as waking
@@ -17,6 +20,8 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils import session_waiter as waiting
 from astrbot.core.utils.session_waiter import (
     USER_SESSIONS,
     DefaultSessionFilter,
@@ -156,3 +161,121 @@ async def test_session_waiter_pipeline(monkeypatch, private, state):
     elif state != "ordinary":
         preprocess.assert_not_awaited()
         assert event.is_stopped()
+
+
+@pytest.fixture
+def empty_mention(monkeypatch):
+    monkeypatch.setattr(waiting, "USER_SESSIONS", {})
+    monkeypatch.setattr(waiting, "FILTERS", [])
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["platform_settings"].update(
+        empty_mention_waiting=True, empty_mention_waiting_need_reply=True
+    )
+    config["provider_ltm_settings"]["group_icl_enable"] = False
+    queue = asyncio.Queue()
+    main = Main.__new__(Main)
+    main.context = SimpleNamespace(
+        get_config=lambda **_: config,
+        get_locale=AsyncMock(return_value="en-US"),
+        get_event_queue=lambda: queue,
+        conversation_manager=SimpleNamespace(
+            get_curr_conversation_id=AsyncMock(return_value="conversation"),
+            get_conversation=AsyncMock(return_value=None),
+        ),
+    )
+    main.group_chat_context = GroupChatContext(None, main.context)
+    return main, config, queue
+
+
+def make_group_event(*components, text=""):
+    message = AstrBotMessage()
+    message.type = MessageType.GROUP_MESSAGE
+    message.self_id = "bot"
+    message.sender = MessageMember(user_id="sender", nickname="Sender")
+    message.message = list(components)
+    return AstrMessageEvent(
+        text,
+        message,
+        PlatformMetadata(id="test", name="test", description="Test"),
+        "group",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tail", "should_wait"),
+    [
+        ([Plain("")], True),
+        ([Plain(" \t")], True),
+        ([Plain("question")], False),
+        ([Plain(""), Image(file="test.png")], False),
+    ],
+)
+async def test_empty_mention_classification(empty_mention, tail, should_wait):
+    main, _, _ = empty_mention
+    event = make_group_event(At(qq="bot"), *tail)
+    chain = event.get_messages()
+    original = copy.deepcopy(chain)
+    async with aclosing(main.handle_empty_mention(event)) as handler:
+        reply = await anext(handler, None)
+        assert isinstance(reply, ProviderRequest) is should_wait
+        assert bool(waiting.USER_SESSIONS) is should_wait
+        assert event.get_messages() is chain and chain == original
+    assert not waiting.USER_SESSIONS and not waiting.FILTERS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("group_context_enabled", [False, True])
+async def test_empty_mention_captures_follow_up_during_greeting(
+    empty_mention, group_context_enabled
+):
+    main, config, queue = empty_mention
+    config["provider_ltm_settings"]["group_icl_enable"] = group_context_enabled
+    context = main.group_chat_context
+    mention = make_group_event(At(qq="bot"))
+    follow_up = make_group_event(Plain("follow-up"), text="follow-up")
+    if group_context_enabled:
+        await context.handle_message(
+            make_group_event(Plain("earlier-chat"), text="earlier-chat")
+        )
+
+    # Deliver a follow-up at the lookup await without sleeps or a fake pipeline.
+    async def deliver_during_lookup(origin):
+        await context.handle_message(
+            make_group_event(Plain("later-chat"), text="later-chat")
+        )
+        await SessionWaiter.trigger(origin, follow_up)
+        queued_during_lookup.append(not queue.empty())
+        return "conversation"
+
+    queued_during_lookup = []
+    if group_context_enabled:
+        main.context.conversation_manager.get_curr_conversation_id.side_effect = (
+            deliver_during_lookup
+        )
+    async with aclosing(main.handle_empty_mention(mention)) as handler:
+        greeting = await anext(handler)
+        if group_context_enabled:
+            assert queued_during_lookup == [False]
+        else:
+            await SessionWaiter.trigger(mention.unified_msg_origin, follow_up)
+        assert follow_up.is_stopped()
+        assert queue.qsize() == 1
+        replay = queue.get_nowait()
+        assert replay.message_str == "follow-up" and not replay.is_stopped()
+        assert isinstance(replay.get_messages()[0], At)
+
+        if group_context_enabled:
+            await main.decorate_llm_req(mention, greeting)
+            (part,) = greeting.extra_user_content_parts
+            assert "earlier-chat" in part.text and "later-chat" not in part.text
+            await context.handle_message(replay)
+            next_request = replay.request_llm(
+                prompt="follow-up", session_id="conversation"
+            )
+            await main.decorate_llm_req(replay, next_request)
+            (part,) = next_request.extra_user_content_parts
+            assert "later-chat" in part.text and "earlier-chat" not in part.text
+
+        assert await anext(handler, None) is None
+    assert not waiting.USER_SESSIONS and not waiting.FILTERS and queue.empty()

@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import traceback
 from collections.abc import Iterable
@@ -59,7 +60,12 @@ class Main(star.Star):
     async def handle_empty_mention(self, event: AstrMessageEvent):
         """处理只有一个 @ 或仅有唤醒前缀的消息，并等待用户下一条内容。"""
         try:
-            messages = event.get_messages()
+            # Ignore empty text segments for detection without changing the event.
+            messages = [
+                message
+                for message in event.get_messages()
+                if not (isinstance(message, Comp.Plain) and not message.text.strip())
+            ]
             cfg = self.context.get_config(umo=event.unified_msg_origin)
             p_settings = cfg["platform_settings"]
             wake_prefix = cfg.get("wake_prefix", [])
@@ -83,62 +89,23 @@ class Main(star.Star):
                 await self.context.get_locale(event.unified_msg_origin),
                 MESSAGES["zh-CN"],
             )
-            if p_settings.get("empty_mention_waiting_need_reply", True):
-                try:
-                    # This handler stops the event before on_message runs, so a
-                    # bare @ is never recorded. Record it before the awaits below:
-                    # a group message arriving meanwhile would otherwise be
-                    # recorded ahead of the mention and be wrongly included in
-                    # this reply.
-                    if (
-                        self.group_chat_context
-                        and cfg["provider_ltm_settings"]["group_icl_enable"]
-                    ):
-                        try:
-                            await self.group_chat_context.handle_message(event)
-                        except Exception as e:
-                            logger.error(f"group chat context: {e}")
 
-                    curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
-                        event.unified_msg_origin,
-                    )
-                    conversation = None
-
-                    if curr_cid:
-                        conversation = (
-                            await self.context.conversation_manager.get_conversation(
-                                event.unified_msg_origin,
-                                curr_cid,
-                            )
-                        )
-                    else:
-                        curr_cid = (
-                            await self.context.conversation_manager.new_conversation(
-                                event.unified_msg_origin,
-                                platform_id=event.get_platform_id(),
-                            )
-                        )
-
-                    yield event.request_llm(
-                        prompt=(
-                            "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
-                            "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
-                            "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
-                        ),
-                        session_id=curr_cid,
-                        contexts=[],
-                        system_prompt="",
-                        conversation=conversation,
-                    )
-                except Exception as e:
-                    logger.error(f"LLM response failed: {e!s}")
-                    yield event.plain_result(messages_i18n["empty_mention"])
+            should_reply = p_settings.get("empty_mention_waiting_need_reply", True)
+            prepare_group_context = (
+                should_reply
+                and self.group_chat_context is not None
+                and cfg["provider_ltm_settings"]["group_icl_enable"]
+                and event.get_message_type() == MessageType.GROUP_MESSAGE
+            )
+            group_context_recorded = False
+            pending_follow_up: AstrMessageEvent | None = None
 
             @session_waiter(60)
             async def empty_mention_waiter(
                 controller: SessionController,
                 event: AstrMessageEvent,
             ) -> None:
+                nonlocal pending_follow_up
                 if not event.message_str or not event.message_str.strip():
                     return
                 event.message_obj.message.insert(
@@ -146,17 +113,79 @@ class Main(star.Star):
                     Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
                 )
                 new_event = copy.copy(event)
-                self.context.get_event_queue().put_nowait(new_event)
+                if prepare_group_context:
+                    pending_follow_up = new_event
+                else:
+                    self.context.get_event_queue().put_nowait(new_event)
                 event.stop_event()
                 controller.stop()
 
+            wait_task = asyncio.create_task(empty_mention_waiter(event))
             try:
-                await empty_mention_waiter(event)
+                if should_reply:
+                    try:
+                        # Record the mention before letting newer messages through.
+                        if prepare_group_context and self.group_chat_context:
+                            try:
+                                await self.group_chat_context.handle_message(event)
+                                group_context_recorded = True
+                            except Exception as e:
+                                logger.error(f"group chat context: {e}")
+                        # Register before the asynchronous greeting setup.
+                        await asyncio.sleep(0)
+                        curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
+                            event.unified_msg_origin,
+                        )
+                        conversation = None
+
+                        if curr_cid:
+                            conversation = await self.context.conversation_manager.get_conversation(
+                                event.unified_msg_origin,
+                                curr_cid,
+                            )
+                        else:
+                            curr_cid = await self.context.conversation_manager.new_conversation(
+                                event.unified_msg_origin,
+                                platform_id=event.get_platform_id(),
+                            )
+
+                        request = event.request_llm(
+                            prompt=(
+                                "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
+                                "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
+                                "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
+                            ),
+                            session_id=curr_cid,
+                            contexts=[],
+                            system_prompt="",
+                            conversation=conversation,
+                        )
+                        if group_context_recorded and self.group_chat_context:
+                            try:
+                                # Take the greeting's history before replaying the
+                                # follow-up, which also uses the group context.
+                                await self.group_chat_context.on_req_llm(event, request)
+                                event.set_extra("_empty_mention_context_prepared", True)
+                            except Exception as e:
+                                logger.error(f"group chat context: {e}")
+                        reply = request
+                    except Exception as e:
+                        logger.error(f"LLM response failed: {e!s}")
+                        reply = event.plain_result(messages_i18n["empty_mention"])
+                    finally:
+                        prepare_group_context = False
+                        if pending_follow_up is not None:
+                            self.context.get_event_queue().put_nowait(pending_follow_up)
+                    yield reply
+                await wait_task
             except TimeoutError:
                 pass
             except Exception as e:
                 yield event.plain_result(messages_i18n["error"].format(detail=str(e)))
             finally:
+                if not wait_task.done():
+                    wait_task.cancel()
+                await asyncio.gather(wait_task, return_exceptions=True)
                 event.stop_event()
         except Exception as e:
             logger.error("handle_empty_mention error: " + str(e))
@@ -357,6 +386,8 @@ class Main(star.Star):
         self, event: AstrMessageEvent, req: ProviderRequest
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
+        if event.get_extra("_empty_mention_context_prepared", False):
+            return
         if self.group_chat_context and self.group_context_enabled(event):
             try:
                 await self.group_chat_context.on_req_llm(event, req)
