@@ -117,6 +117,7 @@ async def test_future_task_edit_updates_existing_job():
         job_type="active_agent",
         run_once=False,
         cron_expression="0 8 * * *",
+        interval_seconds=None,
         payload={
             "session": "test:private:session",
             "sender_id": "user-1",
@@ -575,6 +576,7 @@ def _raw_job(
         job_type=job_type,
         run_once=False,
         cron_expression="0 8 * * *",
+        interval_seconds=None,
         enabled=True,
         next_run_time=None,
         payload=payload or {},
