@@ -892,6 +892,7 @@ class TestCronManagerLifecycleAndValidation:
         mock_db.update_cron_job.side_effect = slow_update
 
         cron_manager._schedule_next_run_update("other-job-id", None)
+        next_run_writer = cron_manager._next_run_tasks["other-job-id"]
         await asyncio.wait_for(next_run_started.wait(), 2)
 
         run_task = asyncio.create_task(cron_manager._run_job(sample_cron_job.job_id))
@@ -900,14 +901,16 @@ class TestCronManagerLifecycleAndValidation:
         await cron_manager.shutdown()
 
         assert run_task.done()
+        assert next_run_writer.cancelled()
         assert cron_manager._running_tasks == {}
         assert cron_manager._next_run_tasks == {}
-        # Cancelled run during shutdown must not overwrite DB status in finally.
+        assert cron_manager._all_next_run_tasks == set()
+        # Shutdown cancellation should record final status without scheduling next_run writes.
         statuses = [
             call.kwargs.get("status")
             for call in mock_db.update_cron_job.await_args_list
         ]
-        assert "cancelled" not in statuses
+        assert "cancelled" in statuses
 
     @pytest.mark.asyncio
     async def test_delete_job_cancels_next_run_update_and_skips_status_write(
@@ -935,14 +938,97 @@ class TestCronManagerLifecycleAndValidation:
         await asyncio.wait_for(started.wait(), 2)
 
         cron_manager._schedule_next_run_update(sample_cron_job.job_id, None)
+        next_run_writer = cron_manager._next_run_tasks[sample_cron_job.job_id]
         await asyncio.wait_for(update_started.wait(), 2)
 
         await cron_manager.delete_job(sample_cron_job.job_id)
 
         assert run_task.cancelled()
+        assert next_run_writer.cancelled()
         assert sample_cron_job.job_id not in cron_manager._next_run_tasks
         statuses = [
             call.kwargs.get("status")
             for call in mock_db.update_cron_job.await_args_list
         ]
         assert "cancelled" not in statuses
+
+    @pytest.mark.asyncio
+    async def test_shutdown_drains_replaced_next_run_writers_and_honors_drain_timeout(
+        self, mock_db, sample_cron_job
+    ):
+        """shutdown drains superseded next_run writers and returns after drain_timeout."""
+        from astrbot.core.cron.manager import CronJobManager
+
+        manager = CronJobManager(mock_db, drain_timeout=0.05)
+        old_writer_started = asyncio.Event()
+        handler_started = asyncio.Event()
+        release_stubborn = asyncio.Event()
+
+        async def blocking_update(*args, **kwargs):
+            if "next_run_time" in kwargs and len(kwargs) == 1:
+                old_writer_started.set()
+                await asyncio.Future()
+
+        mock_db.update_cron_job.side_effect = blocking_update
+        mock_db.get_cron_job.return_value = sample_cron_job
+
+        async def stubborn_handler(**_kwargs):
+            handler_started.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                await release_stubborn.wait()
+
+        manager._basic_handlers[sample_cron_job.job_id] = stubborn_handler
+        run_task = asyncio.create_task(manager._run_job(sample_cron_job.job_id))
+        await asyncio.wait_for(handler_started.wait(), 2)
+
+        manager._schedule_next_run_update("job-a", None)
+        old_writer = manager._next_run_tasks["job-a"]
+        await asyncio.wait_for(old_writer_started.wait(), 2)
+        # Replacing the queued writer cancels old_writer; shutdown must still track it.
+        manager._schedule_next_run_update("job-a", None)
+        replaced_writer = manager._next_run_tasks["job-a"]
+
+        await asyncio.wait_for(manager.shutdown(), 1.0)
+        assert old_writer.cancelled()
+        assert replaced_writer.done()
+        assert not run_task.done()
+
+        release_stubborn.set()
+        await asyncio.wait_for(run_task, 1.0)
+
+    @pytest.mark.asyncio
+    async def test_schedule_job_noop_when_shutting_down_and_sync_resets_running(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """_schedule_job is a no-op during shutdown, and sync_from_db resets running jobs."""
+        stale_job = sample_cron_job.model_copy(
+            update={"status": "running", "enabled": False}
+        )
+        mock_db.list_cron_jobs.return_value = [stale_job]
+        await cron_manager.sync_from_db()
+        mock_db.update_cron_job.assert_awaited_once_with(
+            stale_job.job_id, status="interrupted"
+        )
+
+        cron_manager._shutting_down = True
+        cron_manager._started = False
+        cron_manager._schedule_job(sample_cron_job)
+        assert cron_manager._started is False
+        assert cron_manager.scheduler.get_job(sample_cron_job.job_id) is None
+
+    @pytest.mark.asyncio
+    async def test_run_once_deletes_after_handler_completes_even_on_shutdown(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
+        """A finished run_once job deletes itself even if shutdown begins right after."""
+        one_shot = sample_cron_job.model_copy(update={"run_once": True})
+        mock_db.get_cron_job.return_value = one_shot
+
+        async def handler(**_kwargs):
+            cron_manager._shutting_down = True
+
+        cron_manager._basic_handlers[one_shot.job_id] = handler
+        await cron_manager._run_job(one_shot.job_id)
+        mock_db.delete_cron_job.assert_awaited_once_with(one_shot.job_id)

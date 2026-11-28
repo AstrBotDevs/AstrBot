@@ -110,7 +110,11 @@ class CronJobSchedulingError(Exception):
 class CronJobManager:
     """Central scheduler for BasicCronJob and ActiveAgentCronJob."""
 
-    def __init__(self, db: BaseDatabase) -> None:
+    _DRAIN_TIMEOUT_SECONDS = 5.0
+
+    def __init__(
+        self, db: BaseDatabase, drain_timeout: float = _DRAIN_TIMEOUT_SECONDS
+    ) -> None:
         self.db = db
         self.scheduler = AsyncIOScheduler()
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
@@ -119,8 +123,10 @@ class CronJobManager:
         # The scheduler may start early via _schedule_job; track DB sync separately.
         self._db_synced = False
         self._shutting_down = False
+        self._drain_timeout = drain_timeout
         self._running_tasks: dict[str, set[asyncio.Task]] = {}
         self._next_run_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._all_next_run_tasks: set[asyncio.Task[Any]] = set()
         # Ref-counted deletion markers. A run must not register after deletion
         # has started, and nested/concurrent deletes must not clear the marker
         # before the last deletion finishes.
@@ -145,19 +151,27 @@ class CronJobManager:
             if self._started:
                 self.scheduler.shutdown(wait=False)
             current_task = asyncio.current_task()
-            tasks: list[asyncio.Task[Any]] = []
-            for task in self._next_run_tasks.values():
-                if not task.done() and task is not current_task:
-                    task.cancel()
-                    tasks.append(task)
+            tasks: list[asyncio.Task[Any]] = [
+                task
+                for task in self._all_next_run_tasks
+                if not task.done() and task is not current_task
+            ]
             self._next_run_tasks.clear()
             for job_tasks in self._running_tasks.values():
                 for task in job_tasks:
                     if not task.done() and task is not current_task:
-                        task.cancel()
                         tasks.append(task)
+            for task in tasks:
+                task.cancel()
             if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+                done, pending = await asyncio.wait(tasks, timeout=self._drain_timeout)
+                for done_task in done:
+                    if not done_task.cancelled():
+                        done_task.exception()
+                if pending:
+                    logger.warning(
+                        f"Timed out after {self._drain_timeout}s draining {len(pending)} cron tasks during shutdown"
+                    )
             await asyncio.sleep(0)
             self._started = False
             self._db_synced = False
@@ -165,6 +179,8 @@ class CronJobManager:
     async def sync_from_db(self) -> None:
         jobs = await self.db.list_cron_jobs()
         for job in jobs:
+            if getattr(job, "status", None) == "running":
+                await self.db.update_cron_job(job.job_id, status="interrupted")
             if not job.enabled or not job.persistent:
                 continue
             if job.job_type == "basic" and job.job_id not in self._basic_handlers:
@@ -329,7 +345,14 @@ class CronJobManager:
             for task in tasks:
                 task.cancel()
             if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+                done, pending = await asyncio.wait(tasks, timeout=self._drain_timeout)
+                for done_task in done:
+                    if not done_task.cancelled():
+                        done_task.exception()
+                if pending:
+                    logger.warning(
+                        f"Timed out after {self._drain_timeout}s draining {len(pending)} tasks for cron job {job_id}"
+                    )
             await self.db.delete_cron_job(job_id)
         finally:
             remaining = self._deleting_jobs.get(job_id, 0) - 1
@@ -354,6 +377,8 @@ class CronJobManager:
     ) -> None:
         """Persist a job's next_run_time in a tracked task."""
         self._cancel_next_run_update(job_id)
+        if self._shutting_down:
+            return
 
         async def persist() -> None:
             if self._shutting_down or job_id in self._deleting_jobs:
@@ -369,8 +394,10 @@ class CronJobManager:
 
         task = asyncio.create_task(persist())
         self._next_run_tasks[job_id] = task
+        self._all_next_run_tasks.add(task)
 
         def cleanup(done_task: asyncio.Task[Any]) -> None:
+            self._all_next_run_tasks.discard(done_task)
             if self._next_run_tasks.get(job_id) is done_task:
                 self._next_run_tasks.pop(job_id, None)
 
@@ -437,6 +464,8 @@ class CronJobManager:
             raise CronJobSchedulingError(str(e)) from e
 
     def _schedule_job(self, job: CronJob) -> None:
+        if self._shutting_down:
+            return
         if not self._started:
             self.scheduler.start()
             self._started = True
@@ -510,6 +539,7 @@ class CronJobManager:
             )
             status = "completed"
             last_error = None
+            handler_finished = False
             try:
                 if job.job_type == "basic":
                     await self._run_basic_job(job)
@@ -518,6 +548,7 @@ class CronJobManager:
                     status = "dispatched"
                 else:
                     raise ValueError(f"Unknown cron job type: {job.job_type}")
+                handler_finished = True
             except asyncio.CancelledError:
                 status = "cancelled"
                 raise
@@ -526,18 +557,43 @@ class CronJobManager:
                 last_error = str(e)
                 logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
             finally:
-                if not self._shutting_down and job_id not in self._deleting_jobs:
-                    next_run = self._get_next_run_time(job_id)
-                    await self.db.update_cron_job(
-                        job_id,
-                        status=status,
-                        last_run_at=start_time,
-                        last_error=last_error,
-                        next_run_time=next_run,
-                    )
-                    if job.run_once and delete_run_once and status != "cancelled":
-                        # One-shot runs remove themselves, excluding their own task.
+                if (
+                    job.run_once
+                    and delete_run_once
+                    and handler_finished
+                    and job_id not in self._deleting_jobs
+                ):
+                    try:
                         await self.delete_job(job_id)
+                    except Exception as exc:
+                        logger.warning(
+                            f"Failed to clean up completed run-once cron job {job_id}: {exc}"
+                        )
+                elif job_id not in self._deleting_jobs:
+                    if not self._shutting_down:
+                        next_run = self._get_next_run_time(job_id)
+                        await self.db.update_cron_job(
+                            job_id,
+                            status=status,
+                            last_run_at=start_time,
+                            last_error=last_error,
+                            next_run_time=next_run,
+                        )
+                    else:
+                        try:
+                            await asyncio.wait_for(
+                                self.db.update_cron_job(
+                                    job_id,
+                                    status="cancelled",
+                                    last_run_at=start_time,
+                                    last_error=last_error,
+                                ),
+                                timeout=min(self._drain_timeout, 2.0),
+                            )
+                        except (Exception, asyncio.TimeoutError) as exc:
+                            logger.warning(
+                                f"Failed to persist shutdown cancellation status for cron job {job_id}: {exc}"
+                            )
         finally:
             running = self._running_tasks.get(job_id)
             if running is not None:
