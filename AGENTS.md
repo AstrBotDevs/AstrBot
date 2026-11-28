@@ -39,6 +39,19 @@ ruff check .
 
 > **Note:** If you use VSCode, install the `Ruff` extension for real-time formatting and linting in the editor.
 
+## Testing Policy
+
+Every new test taxes every future PR, so unjustified test diffs get deleted in review.
+
+- **Default: no new tests** — nothing under `tests/` unless the task explicitly asks for tests.
+- **Scratch verification is fine; committing it is NOT.** Need to prove your change? Write a throwaway test, run it, delete it, paste the output in the PR.
+- **Bug fix: at most one fast, deterministic regression test** (no network, no sleeps, no full app boot). Startup / dashboard / platform bugs: verify with `uv run scripts/smoke_startup_check.py` plus manual steps in the PR.
+- **Feature: at most three behavioral tests** asserting the new user-visible behavior (not implementation details), justified in the PR description.
+- **Refactor: no new tests** — behavior is unchanged; the existing suite passing is the proof.
+- **Never commit:** exhaustive enumeration; mock-heavy tests asserting implementation details; tests for trivial code; tests needing real API keys or the running app (if truly unavoidable: `tests/integration/` with `@pytest.mark.slow`).
+- **Never weaken an existing test** to make your change pass — fix the change. Updating tests for an intentional behavior change is fine; say so in the PR.
+- **Always run** the existing tests your change touches and paste the results in the PR.
+
 ## Dev environment tips
 
 ### Basic
