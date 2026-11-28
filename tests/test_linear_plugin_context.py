@@ -1,5 +1,6 @@
 """Plugin attribution and legacy mutation behavior for the linear journal."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -7,6 +8,11 @@ import pytest
 
 from astrbot.core.agent.conversation_events import (
     ConversationEventWriter,
+)
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    TextPart,
+    UserMessageSegment,
 )
 from astrbot.core.astr_agent_runtime.history import ConversationHistoryObserver
 from astrbot.core.conversation_mgr import ConversationManager
@@ -135,3 +141,30 @@ async def test_transcript_only_runner_does_not_clear_history_on_request_hook(
     )
     await writer.save_history([entry["message"] for entry in writer._entries])
     assert (await store.read(conv.conversation_id)).messages == history
+
+
+@pytest.mark.asyncio
+async def test_add_message_pair_keeps_temp_parts_out_of_restored_history(database):
+    store = database.conversation_store
+    manager = ConversationManager(database)
+    conv = await store.create(umo="umo", platform_id="p", content=[])
+    user = UserMessageSegment(
+        content=[TextPart(text="task"), TextPart(text="worksheet").mark_as_temp()]
+    )
+    await manager.add_message_pair(
+        conv.conversation_id, user, AssistantMessageSegment(content="answer")
+    )
+    restored = await manager.get_conversation("umo", conv.conversation_id)
+    assert json.loads(restored.history) == [
+        {"role": "user", "content": [{"type": "text", "text": "task"}]},
+        {"role": "assistant", "content": "answer"},
+    ]
+    appended = [
+        entry.payload["message"]
+        for entry in await store.events(conv.conversation_id)
+        if entry.type == "message.appended"
+    ]
+    assert appended[0]["content"] == [
+        {"type": "text", "text": "task"},
+        {"type": "text", "text": "worksheet", "_no_save": True},
+    ]
