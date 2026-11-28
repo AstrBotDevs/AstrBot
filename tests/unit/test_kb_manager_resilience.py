@@ -10,6 +10,7 @@ These tests use lazy imports and mocks to avoid circular import issues
 in the astrbot core module chain.
 """
 
+import asyncio
 import sys
 import types
 from pathlib import Path
@@ -460,3 +461,144 @@ async def test_update_kb_rolls_back_state_and_terminates_new_helper_on_commit_er
     assert mock_knowledge_base.embedding_provider_id == "test-embedding-provider"
     assert kb_mgr.kb_insts[mock_knowledge_base.kb_id] is old_helper
     mock_term.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_update_kb_keeps_committed_helper_when_refresh_fails(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """Post-commit session.refresh failure must not roll back update_kb."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    mock_provider_manager.get_provider_by_id.return_value = mock_embedding_provider
+
+    old_helper = KBHelper.__new__(KBHelper)
+    old_helper.kb = mock_knowledge_base
+    old_helper.prov_mgr = mock_provider_manager
+    old_helper.kb_db = mock_kb_db
+    old_helper.kb_root_dir = "/tmp/test_kb"
+    old_helper.chunker = MagicMock()
+    old_helper.init_error = None
+    old_helper.vec_db = MagicMock()
+    old_helper.terminate = AsyncMock()
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: old_helper}
+    kb_mgr.retrieval_manager = MagicMock()
+
+    session = MagicMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock(side_effect=RuntimeError("refresh failed"))
+    mock_db_context = MagicMock()
+    mock_db_context.__aenter__ = AsyncMock(return_value=session)
+    mock_db_context.__aexit__ = AsyncMock(return_value=False)
+    mock_kb_db.get_db.return_value = mock_db_context
+
+    with patch.object(KBHelper, "initialize", new_callable=AsyncMock):
+        new_helper = await kb_mgr.update_kb(
+            kb_id=mock_knowledge_base.kb_id,
+            kb_name="renamed_kb",
+            embedding_provider_id="new-emb",
+        )
+
+    assert new_helper is not None
+    assert new_helper is not old_helper
+    assert kb_mgr.kb_insts[mock_knowledge_base.kb_id] is new_helper
+    assert old_helper._superseded is True
+    old_helper.terminate.assert_awaited_once()
+    assert mock_knowledge_base.kb_name == "renamed_kb"
+
+
+@pytest.mark.asyncio
+async def test_update_kb_rethrows_cancelled_error_during_initialize(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+):
+    """CancelledError during new_helper.initialize should roll back and propagate."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    old_helper = KBHelper.__new__(KBHelper)
+    old_helper.kb = mock_knowledge_base
+    old_helper.prov_mgr = mock_provider_manager
+    old_helper.kb_db = mock_kb_db
+    old_helper.kb_root_dir = "/tmp/test_kb"
+    old_helper.chunker = MagicMock()
+    old_helper.init_error = None
+    old_helper.vec_db = MagicMock()
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_db = mock_kb_db
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: old_helper}
+    kb_mgr.retrieval_manager = MagicMock()
+
+    with (
+        patch.object(
+            KBHelper,
+            "initialize",
+            new_callable=AsyncMock,
+            side_effect=asyncio.CancelledError(),
+        ),
+        patch.object(KBHelper, "terminate", new_callable=AsyncMock) as mock_term,
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await kb_mgr.update_kb(
+            kb_id=mock_knowledge_base.kb_id,
+            kb_name="renamed_kb",
+        )
+
+    assert mock_knowledge_base.kb_name == "test_kb"
+    assert kb_mgr.kb_insts[mock_knowledge_base.kb_id] is old_helper
+    mock_term.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_vec_db_closes_vec_db_on_cancelled_initialize(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_kb_db,
+    mock_knowledge_base,
+    mock_embedding_provider,
+):
+    """_ensure_vec_db should close a newly created vec_db if initialize is cancelled."""
+    from astrbot.core.knowledge_base.kb_helper import KBHelper
+
+    mock_provider_manager.get_provider_by_id = AsyncMock(
+        return_value=mock_embedding_provider
+    )
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = mock_knowledge_base
+    helper.prov_mgr = mock_provider_manager
+    helper.kb_db = mock_kb_db
+    helper.kb_root_dir = "/tmp/test_kb"
+    helper.chunker = MagicMock()
+    helper.init_error = None
+    helper.kb_dir = Path("/tmp/test_kb") / mock_knowledge_base.kb_id
+    helper.kb_medias_dir = helper.kb_dir / "medias" / mock_knowledge_base.kb_id
+    helper.kb_files_dir = helper.kb_dir / "files" / mock_knowledge_base.kb_id
+
+    vec_db = MagicMock()
+    vec_db.initialize = AsyncMock(side_effect=asyncio.CancelledError())
+    vec_db.close = AsyncMock()
+
+    with (
+        patch(
+            "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+            return_value=vec_db,
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await helper._ensure_vec_db()
+
+    vec_db.close.assert_awaited_once()

@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError  # type: ignore
@@ -21,12 +22,6 @@ DB_PATH = Path(FILES_PATH) / "kb.db"
 CHUNKER = RecursiveCharacterChunker()
 
 
-def _restore_kb_state(kb: KnowledgeBase, previous_state: dict) -> None:
-    """Restore mutable KnowledgeBase attributes after a failed update."""
-    for field_name, value in previous_state.items():
-        setattr(kb, field_name, value)
-
-
 class KnowledgeBaseManager:
     kb_db: KBSQLiteDatabase
     retrieval_manager: RetrievalManager
@@ -40,6 +35,7 @@ class KnowledgeBaseManager:
         self._session_deleted_callback_registered = False
 
         self.kb_insts: dict[str, KBHelper] = {}
+        self._kb_locks: dict[str, asyncio.Lock] = {}
 
     async def initialize(self) -> None:
         """初始化知识库模块"""
@@ -146,12 +142,13 @@ class KnowledgeBaseManager:
                     await kb_helper.delete_vec_db()
                 except Exception as cleanup_exc:
                     logger.warning(
-                        f"创建知识库失败后清理向量库目录失败 ({kb.kb_id}): {cleanup_exc}"
+                        f"Failed to clean up vector store directory after create_kb failure ({kb.kb_id}): {cleanup_exc}"
                     )
             if isinstance(exc, IntegrityError):
-                logger.exception("创建知识库失败：唯一约束冲突")
+                logger.exception("Failed to create KB: unique constraint violation")
                 raise ValueError(f"知识库名称 '{kb_name}' 已存在") from exc
-            logger.exception("创建知识库失败")
+            if isinstance(exc, Exception):
+                logger.exception("Failed to create KB")
             raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
@@ -212,96 +209,116 @@ class KnowledgeBaseManager:
         top_k_sparse: int | None = None,
         top_m_final: int | None = None,
     ) -> KBHelper | None:
-        """更新知识库实例"""
-        kb_helper = await self.get_kb(kb_id)
-        if not kb_helper:
-            return None
+        """Update a knowledge base helper atomically while keeping active storage intact on failure."""
+        kb_locks = getattr(self, "_kb_locks", None)
+        if kb_locks is None:
+            kb_locks = {}
+            self._kb_locks = kb_locks
+        kb_lock = kb_locks.setdefault(kb_id, asyncio.Lock())
 
-        kb = kb_helper.kb
-        previous_state = {
-            "kb_name": kb.kb_name,
-            "description": kb.description,
-            "emoji": kb.emoji,
-            "embedding_provider_id": kb.embedding_provider_id,
-            "rerank_provider_id": kb.rerank_provider_id,
-            "chunk_size": kb.chunk_size,
-            "chunk_overlap": kb.chunk_overlap,
-            "top_k_dense": kb.top_k_dense,
-            "top_k_sparse": kb.top_k_sparse,
-            "top_m_final": kb.top_m_final,
-        }
-        previous_init_error = kb_helper.init_error
+        async with kb_lock:
+            kb_helper = await self.get_kb(kb_id)
+            if not kb_helper:
+                return None
 
-        if kb_name is not None:
-            kb.kb_name = kb_name
-        if description is not None:
-            kb.description = description
-        if emoji is not None:
-            kb.emoji = emoji
-        if embedding_provider_id is not None:
-            kb.embedding_provider_id = embedding_provider_id
-        kb.rerank_provider_id = rerank_provider_id  # 允许设置为 None
-        if chunk_size is not None:
-            kb.chunk_size = chunk_size
-        if chunk_overlap is not None:
-            kb.chunk_overlap = chunk_overlap
-        if top_k_dense is not None:
-            kb.top_k_dense = top_k_dense
-        if top_k_sparse is not None:
-            kb.top_k_sparse = top_k_sparse
-        if top_m_final is not None:
-            kb.top_m_final = top_m_final
+            kb = kb_helper.kb
+            previous_state = {
+                "kb_name": kb.kb_name,
+                "description": kb.description,
+                "emoji": kb.emoji,
+                "embedding_provider_id": kb.embedding_provider_id,
+                "rerank_provider_id": kb.rerank_provider_id,
+                "chunk_size": kb.chunk_size,
+                "chunk_overlap": kb.chunk_overlap,
+                "top_k_dense": kb.top_k_dense,
+                "top_k_sparse": kb.top_k_sparse,
+                "top_m_final": kb.top_m_final,
+            }
+            previous_init_error = kb_helper.init_error
 
-        # Build a new helper first. Keep current vec_db alive until new init succeeds.
-        new_helper = KBHelper(
-            kb_db=self.kb_db,
-            kb=kb,
-            provider_manager=self.provider_manager,
-            kb_root_dir=FILES_PATH,
-            chunker=CHUNKER,
-        )
+            if kb_name is not None:
+                kb.kb_name = kb_name
+            if description is not None:
+                kb.description = description
+            if emoji is not None:
+                kb.emoji = emoji
+            if embedding_provider_id is not None:
+                kb.embedding_provider_id = embedding_provider_id
+            kb.rerank_provider_id = rerank_provider_id  # 允许设置为 None
+            if chunk_size is not None:
+                kb.chunk_size = chunk_size
+            if chunk_overlap is not None:
+                kb.chunk_overlap = chunk_overlap
+            if top_k_dense is not None:
+                kb.top_k_dense = top_k_dense
+            if top_k_sparse is not None:
+                kb.top_k_sparse = top_k_sparse
+            if top_m_final is not None:
+                kb.top_m_final = top_m_final
 
-        try:
-            await new_helper.initialize()
-        except Exception as e:
-            # Roll back in-memory settings and keep current helper available.
-            _restore_kb_state(kb, previous_state)
-            kb_helper.init_error = previous_init_error
-            try:
-                await new_helper.terminate()
-            except Exception as cleanup_exc:
-                logger.warning(
-                    f"清理初始化失败的知识库实例出错 ({kb.kb_id}): {cleanup_exc}"
-                )
-            logger.error(
-                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
-                exc_info=True,
+            # Build a new helper first. Keep current vec_db alive until new init succeeds.
+            new_helper = KBHelper(
+                kb_db=self.kb_db,
+                kb=kb,
+                provider_manager=self.provider_manager,
+                kb_root_dir=FILES_PATH,
+                chunker=CHUNKER,
             )
-            return kb_helper
 
-        try:
-            async with self.kb_db.get_db() as session:
-                session.add(kb)
-                await session.commit()
-                await session.refresh(kb)
-        except BaseException as exc:
-            _restore_kb_state(kb, previous_state)
-            kb_helper.init_error = previous_init_error
             try:
-                await new_helper.terminate()
-            except Exception as cleanup_exc:
-                logger.warning(
-                    f"清理提交失败的知识库实例出错 ({kb.kb_id}): {cleanup_exc}"
+                await new_helper.initialize()
+            except BaseException as e:
+                # Roll back in-memory settings and keep current helper available.
+                for field_name, value in previous_state.items():
+                    setattr(kb, field_name, value)
+                kb_helper.init_error = previous_init_error
+                try:
+                    await new_helper.terminate()
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        f"Failed to clean up failed KB helper during update ({kb.kb_id}): {cleanup_exc}"
+                    )
+                if not isinstance(e, Exception):
+                    raise
+                logger.error(
+                    f"Failed to reinitialize KB {kb.kb_name}({kb.kb_id}), keeping previous instance: {e}",
+                    exc_info=True,
                 )
-            if isinstance(exc, IntegrityError):
-                raise ValueError(f"知识库名称 '{kb_name}' 已存在") from exc
-            raise
+                return kb_helper
 
-        old_helper = kb_helper
-        self.kb_insts[kb_id] = new_helper
-        await old_helper.terminate()
-        new_helper.init_error = None
-        return new_helper
+            committed = False
+            try:
+                async with self.kb_db.get_db() as session:
+                    session.add(kb)
+                    await session.commit()
+                    committed = True
+                    try:
+                        await session.refresh(kb)
+                    except Exception as refresh_exc:
+                        logger.warning(
+                            f"Failed to refresh KB metadata after commit ({kb.kb_id}): {refresh_exc}"
+                        )
+            except BaseException as exc:
+                if not committed:
+                    for field_name, value in previous_state.items():
+                        setattr(kb, field_name, value)
+                    kb_helper.init_error = previous_init_error
+                    try:
+                        await new_helper.terminate()
+                    except Exception as cleanup_exc:
+                        logger.warning(
+                            f"Failed to clean up uncommitted KB helper during update ({kb.kb_id}): {cleanup_exc}"
+                        )
+                    if isinstance(exc, IntegrityError):
+                        raise ValueError(f"知识库名称 '{kb_name}' 已存在") from exc
+                    raise
+
+            old_helper = kb_helper
+            self.kb_insts[kb_id] = new_helper
+            old_helper._superseded = True
+            await old_helper.terminate()
+            new_helper.init_error = None
+            return new_helper
 
     async def retrieve(
         self,
