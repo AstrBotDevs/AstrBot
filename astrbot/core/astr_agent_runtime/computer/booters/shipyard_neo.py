@@ -6,6 +6,7 @@ import shlex
 from typing import Any, cast
 
 from astrbot.api import logger
+from astrbot.core.skills.skill_manager import SANDBOX_WORKSPACE_ROOT
 
 from ..olayer import (
     BrowserComponent,
@@ -348,6 +349,7 @@ class ShipyardNeoBooter(ComputerBooter):
 
     AUTO_SENTINEL = "__auto__"
     DEFAULT_PROFILE = "python-default"
+    workspace_root: str | None = SANDBOX_WORKSPACE_ROOT
 
     def __init__(
         self,

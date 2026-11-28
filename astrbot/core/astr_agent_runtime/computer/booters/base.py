@@ -8,6 +8,9 @@ from ..olayer import (
 
 
 class ComputerBooter:
+    workspace_root: str | None = None
+    """Fixed POSIX root directory where relative ``fs`` paths reside, if any."""
+
     @property
     def fs(self) -> FileSystemComponent: ...
 

@@ -293,6 +293,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         max_context_tokens: int | None = None,
         conversation_event_sink: Callable[[AgentResponse], Awaitable[bool]]
         | None = None,
+        *,
+        # Async callback `(file_name, content) -> readable_path`; takes
+        # precedence over `tool_result_overflow_dir` when both are provided.
+        # The callback uses the run context's tool call timeout.
+        tool_result_overflow_writer: Callable[[str, str], Awaitable[str]] | None = None,
         **kwargs: T.Any,
     ) -> None:
         self._events = AgentEventStream[RunnerEventPayload | AgentResponse]()
@@ -311,6 +316,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.custom_compressor = custom_compressor
         self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
+        self.tool_result_overflow_writer = tool_result_overflow_writer
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
         self.request_context_manager_config = ContextConfig(
@@ -438,18 +444,49 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_id: str,
         content: str,
     ) -> str:
+        """Persist an oversized tool result via the configured overflow target.
+
+        Args:
+            tool_call_id: Identifier of the tool call producing the result.
+            content: Full tool result text to persist.
+
+        Returns:
+            Path that the model can pass to the file-read tool.
+
+        Raises:
+            ValueError: If no overflow writer or directory is configured, or if
+                a custom writer returns an empty path.
+            asyncio.TimeoutError: If the custom writer exceeds the tool call timeout.
+        """
+        safe_tool_call_id = (
+            "".join(
+                ch if (ch.isascii() and ch.isalnum()) or ch in {"-", "_"} else "_"
+                for ch in tool_call_id
+            )
+            .strip("_")[:120]
+            .rstrip("_")
+            or "tool_call"
+        )
+        file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
+
+        if self.tool_result_overflow_writer is not None:
+            try:
+                written_path = await asyncio.wait_for(
+                    self.tool_result_overflow_writer(file_name, content),
+                    timeout=self.run_context.tool_call_timeout,
+                )
+            except asyncio.TimeoutError as exc:
+                raise asyncio.TimeoutError(
+                    "Tool result overflow write timed out."
+                ) from exc
+            if not isinstance(written_path, str) or not written_path.strip():
+                raise ValueError("tool_result_overflow_writer returned an empty path")
+            return written_path.strip()
+
         if self.tool_result_overflow_dir is None:
             raise ValueError("tool_result_overflow_dir is not configured")
 
         overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
-        safe_tool_call_id = (
-            "".join(
-                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
-                for ch in tool_call_id
-            ).strip("._")
-            or "tool_call"
-        )
-        file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
         overflow_path = overflow_dir / file_name
 
         def _run() -> str:
@@ -465,7 +502,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_id: str,
         content: str,
     ) -> str:
-        if self.tool_result_overflow_dir is None or self.read_tool is None:
+        if (
+            self.tool_result_overflow_writer is None
+            and self.tool_result_overflow_dir is None
+        ) or self.read_tool is None:
             return content
 
         estimated_tokens = self._tool_result_token_counter.count_tokens(
@@ -487,11 +527,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 exc,
                 exc_info=True,
             )
+            target_desc = (
+                "an overflow file"
+                if self.tool_result_overflow_writer is not None
+                else f"`{self.tool_result_overflow_dir}`"
+            )
             error_notice = (
                 "Tool output exceeded the inline result limit "
                 f"({estimated_tokens} estimated tokens > "
                 f"{self.TOOL_RESULT_MAX_ESTIMATED_TOKENS}) and could not be written "
-                f"to `{self.tool_result_overflow_dir}`: {exc}"
+                f"to {target_desc}: {exc}"
             )
             if not preview:
                 return error_notice

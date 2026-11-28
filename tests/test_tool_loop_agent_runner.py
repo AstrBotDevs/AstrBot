@@ -2108,6 +2108,162 @@ async def test_large_tool_result_keeps_preview_when_spill_fails(
 
 
 @pytest.mark.asyncio
+async def test_reset_preserves_existing_positional_arguments(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    read_tool = FunctionTool(
+        name="read_file", description="read file", parameters={}, handler=AsyncMock()
+    )
+    event_sink = AsyncMock()
+    await runner.reset(
+        mock_provider,
+        provider_request,
+        ContextWrapper(context=None),
+        mock_tool_executor,
+        mock_hooks,
+        False,
+        -1,
+        None,
+        0.15,
+        None,
+        1,
+        None,
+        None,
+        "full",
+        None,
+        None,
+        None,
+        read_tool,
+        8192,
+        event_sink,
+    )
+
+    assert runner.read_tool is read_tool
+    assert runner.request_context_manager_config.max_context_tokens == 8192
+    assert runner._conversation_event_sink is event_sink
+    assert runner.tool_result_overflow_writer is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "with_host_dir"),
+    [
+        ("success", False),
+        ("error", False),
+        ("error", True),
+        ("empty_path", False),
+        ("timeout", False),
+    ],
+)
+async def test_large_tool_result_custom_overflow_writer(
+    runner,
+    provider_request,
+    mock_hooks,
+    tmp_path,
+    mode: str,
+    with_host_dir: bool,
+):
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    provider_request.func_tool.add_tool(read_tool)
+    written_calls: list[tuple[str, str]] = []
+    writer_cancelled = asyncio.Event()
+
+    async def _writer(file_name: str, content: str) -> str:
+        written_calls.append((file_name, content))
+        if mode == "error":
+            raise RuntimeError("sandbox write failed")
+        if mode == "empty_path":
+            return "   "
+        if mode == "timeout":
+            try:
+                await asyncio.Future()
+            finally:
+                writer_cancelled.set()
+        return f".astrbot_tool_overflow_{file_name}"
+
+    await runner.reset(
+        provider=SingleToolThenFinalProvider("test_tool", {"query": "large"}),
+        request=provider_request,
+        run_context=ContextWrapper(context=None, tool_call_timeout=1),
+        tool_executor=cast(
+            Any, LargeTextToolExecutor.from_text(_make_large_tool_result_text())
+        ),
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_result_overflow_dir=str(tmp_path) if with_host_dir else None,
+        tool_result_overflow_writer=_writer,
+        read_tool=read_tool,
+    )
+    await asyncio.wait_for(collect_events(runner.step_until_done(3)), timeout=5)
+
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    content = str(tool_messages[0].content)
+    assert len(written_calls) == 1
+
+    if mode == "success":
+        file_name, written_content = written_calls[0]
+        assert file_name.startswith("call_large_result_") and file_name.endswith(".txt")
+        assert written_content == _make_large_tool_result_text()
+        assert f"`.astrbot_tool_overflow_{file_name}`" in content
+        assert "Use `astrbot_file_read_tool` to inspect it." in content
+    elif mode == "error":
+        assert "xxxxxxxxxx" in content
+        assert "could not be written to an overflow file: sandbox write failed" in content
+        assert "`None`" not in content
+        assert str(tmp_path) not in content
+    elif mode == "empty_path":
+        assert "xxxxxxxxxx" in content
+        assert "tool_result_overflow_writer returned an empty path" in content
+    else:
+        assert writer_cancelled.is_set()
+        assert "xxxxxxxxxx" in content
+        assert "Tool result overflow write timed out." in content
+        assert len(content) < len(_make_large_tool_result_text())
+        assert runner.done()
+
+
+@pytest.mark.asyncio
+async def test_large_tool_result_sanitizes_tool_call_id_filename(
+    runner, provider_request, mock_hooks
+):
+    captured_names: list[str] = []
+
+    async def _capture_writer(file_name: str, _content: str) -> str:
+        captured_names.append(file_name)
+        return f".astrbot_tool_overflow_{file_name}"
+
+    await runner.reset(
+        provider=MockProvider(),
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_result_overflow_writer=_capture_writer,
+    )
+
+    for raw_id in ("a" * 300, "中文" * 80 + "..id/1", "..."):
+        written_path = await runner._write_tool_result_overflow_file(
+            tool_call_id=raw_id,
+            content="payload",
+        )
+        file_name = captured_names[-1]
+        assert file_name.isascii()
+        assert len(file_name.encode("utf-8")) <= 133
+        assert ".." not in file_name
+        assert file_name.endswith(".txt")
+        assert written_path == f".astrbot_tool_overflow_{file_name}"
+
+    assert captured_names[-1].startswith("tool_call_")
+
+
+@pytest.mark.asyncio
 async def test_follow_up_rejected_when_stop_requested(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):

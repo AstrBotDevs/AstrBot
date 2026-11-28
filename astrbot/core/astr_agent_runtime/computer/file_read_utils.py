@@ -8,7 +8,7 @@ import os
 import zipfile
 from asyncio import to_thread
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 import mcp
@@ -720,6 +720,16 @@ async def read_file_tool_result(
     workspace_dir: str | None = None,
     local_file_descriptor: int | None = None,
 ) -> ToolExecResult:
+    if not local_mode:
+        workspace_root = getattr(booter, "workspace_root", None)
+        if (
+            isinstance(workspace_root, str)
+            and workspace_root.strip()
+            and not path.startswith("/")
+        ):
+            # Resolve relative sandbox paths under the booter's fixed POSIX
+            # workspace root so reads survive Python kernel `cwd` changes.
+            path = PurePosixPath(workspace_root.strip(), path).as_posix()
     if local_mode:
         probe_payload = await _probe_local_file(path, local_file_descriptor)
     else:

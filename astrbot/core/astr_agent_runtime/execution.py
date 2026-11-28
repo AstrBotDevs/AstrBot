@@ -1,6 +1,7 @@
 """Drive the native loop without rendering or sending platform messages."""
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import aclosing
 from typing import TYPE_CHECKING
 
@@ -28,6 +29,61 @@ if TYPE_CHECKING:
     from astrbot.core.provider.entities import ProviderRequest
     from astrbot.core.provider.provider import Provider
     from astrbot.core.star.context import Context
+
+
+SANDBOX_TOOL_RESULT_OVERFLOW_PREFIX = ".astrbot_tool_overflow_"
+
+
+def create_sandbox_tool_result_overflow_writer(
+    context: "Context",
+    umo: str,
+) -> Callable[[str, str], Awaitable[str]]:
+    """Create an async writer that spills oversized tool results into a sandbox.
+
+    Args:
+        context: Host service context used to resolve the session sandbox booter.
+        umo: Unified message origin identifying the sandbox session.
+
+    Returns:
+        Async callback accepting ``(file_name, content)`` and returning a
+        sandbox path readable by ``astrbot_file_read_tool``.
+    """
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.astr_agent_runtime.computer.booters.local import LocalBooter
+
+    async def _write_to_sandbox(file_name: str, content: str) -> str:
+        booter = await computer_client.get_booter(context, umo)
+        if isinstance(booter, LocalBooter):
+            raise RuntimeError(
+                "Active computer-use runtime switched to local; refusing to "
+                "write sandbox tool overflow file to host working directory."
+            )
+        # Write flat hidden files in the sandbox workspace root because sandbox
+        # filesystem APIs (such as Bay/Shipyard) are jailed to the workspace
+        # root and may not create parent directories automatically.
+        target_path = f"{SANDBOX_TOOL_RESULT_OVERFLOW_PREFIX}{file_name}"
+        result = await booter.fs.write_file(
+            path=target_path,
+            content=content,
+            mode="w",
+            encoding="utf-8",
+        )
+        if not isinstance(result, dict) or not result.get("success", False):
+            error_detail = ""
+            if isinstance(result, dict):
+                error_detail = str(
+                    result.get("error")
+                    or result.get("stderr")
+                    or result.get("message")
+                    or ""
+                ).strip()
+            raise RuntimeError(error_detail or "unknown sandbox filesystem write error")
+        written_path = result.get("path")
+        if isinstance(written_path, str) and written_path.strip():
+            return written_path.strip()
+        return target_path
+
+    return _write_to_sandbox
 
 
 async def create_native_runner(
@@ -69,9 +125,29 @@ async def create_native_runner(
             else config.fallback_max_context_tokens
         )
     runner = AgentRunner()
-    read_tool = (
+    candidate_read_tool = (
         request.func_tool.get_tool("astrbot_file_read_tool")
         if request.func_tool
+        else None
+    )
+    read_tool = (
+        candidate_read_tool
+        if candidate_read_tool is not None and candidate_read_tool.active
+        else None
+    )
+    use_sandbox_overflow = (
+        read_tool is not None and config.computer_use_runtime == "sandbox"
+    )
+    overflow_dir = (
+        get_astrbot_system_tmp_path()
+        if read_tool is not None and not use_sandbox_overflow
+        else None
+    )
+    overflow_writer = (
+        create_sandbox_tool_result_overflow_writer(
+            context, agent_context.event.unified_msg_origin
+        )
+        if use_sandbox_overflow
         else None
     )
     compression_provider = await providers.resolve_compression_provider(config, context)
@@ -104,7 +180,8 @@ async def create_native_runner(
             provider, context, config.fallback_provider_ids
         ),
         request_max_retries=config.request_max_retries,
-        tool_result_overflow_dir=get_astrbot_system_tmp_path() if read_tool else None,
+        tool_result_overflow_dir=overflow_dir,
+        tool_result_overflow_writer=overflow_writer,
         read_tool=read_tool,
     )
     if context_observer is not None:

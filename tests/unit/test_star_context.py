@@ -104,6 +104,141 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
         agent_config.get_config.assert_not_called()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config_payload", "expects_sandbox_writer"),
+    [
+        ({"provider_settings": {"computer_use_runtime": "sandbox"}}, True),
+        ({"provider_settings": {"computer_use_runtime": "local"}}, False),
+        ({"provider_settings": {"computer_use_runtime": "none"}}, False),
+        ({"provider_settings": None}, False),
+    ],
+)
+async def test_tool_loop_agent_configures_overflow_for_runtime(
+    monkeypatch,
+    config_payload: dict,
+    expects_sandbox_writer: bool,
+):
+    from astrbot.core.astr_agent_runtime.computer import computer_client
+    from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
+
+    async def finished_steps(_max_steps):
+        for response in ():
+            yield response
+
+    runner = MagicMock(reset=AsyncMock(), step_until_done=finished_steps)
+    monkeypatch.setattr("astrbot.core.star.context.ToolLoopAgentRunner", lambda: runner)
+    write_file = AsyncMock(return_value={"success": True})
+    get_booter = AsyncMock(
+        return_value=SimpleNamespace(fs=SimpleNamespace(write_file=write_file))
+    )
+    monkeypatch.setattr(computer_client, "get_booter", get_booter)
+
+    caller_context = SimpleNamespace(
+        provider_manager=SimpleNamespace(
+            get_provider_by_id=AsyncMock(return_value=MagicMock(spec=Provider))
+        ),
+        get_config=MagicMock(
+            side_effect=AssertionError("Caller config must not be used")
+        ),
+    )
+    agent_config = SimpleNamespace(get_config=MagicMock(return_value=config_payload))
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool", description="read file", parameters={}
+    )
+
+    await Context.tool_loop_agent(
+        caller_context,
+        event=SimpleNamespace(role="admin", unified_msg_origin="caller-test"),
+        chat_provider_id="test",
+        tools=ToolSet([read_tool]),
+        agent_context=SimpleNamespace(
+            context=agent_config,
+            event=SimpleNamespace(role="member", unified_msg_origin="agent-test"),
+        ),
+    )
+
+    reset_kwargs = runner.reset.await_args.kwargs
+    assert reset_kwargs["read_tool"] is read_tool
+    agent_config.get_config.assert_called_once_with(umo="agent-test")
+    caller_context.get_config.assert_not_called()
+
+    if expects_sandbox_writer:
+        assert "tool_result_overflow_dir" not in reset_kwargs
+        writer = reset_kwargs["tool_result_overflow_writer"]
+        get_booter.assert_not_called()
+        assert await writer("call_abc.txt", "payload") == ".astrbot_tool_overflow_call_abc.txt"
+        get_booter.assert_awaited_once_with(agent_config, "agent-test")
+        write_file.assert_awaited_once_with(
+            path=".astrbot_tool_overflow_call_abc.txt",
+            content="payload",
+            mode="w",
+            encoding="utf-8",
+        )
+    else:
+        assert reset_kwargs["tool_result_overflow_dir"] == get_astrbot_system_tmp_path()
+        assert "tool_result_overflow_writer" not in reset_kwargs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("active", "extra_kwargs"),
+    [
+        (False, {}),
+        (True, {"read_tool": None}),
+        (True, {"read_tool": FunctionTool(name="custom_read", description="", parameters={})}),
+        (True, {"tool_result_overflow_dir": None}),
+    ],
+)
+async def test_tool_loop_agent_respects_inactive_read_tool_and_explicit_overrides(
+    monkeypatch,
+    active: bool,
+    extra_kwargs: dict,
+):
+    async def finished_steps(_max_steps):
+        for response in ():
+            yield response
+
+    runner = MagicMock(reset=AsyncMock(), step_until_done=finished_steps)
+    monkeypatch.setattr("astrbot.core.star.context.ToolLoopAgentRunner", lambda: runner)
+    context = SimpleNamespace(
+        provider_manager=SimpleNamespace(
+            get_provider_by_id=AsyncMock(return_value=MagicMock(spec=Provider))
+        ),
+        get_config=MagicMock(
+            side_effect=AssertionError("Config should not be read when overflow is bypassed")
+        ),
+    )
+    event = SimpleNamespace(role="admin", unified_msg_origin="session-1")
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={},
+        active=active,
+    )
+
+    await Context.tool_loop_agent(
+        context,
+        event=event,
+        chat_provider_id="test",
+        tools=ToolSet([read_tool]),
+        agent_context=SimpleNamespace(context=context, event=event),
+        **extra_kwargs,
+    )
+
+    reset_kwargs = runner.reset.await_args.kwargs
+    assert "tool_result_overflow_writer" not in reset_kwargs
+    if "tool_result_overflow_dir" in extra_kwargs:
+        assert reset_kwargs["tool_result_overflow_dir"] is None
+    else:
+        assert "tool_result_overflow_dir" not in reset_kwargs
+    if not active:
+        assert "read_tool" not in reset_kwargs
+    elif "read_tool" in extra_kwargs:
+        assert reset_kwargs["read_tool"] is extra_kwargs["read_tool"]
+    context.get_config.assert_not_called()
+
+
 @pytest.fixture(autouse=True)
 def restore_star_registry():
     original_registry = list(star_registry)
