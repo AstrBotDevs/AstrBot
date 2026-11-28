@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_runtime.tools.message_tools import (
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGE_EXTRA_KEY
 from astrbot.core.pipeline.context_utils import call_event_hook
+from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
@@ -130,6 +131,8 @@ async def build_main_agent(
     req = prepared.request
 
     # Seed caller capabilities before persona selection.
+    if isinstance(event, AgentWakeupEvent):
+        persona.apply_proactive_registered_tools(req, plugin_context, plugin_tools)
     if config.enable_message_delivery:
         if req.func_tool is None:
             req.func_tool = ToolSet()
