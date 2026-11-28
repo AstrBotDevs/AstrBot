@@ -91,7 +91,7 @@
     "saveUpgrade": "アップグレードを保存",
     "nameConflict": "同名のツール {name} は一度に一つだけ選択できます。",
     "useAllAvailable": "利用可能な項目をすべて使用",
-    "unavailableCapabilities": "選択済みで現在使用できないツールとスキル",
+    "unavailableSelections": "選択済みで現在使用できないツールとスキル",
     "title": "ペルソナの機能",
     "titleWithName": "{name} のペルソナ機能",
     "editHint": "選択内容はこのペルソナに即時保存され、このペルソナを使用するすべての設定に反映されます。",

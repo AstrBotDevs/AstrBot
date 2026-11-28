@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from astrbot.core.capabilities import CapabilityGroup
+from astrbot.core.resource_settings import SourceSelectionGroup
 
 BotCleanupTarget = Literal[
     "custom_rules",
@@ -369,17 +369,17 @@ class PersonaRequest(OpenModel):
     persona_id: str | None = None
     system_prompt: str | None = None
     begin_dialogs: list[Any] | None = None
-    tools: list[str | CapabilityGroup] | None = None
-    skills: list[str | CapabilityGroup] | None = None
+    tools: list[str | SourceSelectionGroup] | None = None
+    skills: list[str | SourceSelectionGroup] | None = None
     custom_error_message: str | None = None
     folder_id: str | None = None
     sort_order: int | None = None
 
     @model_validator(mode="after")
-    def validate_capability_kinds(self) -> PersonaRequest:
+    def validate_selection_kinds(self) -> PersonaRequest:
         for kind, entries in (("tool", self.tools), ("skill", self.skills)):
             if any(
-                isinstance(entry, CapabilityGroup) and entry.kind != kind
+                isinstance(entry, SourceSelectionGroup) and entry.kind != kind
                 for entry in entries or []
             ):
                 raise ValueError(f"Expected {kind} selection group")

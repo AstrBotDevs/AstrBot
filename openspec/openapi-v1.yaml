@@ -6877,7 +6877,7 @@ components:
           type: number
       additionalProperties: false
 
-    CapabilityGroup:
+    SourceSelectionGroup:
       type: object
       required: [kind, source, items]
       properties:
@@ -6911,13 +6911,13 @@ components:
           items:
             oneOf:
               - type: string
-              - $ref: "#/components/schemas/CapabilityGroup"
+              - $ref: "#/components/schemas/SourceSelectionGroup"
         skills:
           type: [array, "null"]
           items:
             oneOf:
               - type: string
-              - $ref: "#/components/schemas/CapabilityGroup"
+              - $ref: "#/components/schemas/SourceSelectionGroup"
         custom_error_message:
           type: string
       additionalProperties: true

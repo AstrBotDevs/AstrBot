@@ -1,6 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
-import { mcpApi } from "@/api/v1";
+import { computed, ref } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import PersonaCapabilityList from "./PersonaCapabilityList.vue";
 
@@ -27,40 +26,23 @@ const decisions = ref({});
 const removed = ref([]);
 const conflict = ref("");
 const removeChoice = "remove";
-const mcpLabels = ref({});
-
-onMounted(async () => {
-  try {
-    const response = await mcpApi.list();
-    if (response.data?.status === "ok") {
-      mcpLabels.value = Object.fromEntries(
-        (response.data.data || [])
-          .filter((server) => server._astrbot_id)
-          .map((server) => [server._astrbot_id, server.name]),
-      );
-    }
-  } catch (error) {
-    console.error("Failed to load MCP source labels", error);
-  }
-});
-
 const catalog = computed(() => ({
   tools: props.availableTools
     .filter(
-      (tool) => ["plugin", "mcp"].includes(tool.origin) && tool.capability,
+      (tool) => ["plugin", "mcp"].includes(tool.origin) && tool.resource,
     )
     .map((tool) => ({
       ...tool,
-      ...tool.capability,
+      ...tool.resource,
       legacyName: tool.name,
       kind: "tool",
       label: tool.origin_display_name || tool.origin_name,
     })),
   skills: props.availableSkills
-    .filter((skill) => skill.capability)
+    .filter((skill) => skill.resource)
     .map((skill) => ({
       ...skill,
-      ...skill.capability,
+      ...skill.resource,
       legacyName: skill.name,
       kind: "skill",
       active: skill.active !== false && skill.plugin_active !== false,
@@ -314,7 +296,6 @@ const unavailable = computed(() =>
             item,
             label: [
               source?.label ||
-                (entry.source === "mcp" && mcpLabels.value[entry.source_id]) ||
                 entry.source_id ||
                 entry.source,
               name,
@@ -471,7 +452,7 @@ const upgradeReady = computed(
           tm(
             [...unavailable, ...removed].every((row) => row.field === "tools")
               ? "personaQuickPreview.unlistedSavedTools"
-              : "personaQuickPreview.unavailableCapabilities",
+              : "personaQuickPreview.unavailableSelections",
           )
         }}
       </div>

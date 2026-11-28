@@ -25,7 +25,6 @@ from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
 from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.capabilities import migrate_legacy_settings
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -40,6 +39,7 @@ from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.process_restart import restart_process
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.resource_settings import migrate_legacy_settings
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -206,7 +206,7 @@ class AstrBotCoreLifecycle:
 
             await migrate_legacy_settings(Path(SkillManager().config_path))
         except (OSError, ValueError):
-            logger.exception("Could not migrate legacy capability settings")
+            logger.exception("Could not migrate legacy resource settings")
 
         # 初始化事件队列
         self.event_queue = Queue()

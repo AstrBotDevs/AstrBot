@@ -53,7 +53,7 @@ export function useToolActions(
     const previous = tool.active;
     tool.active = !tool.active;
     try {
-      const res = await toolApi.setEnabled(tool.name, tool.active, tool.capability?.key);
+      const res = await toolApi.setEnabled(tool.name, tool.active, tool.resource?.key);
       if (res.data.status === 'ok') {
         tool.inactive_configured = !tool.active;
         toast(res.data.message || successMessage);
@@ -82,7 +82,7 @@ export function useToolActions(
     errorMessage: string
   ) => {
     try {
-      const res = await toolApi.setPermission(tool.name, permission, tool.capability?.key);
+      const res = await toolApi.setPermission(tool.name, permission, tool.resource?.key);
       if (res.data.status === 'ok') {
         tool.permission = permission;
         tool.permission_configured = true;

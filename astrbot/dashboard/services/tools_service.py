@@ -6,7 +6,8 @@ from typing import Any
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
-from astrbot.core.capabilities import (
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.resource_settings import (
     SETTINGS_SCOPE,
     global_settings,
     legacy_setting,
@@ -14,7 +15,6 @@ from astrbot.core.capabilities import (
     update_setting,
     write_legacy_setting,
 )
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 
 
@@ -142,7 +142,6 @@ class ToolsService:
                 logger.error(traceback.format_exc())
                 raise ToolsServiceError(f"MCP connection test failed: {exc!s}") from exc
 
-            server_config.pop("_astrbot_id", None)
             config["mcpServers"][name] = server_config
 
             if self.tool_mgr.save_mcp_config(config):
@@ -196,9 +195,6 @@ class ToolsService:
                 active,
             )
             self._validate_server_config(server_config)
-            server_config.pop("_astrbot_id", None)
-            if isinstance(old_config, dict) and old_config.get("_astrbot_id"):
-                server_config["_astrbot_id"] = old_config["_astrbot_id"]
 
             if is_rename:
                 config["mcpServers"].pop(old_name)
@@ -306,7 +302,7 @@ class ToolsService:
                 else set()
             )
             for entry in result:
-                scoped = settings.get(entry["capability"]["key"], {})
+                scoped = settings.get(entry["resource"]["key"], {})
                 entry["inactive_configured"] = not scoped.get(
                     "enabled", entry["name"] not in inactive_names
                 )
@@ -325,7 +321,7 @@ class ToolsService:
                     }
                 )
             registered_keys = {
-                entry["capability"]["key"] for entry in result if "capability" in entry
+                entry["resource"]["key"] for entry in result if "resource" in entry
             }
             for key, setting in settings.items():
                 if key not in registered_keys and (
@@ -526,7 +522,7 @@ class ToolsService:
         server_config = {"active": server_data.get("active", True)}
 
         for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs", "_astrbot_id"]:
+            if key in ["name", "active", "tools", "errlogs"]:
                 continue
             if key == "mcpServers":
                 try:
@@ -556,7 +552,6 @@ class ToolsService:
                 "tools",
                 "errlogs",
                 "oldName",
-                "_astrbot_id",
             ]:
                 continue
             if key == "mcpServers":
@@ -691,7 +686,7 @@ class ToolsService:
             "origin": origin,
             "origin_name": origin_name,
             "origin_display_name": origin_display_name,
-            "capability": tool_ref(tool).metadata(),
+            "resource": tool_ref(tool).metadata(),
             "permission": settings.get("permission", defaults.get(tool.name, "member")),
             "permission_configured": "permission" in settings or tool.name in defaults,
         }

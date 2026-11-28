@@ -29,18 +29,18 @@ from astrbot.core import (
     sp,
 )
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
-from astrbot.core.capabilities import (
-    CapabilityRef,
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import VERSION
+from astrbot.core.platform.register import unregister_platform_adapters_by_module
+from astrbot.core.provider.register import llm_tools
+from astrbot.core.resource_settings import (
+    ResourceRef,
     global_settings,
     legacy_setting,
     tool_ref,
     update_setting,
     write_legacy_setting,
 )
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.default import VERSION
-from astrbot.core.platform.register import unregister_platform_adapters_by_module
-from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -1240,7 +1240,7 @@ class PluginManager:
                     metadata.config = plugin_config
                     plugin_id = metadata.plugin_id
                     plugin_disabled = not settings.get(
-                        CapabilityRef("plugin", "plugin", None, plugin_id).key, {}
+                        ResourceRef("plugin", "plugin", None, plugin_id).key, {}
                     ).get("enabled", path not in inactivated_plugins)
 
                     # inject class attributes before instantiation so __init__ can read them
@@ -1388,7 +1388,7 @@ class PluginManager:
                     if metadata is None:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
                     plugin_disabled = not settings.get(
-                        CapabilityRef("plugin", "plugin", None, metadata.plugin_id).key,
+                        ResourceRef("plugin", "plugin", None, metadata.plugin_id).key,
                         {},
                     ).get("enabled", path not in inactivated_plugins)
 
@@ -1996,7 +1996,7 @@ class PluginManager:
             await self._terminate_plugin(plugin)
 
             await update_setting(
-                CapabilityRef("plugin", "plugin", None, plugin.plugin_id),
+                ResourceRef("plugin", "plugin", None, plugin.plugin_id),
                 enabled=False,
             )
             for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
@@ -2061,7 +2061,7 @@ class PluginManager:
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在。")
         await update_setting(
-            CapabilityRef("plugin", "plugin", None, plugin.plugin_id),
+            ResourceRef("plugin", "plugin", None, plugin.plugin_id),
             enabled=True,
         )
 

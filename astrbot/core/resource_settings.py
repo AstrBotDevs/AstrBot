@@ -1,4 +1,4 @@
-"""Identities and persisted settings for persona and global capabilities."""
+"""Resource identities, persona selections, and global settings."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pydantic import BaseModel, model_validator
 from astrbot.core import sp
 
 
-class CapabilityGroup(BaseModel):
+class SourceSelectionGroup(BaseModel):
     """Persisted selection of individual members from a single source."""
 
     kind: Literal["tool", "skill"]
@@ -23,25 +23,25 @@ class CapabilityGroup(BaseModel):
     items: list[str]
 
     @model_validator(mode="after")
-    def validate_source(self) -> CapabilityGroup:
+    def validate_source(self) -> SourceSelectionGroup:
         valid = {
             "tool": {"plugin", "mcp", "astrbot"},
             "skill": {"plugin", "local", "sandbox"},
         }
         if self.source not in valid[self.kind]:
-            raise ValueError("Invalid capability source for this kind")
+            raise ValueError("Invalid source for this selection kind")
         if (self.source in {"plugin", "mcp"}) != bool(self.source_id):
             raise ValueError("Plugin and MCP selections require a source ID")
         if any(not name for name in self.items):
-            raise ValueError("Capability member names cannot be empty")
+            raise ValueError("Selection member names cannot be empty")
         return self
 
 
-CapabilitySelection = list[str | dict] | None
+PersonaSelection = list[str | dict] | None
 
 
 @dataclass(frozen=True)
-class CapabilityRef:
+class ResourceRef:
     """One member's identity, independent of its display and model names."""
 
     kind: Literal["plugin", "tool", "skill"]
@@ -73,38 +73,38 @@ class CapabilityRef:
         }
 
 
-def tool_ref(tool) -> CapabilityRef:
+def tool_ref(tool) -> ResourceRef:
     """Resolve a registered tool's identity, including permission wrappers."""
     from astrbot.core.agent.mcp_client import MCPTool
     from astrbot.core.star.star import star_map
 
-    ref = getattr(tool, "capability_ref", None)
+    ref = getattr(tool, "resource_ref", None)
     if ref is not None:
         return ref
     if isinstance(tool, MCPTool):
-        return CapabilityRef("tool", "mcp", tool.mcp_server_id, tool.mcp_tool.name)
+        return ResourceRef("tool", "mcp", tool.mcp_server_name, tool.mcp_tool.name)
     plugin = star_map.get(getattr(tool, "handler_module_path", None))
     if plugin is not None:
-        return CapabilityRef("tool", "plugin", plugin.plugin_id, tool.name)
-    return CapabilityRef("tool", "astrbot", None, tool.name)
+        return ResourceRef("tool", "plugin", plugin.plugin_id, tool.name)
+    return ResourceRef("tool", "astrbot", None, tool.name)
 
 
-def selected_members(selection: CapabilitySelection, kind: Literal["tool", "skill"]):
+def selected_members(selection: PersonaSelection, kind: Literal["tool", "skill"]):
     """Yield legacy names or exact refs in the order saved by the persona."""
     for entry in selection or []:
         if isinstance(entry, str):
             yield entry
         elif isinstance(entry, dict):
             try:
-                group = CapabilityGroup.model_validate(entry)
+                group = SourceSelectionGroup.model_validate(entry)
             except ValueError:
                 continue
             if group.kind == kind:
                 for name in group.items:
-                    yield CapabilityRef(kind, group.source, group.source_id, name)
+                    yield ResourceRef(kind, group.source, group.source_id, name)
 
 
-def resolve_tools(selection: CapabilitySelection, tools) -> list:
+def resolve_tools(selection: PersonaSelection, tools) -> list:
     """Resolve exact selections before deduplicating model names."""
     candidates = list(tools)
     by_ref = {}
@@ -129,12 +129,12 @@ def resolve_tools(selection: CapabilitySelection, tools) -> list:
     return list(selected.values())
 
 
-SETTINGS_SCOPE = "global_capability_settings"
+SETTINGS_SCOPE = "global_resource_settings"
 LEGACY_SKILLS_KEY = "legacy_skill_switches"
 _settings_lock = asyncio.Lock()
 
 
-async def update_setting(ref: CapabilityRef, **changes) -> None:
+async def update_setting(ref: ResourceRef, **changes) -> None:
     """Update one resource without discarding other fields on the same row."""
     async with _settings_lock:
         current = await sp.get_async(SETTINGS_SCOPE, "global", ref.key, {})

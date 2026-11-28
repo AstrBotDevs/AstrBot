@@ -66,17 +66,6 @@ export type BotRegistrationRequest = {
 
 export type action = 'start' | 'poll';
 
-export type CapabilityGroup = {
-    kind: 'tool' | 'skill';
-    source: 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
-    source_id?: (string) | null;
-    items: Array<(string)>;
-};
-
-export type kind = 'tool' | 'skill';
-
-export type source = 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
-
 export type ChatChunkUploadRequest = {
     upload_id: string;
     chunk_index: number;
@@ -530,8 +519,8 @@ export type PersonaRequest = {
     system_prompt: string;
     begin_dialogs?: Array<(string)>;
     folder_id?: string;
-    tools?: Array<(string | CapabilityGroup)> | null;
-    skills?: Array<(string | CapabilityGroup)> | null;
+    tools?: Array<(string | SourceSelectionGroup)> | null;
+    skills?: Array<(string | SourceSelectionGroup)> | null;
     custom_error_message?: string;
     [key: string]: unknown | string;
 };
@@ -718,6 +707,17 @@ export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
 };
+
+export type SourceSelectionGroup = {
+    kind: 'tool' | 'skill';
+    source: 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
+    source_id?: (string) | null;
+    items: Array<(string)>;
+};
+
+export type kind = 'tool' | 'skill';
+
+export type source = 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
 
 export type StatsDailyUsage = {
     tokens: number;

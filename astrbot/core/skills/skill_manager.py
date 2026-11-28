@@ -15,7 +15,11 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from astrbot.core import logger, sp
-from astrbot.core.capabilities import LEGACY_SKILLS_KEY, SETTINGS_SCOPE, CapabilityRef
+from astrbot.core.resource_settings import (
+    LEGACY_SKILLS_KEY,
+    SETTINGS_SCOPE,
+    ResourceRef,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
     get_astrbot_data_path,
@@ -132,19 +136,19 @@ class SkillInfo:
     plugin_id: str | None = None
 
     @property
-    def capability_ref(self) -> CapabilityRef:
+    def resource_ref(self) -> ResourceRef:
         if self.source_type == "plugin":
-            return CapabilityRef(
+            return ResourceRef(
                 "skill", "plugin", self.plugin_id or self.plugin_name, self.name
             )
         if self.source_type in {"sandbox_only", "workspace"}:
-            return CapabilityRef(
+            return ResourceRef(
                 "skill",
                 "sandbox" if self.source_type == "sandbox_only" else "workspace",
                 None,
                 self.name,
             )
-        return CapabilityRef("skill", "local", None, self.name)
+        return ResourceRef("skill", "local", None, self.name)
 
 
 def _parse_frontmatter_description(text: str) -> str:
@@ -638,7 +642,7 @@ class SkillManager:
             except OSError as exc:
                 logger.warning(f"Skip unreadable skill directory {entry}: {exc}")
                 continue
-            ref = CapabilityRef("skill", "local", None, skill_name)
+            ref = ResourceRef("skill", "local", None, skill_name)
             active = scoped.get(ref.key, {}).get(
                 "enabled", skill_configs.get(skill_name, {}).get("active", True)
             )
@@ -679,7 +683,7 @@ class SkillManager:
             skill_dir,
             preset,
         ) in self._iter_plugin_skill_dirs():
-            ref = CapabilityRef(
+            ref = ResourceRef(
                 "skill", "plugin", plugins.get(plugin_name, plugin_name), skill_name
             )
             if (ref.key if include_same_names else skill_name) in skills_by_name:
@@ -749,7 +753,7 @@ class SkillManager:
                     or not _SKILL_NAME_RE.match(skill_name)
                 ):
                     continue
-                ref = CapabilityRef("skill", "sandbox", None, skill_name)
+                ref = ResourceRef("skill", "sandbox", None, skill_name)
                 active = scoped.get(ref.key, {}).get(
                     "enabled", skill_configs.get(skill_name, {}).get("active", True)
                 )
@@ -817,15 +821,11 @@ class SkillManager:
         skill = next(
             (entry for entry in self.list_skills() if entry.name == name), None
         )
-        ref = (
-            skill.capability_ref
-            if skill
-            else CapabilityRef("skill", "local", None, name)
-        )
+        ref = skill.resource_ref if skill else ResourceRef("skill", "local", None, name)
         self.save_skill_switch(ref, active)
 
     @staticmethod
-    def save_skill_switch(ref: CapabilityRef, active: bool) -> None:
+    def save_skill_switch(ref: ResourceRef, active: bool) -> None:
         """Store a skill switch from a synchronous install or SDK caller."""
         sp.put(
             ref.key, {"enabled": bool(active)}, scope=SETTINGS_SCOPE, scope_id="global"
@@ -875,7 +875,7 @@ class SkillManager:
         # to refresh cache from runtime side.
         self._remove_skill_from_sandbox_cache(name)
 
-        ref = CapabilityRef("skill", "local", None, name)
+        ref = ResourceRef("skill", "local", None, name)
         sp.remove(ref.key, scope=SETTINGS_SCOPE, scope_id="global")
 
     def install_skill_from_zip(
@@ -996,7 +996,7 @@ class SkillManager:
 
                     shutil.move(str(src_dir), str(dest_dir))
                     self.save_skill_switch(
-                        CapabilityRef("skill", "local", None, skill_name), True
+                        ResourceRef("skill", "local", None, skill_name), True
                     )
                     installed_skills.append(skill_name)
 
@@ -1043,7 +1043,7 @@ class SkillManager:
 
                         shutil.move(str(src_dir), str(dest_dir))
                         self.save_skill_switch(
-                            CapabilityRef("skill", "local", None, skill_name), True
+                            ResourceRef("skill", "local", None, skill_name), True
                         )
                         installed_skills.append(skill_name)
 

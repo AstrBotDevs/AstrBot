@@ -34,9 +34,9 @@ from astrbot.core.astr_agent_runtime.subagents.caller import (
 )
 from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
-from astrbot.core.capabilities import CapabilitySelection, resolve_tools, tool_ref
 from astrbot.core.db.po import Conversation
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.resource_settings import PersonaSelection, resolve_tools, tool_ref
 from astrbot.core.star.star import star_map
 
 if TYPE_CHECKING:
@@ -81,8 +81,8 @@ class NativeConversation:
     conversation_id: str
     provider_id: str
     instructions: str
-    tools: CapabilitySelection
-    skills: CapabilitySelection = None
+    tools: PersonaSelection
+    skills: PersonaSelection = None
     initial_dialogs: list[Message] = field(default_factory=list)
     messages: list[Message] = field(default_factory=list)
     runtime_config: dict = field(default_factory=dict)

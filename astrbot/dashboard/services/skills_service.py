@@ -16,7 +16,7 @@ from astrbot.core.astr_agent_runtime.computer.computer_client import (
     sync_skills_to_active_sandboxes,
 )
 from astrbot.core.astr_agent_runtime.computer.neo_skill_sync import NeoSkillSyncManager
-from astrbot.core.capabilities import update_setting
+from astrbot.core.resource_settings import update_setting
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -270,7 +270,7 @@ class SkillsService:
         for skill in skills:
             skill_data = {
                 **skill.__dict__,
-                "capability": skill.capability_ref.metadata(),
+                "resource": skill.resource_ref.metadata(),
             }
             if skill.source_type == "plugin":
                 plugin_active = plugin_activation_by_root_name.get(
@@ -642,11 +642,7 @@ class SkillsService:
         ]
         if resource_key:
             skill = next(
-                (
-                    item
-                    for item in candidates
-                    if item.capability_ref.key == resource_key
-                ),
+                (item for item in candidates if item.resource_ref.key == resource_key),
                 None,
             )
         else:
@@ -655,7 +651,7 @@ class SkillsService:
             raise SkillsServiceError("Skill not found")
         if skill.source_type == "sandbox_only":
             raise SkillsServiceError("Sandbox preset skills are managed by the sandbox")
-        await update_setting(skill.capability_ref, enabled=bool(active))
+        await update_setting(skill.resource_ref, enabled=bool(active))
         return {"name": name, "active": bool(active)}
 
     async def delete_skill(self, data: object) -> dict:

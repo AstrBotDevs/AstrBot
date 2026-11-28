@@ -405,7 +405,7 @@ class TestUpdateToolPermission:
         assert "target_tool" in message
 
         stored = await sp.get_async(
-            "global_capability_settings", "global", "astrbot/tools/target_tool", {}
+            "global_resource_settings", "global", "astrbot/tools/target_tool", {}
         )
         assert stored["permission"] == "admin"
 

@@ -91,7 +91,7 @@
     "saveUpgrade": "Save upgrade",
     "nameConflict": "Only one tool named {name} can be selected at a time.",
     "useAllAvailable": "Use all available",
-    "unavailableCapabilities": "Selected tools and skills currently unavailable",
+    "unavailableSelections": "Selected tools and skills currently unavailable",
     "title": "Persona Capabilities",
     "titleWithName": "{name}'s Capabilities",
     "editHint": "Selections are saved to this persona immediately and apply to every profile that uses it.",

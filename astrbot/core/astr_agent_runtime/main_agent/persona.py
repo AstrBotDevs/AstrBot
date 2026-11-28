@@ -6,17 +6,17 @@ import copy
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.capabilities import (
-    CapabilitySelection,
-    resolve_tools,
-    selected_members,
-)
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.resource_settings import (
+    PersonaSelection,
+    resolve_tools,
+    selected_members,
+)
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
@@ -184,7 +184,7 @@ async def apply_skills(
     plugin_context: Context,
     event: AstrMessageEvent,
     *,
-    allowed_skills: CapabilitySelection = None,
+    allowed_skills: PersonaSelection = None,
     plugin_skills: list[SkillInfo] | None = None,
 ) -> None:
     """Compose runtime skills and authorized plugin skills under persona selection.
@@ -223,7 +223,7 @@ async def apply_skills(
         workspace_skills.extend(skill_manager.list_workspace_skills(workspace_root))
 
     if skills or workspace_skills:
-        by_ref = {skill.capability_ref: skill for skill in skills}
+        by_ref = {skill.resource_ref: skill for skill in skills}
         by_name = {}
         for skill in skills:
             by_name.setdefault(skill.name, skill)

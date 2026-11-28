@@ -33,7 +33,7 @@ async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
     assert await manager.deactivate_llm_tool_async("custom_tool") is True
     assert manager.get_func("custom_tool").active is False
     put_async.assert_awaited_once_with(
-        "global_capability_settings",
+        "global_resource_settings",
         "global",
         "astrbot/tools/custom_tool",
         {"enabled": False, "permission": "admin"},
@@ -45,7 +45,7 @@ async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
     assert await manager.activate_llm_tool_async("custom_tool", {}) is True
     assert manager.get_func("custom_tool").active is True
     put_async.assert_awaited_once_with(
-        "global_capability_settings",
+        "global_resource_settings",
         "global",
         "astrbot/tools/custom_tool",
         {"enabled": True, "permission": "admin"},

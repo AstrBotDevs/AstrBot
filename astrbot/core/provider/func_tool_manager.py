@@ -10,7 +10,6 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
-from uuid import uuid4
 
 import aiohttp
 from deprecated import deprecated
@@ -19,7 +18,7 @@ from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.capabilities import (
+from astrbot.core.resource_settings import (
     SETTINGS_SCOPE,
     global_settings,
     legacy_setting,
@@ -243,13 +242,13 @@ class _PermissionGuardedTool(FunctionTool):
         # Mirror mutable state from the underlying tool
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
-        self.capability_ref = tool_ref(tool)
+        self.resource_ref = tool_ref(tool)
 
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
         error = await self._mgr._check_tool_permission(
-            self.name, context, self.capability_ref.key
+            self.name, context, self.resource_ref.key
         )
         if error is not None:
             return error
@@ -534,7 +533,8 @@ class FunctionToolManager:
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return MCPInitSummary(total=0, success=0, failed=[])
 
-        mcp_server_json_obj: dict[str, dict] = self.load_mcp_config()["mcpServers"]
+        with open(mcp_json_file, encoding="utf-8") as f:
+            mcp_server_json_obj: dict[str, dict] = json.load(f)["mcpServers"]
 
         init_timeout = self._init_timeout_default
         timeout_display = f"{init_timeout:g}"
@@ -656,7 +656,6 @@ class FunctionToolManager:
                         mcp_tool=tool,
                         mcp_client=mcp_client,
                         mcp_server_name=name,
-                        server_id=cfg.get("_astrbot_id"),
                     )
                     for tool in mcp_client.tools
                 ]
@@ -1058,43 +1057,13 @@ class FunctionToolManager:
 
         try:
             with open(self.mcp_config_path, encoding="utf-8") as f:
-                config = json.load(f)
-            servers = config.get("mcpServers", {})
-            if isinstance(servers, dict):
-                ids = [
-                    server.get("_astrbot_id")
-                    for server in servers.values()
-                    if isinstance(server, dict)
-                ]
-                if (
-                    any(
-                        not isinstance(identity, str) or not identity
-                        for identity in ids
-                    )
-                    or len(set(ids)) != len(ids)
-                ) and not self.save_mcp_config(config):
-                    raise OSError("Could not persist MCP connection IDs")
-            return config
+                return json.load(f)
         except Exception as e:
             logger.error(f"加载 MCP 配置失败: {e}")
             return DEFAULT_MCP_CONFIG
 
     def save_mcp_config(self, config: dict) -> bool:
         try:
-            servers = config.get("mcpServers", {})
-            if isinstance(servers, dict):
-                seen = set()
-                for server in servers.values():
-                    if not isinstance(server, dict):
-                        continue
-                    identity = server.get("_astrbot_id")
-                    if (
-                        not isinstance(identity, str)
-                        or not identity
-                        or identity in seen
-                    ):
-                        identity = server["_astrbot_id"] = uuid4().hex
-                    seen.add(identity)
             with open(self.mcp_config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, ensure_ascii=False, indent=4)
             return True
@@ -1142,11 +1111,6 @@ class FunctionToolManager:
                                 "active": True,
                                 "provider": "modelscope",
                             }
-                            previous = mcp_servers.get(server_name)
-                            if isinstance(previous, dict) and (
-                                previous_id := previous.get("_astrbot_id")
-                            ):
-                                server_config["_astrbot_id"] = previous_id
                             mcp_servers[server_name] = server_config
                             synced_servers.append((server_name, server_config))
 

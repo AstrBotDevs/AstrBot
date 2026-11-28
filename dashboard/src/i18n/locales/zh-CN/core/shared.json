@@ -91,7 +91,7 @@
     "saveUpgrade": "保存升级",
     "nameConflict": "同一时间只能选择一个名为 {name} 的工具。",
     "useAllAvailable": "使用全部可用项",
-    "unavailableCapabilities": "已选但当前不可用的工具和技能",
+    "unavailableSelections": "已选但当前不可用的工具和技能",
     "title": "人格能力",
     "titleWithName": "{name}的人格能力",
     "editHint": "勾选后会立即更新该人格，并同步应用到所有使用它的配置文件。",
