@@ -14,6 +14,7 @@ from astrbot.core.provider.entities import (
     DecisionChoiceAnswer,
     DecisionChoiceQuestion,
     DecisionError,
+    DecisionScoreQuestion,
     ProviderType,
 )
 from astrbot.core.provider.manager import ProviderManager
@@ -279,7 +280,7 @@ async def test_system_one_limits_concurrent_requests():
         {
             "choice": "respond",
             "confidence": 0.9,
-            "probabilities": {"respond": 0.8, "ignore": 0.3},
+            "probabilities": {"respond": 0.0, "ignore": 0.0},
         },
         {
             "choice": "respond",
@@ -307,6 +308,48 @@ async def test_system_one_rejects_invalid_choice_answers(choice_answer):
             )
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_system_one_normalizes_probabilities_that_do_not_sum_to_one():
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "answers": {
+                    "route": {
+                        "choice": "respond",
+                        "confidence": 0.4,
+                        "probabilities": {"respond": 0.54, "ignore": 0.44},
+                    },
+                    "urgency": {
+                        "score": 0.6,
+                        "confidence": 0.4,
+                        "probabilities": {"0": 0.44, "1": 0.54},
+                        "legend": {"0": "Low", "1": "High"},
+                    },
+                }
+            },
+        )
+    )
+    try:
+        result = await provider.ask(
+            {
+                "route": DecisionChoiceQuestion(
+                    "Choose one",
+                    {"respond": "Reply", "ignore": "Ignore"},
+                ),
+                "urgency": DecisionScoreQuestion("How urgent?", ["Low", "High"]),
+            }
+        )
+    finally:
+        await provider.terminate()
+
+    route = result["route"]
+    assert route.choice == "respond"
+    assert route.probability == pytest.approx(0.54 / 0.98)
+    assert sum(route.probabilities.values()) == pytest.approx(1.0)
+    assert sum(result["urgency"].probabilities.values()) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
@@ -493,9 +536,7 @@ async def test_decision_service_maps_choice_ids_and_applies_threshold():
                     confidence=0.8,
                 )
             },
-            {
-                "answer": DecisionBooleanAnswer(probability=0.6)
-            },
+            {"answer": DecisionBooleanAnswer(probability=0.6)},
         ]
     )
     manager = MagicMock()
