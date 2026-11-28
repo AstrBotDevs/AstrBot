@@ -43,6 +43,11 @@
 - 总览统计并入 `/api/v1/stats`，新增 `daily_usage` 与 `system`，移除开发阶段的 `/api/v1/stats/overview`。使用 `sections` 选择 `messages`、`daily_usage`、`process`、`system` 或 `instances`；省略时返回全部数据。旧接口 `/api/stat/get` 同样支持。
 - Consolidate overview metrics into `/api/v1/stats`, adding `daily_usage` and `system` and removing the development-only `/api/v1/stats/overview`. Use `sections` to select `messages`, `daily_usage`, `process`, `system`, or `instances`; omit it for the full response. Legacy `/api/stat/get` also supports this parameter.
 
+### ChatUI messages / ChatUI 消息
+
+- ChatUI 中用户自己的消息也显示复制按钮（此前只有机器人回复可以复制），复制消息中的文字，不含附件和引用；只有图片、文件或空白的消息不显示。
+- ChatUI: user messages now have a copy button too (previously only bot replies did). It copies the message text, without attachments or the quoted reply; a message with only an image, a file or whitespace has none.
+
 ### Plugin AI documentation / 插件 AI 文档
 
 - 调用 AI → AI：按模型、Agent、工具、会话与对话、其他拆分文档。多 Agent 编排归入构建自定义 Agent 的示例，人格管理归入其他；原 AI 地址保留为概览入口。
