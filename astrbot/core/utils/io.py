@@ -21,6 +21,21 @@ from .astrbot_path import get_astrbot_temp_path
 logger = logging.getLogger("astrbot")
 
 
+DOWNLOAD_USER_AGENT = "AstrBot (bot; +https://github.com/AstrBotDevs/AstrBot)"
+
+
+def download_request_headers(user_agent: str | None = None) -> dict[str, str]:
+    """Build the single User-Agent header used for downloads.
+
+    Args:
+        user_agent: Custom User-Agent, or None to use the AstrBot default.
+
+    Returns:
+        A mapping containing only the User-Agent header.
+    """
+    return {"User-Agent": DOWNLOAD_USER_AGENT if user_agent is None else user_agent}
+
+
 def _safe_url_for_log(url: str) -> str:
     """Return a URL summary that omits query strings and fragments.
 
@@ -115,8 +130,22 @@ async def download_image_by_url(
     post: bool = False,
     post_data: dict | None = None,
     path: str | None = None,
+    *,
+    user_agent: str | None = None,
 ) -> str:
-    """下载图片, 返回 path"""
+    """Download an image or invoke a legacy image-generation endpoint.
+
+    Args:
+        url: Image resource URL or generation endpoint.
+        post: Whether to use POST instead of an image GET.
+        post_data: Optional JSON body for the generation POST.
+        path: Local destination, or None for a temporary image file.
+        user_agent: Custom User-Agent for GET only. None uses the AstrBot default.
+
+    Returns:
+        Path to the downloaded image.
+    """
+    get_headers = download_request_headers(user_agent) if not post else None
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -134,7 +163,7 @@ async def download_image_by_url(
                         f.write(await resp.read())
                     return path
             else:
-                async with session.get(url) as resp:
+                async with session.get(url, headers=get_headers) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
                     with open(path, "wb") as f:
@@ -160,7 +189,9 @@ async def download_image_by_url(
                         f.write(await resp.read())
                     return path
             else:
-                async with session.get(url, ssl=ssl_context) as resp:
+                async with session.get(
+                    url, ssl=ssl_context, headers=get_headers
+                ) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
                     with open(path, "wb") as f:
@@ -279,6 +310,8 @@ async def download_file(
     show_progress: bool = False,
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
+    *,
+    user_agent: str | None = None,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -289,11 +322,13 @@ async def download_file(
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
             TLS certificate verification disabled.
+        user_agent: Custom User-Agent for GET, or None for the AstrBot default.
 
     Returns:
         None.
     """
 
+    get_headers = download_request_headers(user_agent)
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -303,7 +338,7 @@ async def download_file(
             trust_env=True,
             connector=connector,
         ) as session:
-            async with session.get(url, timeout=1800) as resp:
+            async with session.get(url, timeout=1800, headers=get_headers) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
@@ -331,7 +366,9 @@ async def download_file(
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+            async with session.get(
+                url, ssl=ssl_context, timeout=120, headers=get_headers
+            ) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
