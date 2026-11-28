@@ -917,7 +917,6 @@ function openImage(url: string) {
 
 function closeImage() {
   imagePreview.visible = false;
-  imagePreview.url = "";
 }
 
 function formatTime(value: string) {
