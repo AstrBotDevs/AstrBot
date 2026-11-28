@@ -23,6 +23,7 @@ from astrbot.core.astr_agent_runtime.tool_executor import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
+from astrbot.core.provider.modalities import AUDIO_NOT_RECEIVED_HINT
 from astrbot.core.provider.provider import Provider
 
 
@@ -3151,3 +3152,141 @@ async def test_running_tool_returns_its_real_result_before_steering(
     assert len(finished) == 1 and finished[0].status == "completed"
     assert finished[0].structured_result is None
     wakeup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_trusted_context_tokens_add_new_messages_to_reported_usage(
+    runner, mock_provider, mock_tool_executor, mock_hooks, tool_set
+):
+    """Reported usage covers the history; newer messages are estimated on top."""
+    request = ProviderRequest(
+        prompt="new question " * 20,
+        system_prompt="system",
+        contexts=[
+            {"role": "user", "content": "old question"},
+            {"role": "assistant", "content": "old answer"},
+        ],
+        conversation=SimpleNamespace(token_usage=1000, cid="c1"),
+        func_tool=tool_set,
+    )
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    manager = runner.request_context_manager
+    counter = manager.token_counter
+    seen = []
+    process = manager.process
+
+    async def recording_process(messages, trusted_token_usage=0):
+        seen.append(trusted_token_usage)
+        return await process(messages, trusted_token_usage=trusted_token_usage)
+
+    manager.process = recording_process
+    user_tokens = counter.count_tokens([runner.run_context.messages[-1]])
+    assert user_tokens > 0
+
+    # The stored usage covers the history; the new user message is estimated.
+    # A tool call makes the run take a second step, where the new report
+    # covers everything so far: only the tool result is estimated (the reply
+    # that asked for it is output of the measured request).
+    replies = 0
+
+    async def text_chat(**kwargs):
+        nonlocal replies
+        replies += 1
+        return LLMResponse(
+            role="assistant",
+            completion_text="first reply" if replies == 1 else "done",
+            tools_call_name=["test_tool"] if replies == 1 else None,
+            tools_call_args=[{"query": "q"}] if replies == 1 else None,
+            tools_call_ids=["call_1"] if replies == 1 else None,
+            usage=TokenUsage(input_other=1490, output=10),
+        )
+
+    mock_provider.text_chat = text_chat
+    async for _ in runner.step_until_done(3):
+        pass
+    tool_result = next(
+        message for message in runner.run_context.messages if message.role == "tool"
+    )
+    assert seen[0] == 1000 + user_tokens
+    assert seen[1] == 1500 + counter.count_tokens([tool_result])
+
+    # Without a usable report the context manager estimates everything.
+    await runner.reset(
+        provider=mock_provider,
+        request=ProviderRequest(prompt="new"),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    runner.request_context_manager.process = recording_process
+    await collect_events(runner.step())
+    assert seen[-1] == 0
+
+
+@pytest.mark.asyncio
+async def test_compaction_invalidates_reported_usage_before_next_provider_call(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """Usage reported for the old history must not be reused after compression."""
+    observed = []
+
+    async def reply(**kwargs):
+        observed.append((len(runner.run_context.messages), runner._usage_baseline))
+        return LLMResponse(
+            role="assistant",
+            completion_text="done",
+            usage=TokenUsage(input_other=10, output=2),
+        )
+
+    mock_provider.text_chat = reply
+    request = ProviderRequest(
+        prompt="next",
+        contexts=[
+            {"role": role, "content": "history " * 100}
+            for role in ("user", "assistant", "user", "assistant")
+        ],
+        conversation=SimpleNamespace(token_usage=4000, cid="c1"),
+    )
+    await runner.reset(
+        provider=mock_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        max_context_tokens=100,
+        truncate_turns=1,
+    )
+    assert runner._usage_baseline == (4000, 4)
+    await collect_events(runner.step())
+    # The history was shortened before the request and the baseline dropped.
+    assert len(observed) == 1
+    assert observed[0][0] < 5
+    assert observed[0][1] is None
+
+
+@pytest.mark.asyncio
+async def test_unsupported_audio_is_explained_to_the_model(
+    runner, mock_hooks, mock_tool_executor
+):
+    """Audio a text-only model cannot receive is replaced by a fix-it hint."""
+    provider = CapturingProvider(modalities=["text"])
+
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(prompt="what was said?", audio_urls=["voice.wav"]),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    content = runner.run_context.messages[-1].content
+    assert TextPart(text=AUDIO_NOT_RECEIVED_HINT) in content
+    assert TextPart(text="[Audio]") not in content

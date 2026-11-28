@@ -2670,3 +2670,87 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Error code: 400 - this model does not support tools",
+        "Function calling is not enabled for this model",
+        "tool calling is not supported by the selected model",
+        "当前模型不支持工具调用",
+        "Error code: 400 - {'error': {'message': \"'tools' is not supported\"}}",
+        "This model does not support the 'tools' parameter",
+        "Function call is not supported for this model",
+        "No endpoints found that support tool use. To learn more about provider "
+        "routing, visit: https://openrouter.ai/docs/provider-routing",
+    ],
+)
+async def test_handle_api_error_tools_unsupported_drops_tools_and_tool_choice(
+    message,
+):
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "function", "function": {"name": "f"}}],
+            "tool_choice": "auto",
+        }
+
+        (
+            success,
+            _key,
+            _keys,
+            new_payloads,
+            _ctx,
+            new_tools,
+            _img,
+        ) = await provider._handle_api_error(
+            Exception(message),
+            payloads=payloads,
+            context_query=payloads["messages"],
+            func_tool=object(),
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert new_tools is None
+        assert "tools" not in new_payloads
+        assert "tool_choice" not in new_payloads
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        # gpt models on /v1/chat/completions: tools are supported, the
+        # combination with reasoning_effort is not (should surface, not drop).
+        "400 - Function tools with reasoning_effort are not supported for "
+        "gpt-x in /v1/chat/completions. To use function tools, use /v1/responses",
+        "Invalid schema for function 'lookup': 'format' is not supported",
+    ],
+)
+async def test_handle_api_error_unrelated_tool_errors_are_raised(message):
+    provider = _make_provider()
+    try:
+        payloads = {"messages": [], "tools": [{}], "tool_choice": "auto"}
+        with pytest.raises(Exception, match="not supported"):
+            await provider._handle_api_error(
+                Exception(message),
+                payloads=payloads,
+                context_query=[],
+                func_tool=object(),
+                chosen_key="test-key",
+                available_api_keys=["test-key"],
+                retry_cnt=0,
+                max_retries=10,
+            )
+        assert "tools" in payloads
+    finally:
+        await provider.terminate()

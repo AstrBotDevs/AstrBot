@@ -8,6 +8,16 @@ from typing import Any
 from astrbot import logger
 from astrbot.core.agent.message import Message
 
+# Stands in for audio the current model cannot receive, so the model tells the
+# user how to fix it instead of pretending it heard the attachment.
+AUDIO_NOT_RECEIVED_HINT = (
+    "[Audio attachment not received: this model cannot take audio input and the "
+    "audio was not transcribed. Tell the user you cannot hear it, and that they "
+    "can enable speech recognition in the AstrBot WebUI (Config > AI > Model > "
+    "Speech recognition) and choose a speech-to-text model, or switch to a model "
+    "that accepts audio.]"
+)
+
 
 @dataclass(slots=True)
 class ContextSanitizeStats:

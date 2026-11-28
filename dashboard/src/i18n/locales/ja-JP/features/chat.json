@@ -317,6 +317,22 @@
       "title": "返信を完了できませんでした",
       "description": "しばらくしてから再試行するか、詳細を開いて原因を確認してください。"
     },
+    "apiKey": {
+      "title": "API キーが拒否されました",
+      "description": "プロバイダーの API キーと権限を確認してから、もう一度お試しください。"
+    },
+    "rateLimit": {
+      "title": "レート制限または利用上限に達しました",
+      "description": "しばらく待ってから再試行するか、このプロバイダーのプランと利用上限を確認してください。"
+    },
+    "responsesApi": {
+      "title": "このモデルでツールを使うには Responses API が必要です",
+      "description": "このモデルのプロバイダー種別を OpenAI Responses に変更するか、モデル機能の「ツール使用」のチェックを外してください。"
+    },
+    "modelNotFound": {
+      "title": "モデルが見つかりません",
+      "description": "プロバイダー設定のモデル名と API ベース URL を確認するか、別のモデルを選択してください。"
+    },
     "configureModels": "モデルを設定",
     "details": "詳細を表示"
   }
