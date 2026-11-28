@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import locale
 import os
+import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -80,9 +82,86 @@ sys.stdout.write("".join(results))
 """
 
 
+# Separators that end one shell command and start the next.
+_SHELL_SEPARATORS = re.compile(r"&&|\|\||[;|\n\r]")
+
+
 def _is_safe_command(command: str) -> bool:
+    """Check a shell command line against the blocklist.
+
+    The line is split into the individual commands it would run, then each of
+    them is tokenised, because searching the raw text misses variants such as
+    ``rm  -rf /`` (extra space), ``echo hi;rm -rf /`` (chained) and
+    ``/bin/rm -rf /`` (absolute path).
+
+    Args:
+        command: The shell command line about to be executed.
+
+    Returns:
+        True if the command may run, False if it matches a blocked pattern.
+    """
     cmd = f" {command.strip().lower()} "
-    return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
+    if any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS):
+        return False
+
+    for segment in _SHELL_SEPARATORS.split(command):
+        try:
+            argv = shlex.split(segment, posix=True)
+        except ValueError:
+            # Unbalanced quotes: fall back to whitespace splitting so that a
+            # malformed command cannot slip through by failing tokenisation.
+            argv = segment.split()
+        if not argv:
+            continue
+
+        # Re-run the substring check per segment so a separator cannot break
+        # the surrounding spaces a pattern relies on.
+        if any(
+            pat in f" {segment.strip().lower()} " for pat in _BLOCKED_COMMAND_PATTERNS
+        ):
+            return False
+
+        # Compare the bare program name so `/bin/rm` and `rm` are the same tool.
+        name = argv[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+        flags = argv[1:]
+
+        # `sudo` is blocked outright, so a tab or extra space around it must not
+        # let the wrapped command through the surrounding-space match above.
+        if name == "sudo":
+            return False
+
+        if name == "rm":
+            # Any recursive forced removal, however the flags are grouped.
+            short = "".join(
+                f[1:] for f in flags if f.startswith("-") and not f.startswith("--")
+            )
+            long_flags = {f for f in flags if f.startswith("--")}
+            recursive = "r" in short or "R" in short or "--recursive" in long_flags
+            forced = "f" in short or "--force" in long_flags
+            if recursive and forced:
+                return False
+
+        if name in {"kill", "killall", "pkill"} and "-9" in flags:
+            return False
+
+        if name == "dd" and any(f.lower().startswith("if=") for f in flags):
+            return False
+
+        # A shell started with `-c` runs whatever it is handed, so check that
+        # payload as its own command line instead of trusting the outer text.
+        if name in {"sh", "bash", "zsh", "dash", "ksh"} or name in {
+            "powershell",
+            "pwsh",
+        }:
+            if "-c" in flags:
+                index = flags.index("-c")
+                if index + 1 >= len(flags) or not _is_safe_command(flags[index + 1]):
+                    return False
+                continue
+            # Without `-c` the shell runs a script file or a REPL; there is no
+            # inline payload to inspect, so fall through to the checks above.
+
+    return True
 
 
 def _decode_bytes_with_fallback(
