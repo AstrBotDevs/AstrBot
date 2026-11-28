@@ -532,6 +532,8 @@ class ConversationStore:
             snapshot.entries = persistent_entries(baseline.payload["messages"])
             baseline_seq = baseline.seq
             snapshot.replay_count = 1
+            if baseline_seq == target.seq:
+                return snapshot
         query = (
             select(ConversationEvent)
             .where(

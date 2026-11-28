@@ -861,6 +861,28 @@ class BaseDatabase(abc.ABC):
         """
         ...
 
+    async def get_recent_standalone_platform_sessions(
+        self, creator: str, platform_id: str | None, limit: int
+    ) -> list[PlatformSession]:
+        """Get recent sessions outside projects in the same order as a session page.
+
+        Args:
+            creator: Username that owns the sessions.
+            platform_id: Optional platform filter.
+            limit: Maximum number of sessions to return.
+
+        Returns:
+            Matching sessions, newest first.
+        """
+        rows, _ = await self.get_platform_sessions_by_creator_paginated(
+            creator=creator,
+            platform_id=platform_id,
+            page=1,
+            page_size=limit,
+            exclude_project_sessions=True,
+        )
+        return [row["session"] for row in rows]
+
     @abc.abstractmethod
     async def update_platform_session(
         self,
