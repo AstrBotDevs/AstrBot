@@ -1,14 +1,16 @@
 from copy import deepcopy
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
@@ -92,9 +94,9 @@ async def test_webchat_follow_up_captured_is_emitted_by_default():
 
 
 @pytest.mark.asyncio
-async def test_nonstream_reasoning_is_delivered_once_before_the_reply():
+async def test_nonstream_reasoning_is_delivered_once_before_the_reply(tmp_path: Path):
     event = _event("reasoning-request")
-    config = deepcopy(DEFAULT_CONFIG)
+    config = AstrBotConfig(str(tmp_path / "config.json"), deepcopy(DEFAULT_CONFIG))
     config["platform_settings"]["segmented_reply"].update(enable=True, interval="0,0")
     event.set_extra("enable_reasoning", True)
     event.set_extra("_llm_reasoning_content", "Thinking")
@@ -103,15 +105,10 @@ async def test_nonstream_reasoning_is_delivered_once_before_the_reply():
         .message("First。Second。")
         .set_result_content_type(ResultContentType.LLM_RESULT)
     )
-    context = SimpleNamespace(
-        astrbot_config=config,
-        plugin_manager=SimpleNamespace(
-            context=SimpleNamespace(
-                get_using_tts_provider_async=AsyncMock(return_value=None),
-                get_config=lambda **_: config,
-            )
-        ),
-    )
+    plugin_manager = Mock()
+    plugin_manager.context.get_using_tts_provider_async = AsyncMock(return_value=None)
+    plugin_manager.context.get_config.return_value = config
+    context = PipelineContext(config, plugin_manager, "test")
     decorate = ResultDecorateStage()
     respond = RespondStage()
     await decorate.initialize(context)
@@ -127,8 +124,8 @@ async def test_nonstream_reasoning_is_delivered_once_before_the_reply():
             frames.append((frame["chain_type"], frame["data"]))
         assert frames == [
             ("reasoning", "Thinking"),
-            (None, "First。"),
-            (None, "Second。"),
+            (None, "First"),
+            (None, "Second"),
         ]
     finally:
         webchat_queue_mgr.remove_back_queue("reasoning-request")

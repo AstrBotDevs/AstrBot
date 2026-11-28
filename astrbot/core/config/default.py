@@ -121,7 +121,7 @@ DEFAULT_CONFIG = {
             "log_base": 2.6,
             "words_count_threshold": 150,
             "split_mode": "regex",  # regex 或 words
-            "regex": ".*?[。？！~…]+|.+$",
+            "regex": r"(?:“[^”]*”|\[[^\]]*\]|「[^」]*」|（[^）]*）|[^。“\[「（])*?。|[\s\S]+$",
             "split_words": [
                 "。",
                 "？",
@@ -129,7 +129,7 @@ DEFAULT_CONFIG = {
                 "~",
                 "…",
             ],  # 当 split_mode 为 words 时使用
-            "content_cleanup_rule": "",
+            "content_cleanup_rule": r"[。.]+$",
         },
         "no_permission_reply": True,
         "empty_mention_waiting": True,
