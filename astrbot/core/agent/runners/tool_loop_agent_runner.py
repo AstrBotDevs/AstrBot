@@ -21,6 +21,7 @@ from mcp.types import (
 from tenacity import (
     AsyncRetrying,
     retry_if_exception,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -799,9 +800,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         last_exception: Exception | None = None
         last_err_response: LLMResponse | None = None
         has_stream_output = False
-        retry_empty_output = retry_if_exception(
-            lambda exc: not has_stream_output and isinstance(exc, EmptyModelOutputError)
-        )
+        retry_empty_output = retry_if_exception_type(
+            EmptyModelOutputError
+        ) & retry_if_exception(lambda _: not has_stream_output)
 
         async def wait_before_retry(delay: float) -> None:
             await self._await_or_stop(asyncio.sleep(delay), interrupt_for_steering=True)
