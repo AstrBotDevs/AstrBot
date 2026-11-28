@@ -1,6 +1,7 @@
 import asyncio
 import re
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from aiocqhttp import CQHttp, Event
 
@@ -21,6 +22,12 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import Group, MessageMember
 
+# aiohttp's default limit for one WebSocket message; aiocqhttp sends each
+# OneBot API call as a single frame and inherits that limit.
+MAX_WS_MESSAGE_BYTES = 4 * 1024 * 1024
+# Leave room for the action envelope and the rest of the message.
+WS_MESSAGE_HEADROOM_BYTES = 64 * 1024
+
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
@@ -40,6 +47,48 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if isinstance(segment, Image | Record):
             # For Image and Record segments, we convert them to base64
             bs64 = await segment.convert_to_base64()
+            encoded_size = len(bs64) + len("base64://")
+            if encoded_size > MAX_WS_MESSAGE_BYTES - WS_MESSAGE_HEADROOM_BYTES:
+                # A frame over the limit closes the reverse WebSocket before
+                # the protocol side can reply, which looks like a silent drop.
+                # Prefer a reference the protocol side fetches on its own.
+                file_ref = ""
+                for candidate in (segment.url, segment.file, segment.path):
+                    if not isinstance(candidate, str) or not candidate:
+                        continue
+                    if candidate.startswith(("http://", "https://", "file://")):
+                        file_ref = candidate
+                        break
+                    if "://" in candidate or candidate.startswith("data:"):
+                        continue
+                    if len(candidate) >= 4096:
+                        continue
+                    candidate_path = Path(candidate)
+                    if candidate_path.is_file():
+                        file_ref = candidate_path.resolve().as_uri()
+                        break
+                if file_ref:
+                    logger.warning(
+                        f"aiocqhttp: {segment.type.value} payload is "
+                        f"{encoded_size / 1024 / 1024:.1f} MB after base64 "
+                        f"encoding, over the 4 MB WebSocket frame limit; "
+                        f"sending {file_ref} instead"
+                    )
+                    return {
+                        "type": segment.type.lower(),
+                        "data": {"file": file_ref},
+                    }
+                logger.error(
+                    f"aiocqhttp: {segment.type.value} payload is "
+                    f"{encoded_size / 1024 / 1024:.1f} MB after base64 encoding, "
+                    f"over the 4 MB WebSocket frame limit and no local path or "
+                    f"URL is available for fallback; refusing to send it"
+                )
+                raise ValueError(
+                    f"aiocqhttp {segment.type.value} payload is "
+                    f"{encoded_size / 1024 / 1024:.1f} MB after base64 encoding, "
+                    f"exceeding the 4 MB WebSocket frame limit"
+                )
             return {
                 "type": segment.type.lower(),
                 "data": {
