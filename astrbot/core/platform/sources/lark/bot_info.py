@@ -7,6 +7,7 @@ from .app_registration import DEFAULT_FEISHU_OPEN_DOMAIN, DEFAULT_LARK_OPEN_DOMA
 
 TENANT_ACCESS_TOKEN_INTERNAL_PATH = "/open-apis/auth/v3/tenant_access_token/internal"
 BOT_INFO_PATH = "/open-apis/bot/v3/info"
+LARK_PLATFORM_POLICY_DENIED_CODE = 21001
 
 
 @dataclass
@@ -29,30 +30,63 @@ def _string_field(data: dict[str, Any], key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
-async def _post_json(
+async def _request_json(
+    method: str,
     endpoint: str,
-    payload: dict[str, str],
+    action: str,
+    **kwargs: Any,
 ) -> dict[str, Any]:
+    """Call a Lark Open API endpoint and return its JSON body.
+
+    Args:
+        method: HTTP method, such as ``GET`` or ``POST``.
+        endpoint: Full Open API URL.
+        action: Short description of the call, used in error messages.
+        **kwargs: Extra arguments forwarded to ``aiohttp.ClientSession.request``.
+
+    Returns:
+        The decoded JSON object of a response whose business ``code`` is 0.
+
+    Raises:
+        RuntimeError: If the response body is not valid JSON, is not a JSON
+            object, or has a non-zero ``code``. The message keeps the HTTP status, ``code``, ``msg`` and
+            the ``x-tt-logid`` header so the request can be traced with Lark
+            support. Request payloads and headers are never included.
+    """
     timeout = aiohttp.ClientTimeout(total=15)
     async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
-        async with session.post(endpoint, json=payload) as response:
-            data = await response.json(content_type=None)
+        async with session.request(method, endpoint, **kwargs) as response:
+            status = response.status
+            log_id = response.headers.get("x-tt-logid") or "n/a"
+            try:
+                data = await response.json(content_type=None)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Failed to {action}: response is not valid JSON "
+                    f"(HTTP {status}, log_id={log_id})"
+                ) from exc
     if not isinstance(data, dict):
-        raise RuntimeError("飞书接口响应格式异常")
-    return data
-
-
-async def _get_json(
-    endpoint: str,
-    *,
-    headers: dict[str, str],
-) -> dict[str, Any]:
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
-        async with session.get(endpoint, headers=headers) as response:
-            data = await response.json(content_type=None)
-    if not isinstance(data, dict):
-        raise RuntimeError("飞书接口响应格式异常")
+        raise RuntimeError(
+            f"Failed to {action}: unexpected response format "
+            f"(HTTP {status}, log_id={log_id})"
+        )
+    code = data.get("code")
+    if code != 0:
+        message = (
+            f"Failed to {action}: code={code}, "
+            f"msg={_string_field(data, 'msg') or 'n/a'} "
+            f"(HTTP {status}, log_id={log_id})"
+        )
+        if code == LARK_PLATFORM_POLICY_DENIED_CODE:
+            # Retrying cannot get past a platform policy denial, so tell the
+            # admin where to look instead.
+            message += (
+                ". Lark/Feishu denied the request due to platform policy; "
+                "retrying will not help. Check the app and tenant status in the "
+                "Lark/Feishu developer console, or contact Lark/Feishu support "
+                "with the log_id."
+            )
+        raise RuntimeError(message)
     return data
 
 
@@ -63,30 +97,28 @@ async def request_lark_bot_info(
     app_secret: str,
 ) -> LarkBotInfo:
     open_base = _open_base(domain)
-    token_data = await _post_json(
+    token_data = await _request_json(
+        "POST",
         f"{open_base}{TENANT_ACCESS_TOKEN_INTERNAL_PATH}",
-        {
+        "obtain Lark tenant access token",
+        json={
             "app_id": app_id,
             "app_secret": app_secret,
         },
     )
-    if token_data.get("code") != 0:
-        raise RuntimeError(_string_field(token_data, "msg") or "获取飞书访问令牌失败")
-
     tenant_access_token = _string_field(token_data, "tenant_access_token")
     if not tenant_access_token:
-        raise RuntimeError("飞书访问令牌响应缺少 tenant_access_token")
+        raise RuntimeError("Lark token response is missing tenant_access_token")
 
-    bot_data = await _get_json(
+    bot_data = await _request_json(
+        "GET",
         f"{open_base}{BOT_INFO_PATH}",
+        "fetch Lark bot info",
         headers={"Authorization": f"Bearer {tenant_access_token}"},
     )
-    if bot_data.get("code") != 0:
-        raise RuntimeError(_string_field(bot_data, "msg") or "获取飞书机器人信息失败")
-
     bot = bot_data.get("bot")
     if not isinstance(bot, dict):
-        raise RuntimeError("飞书机器人信息响应缺少 bot 字段")
+        raise RuntimeError("Lark bot info response is missing the bot field")
 
     return LarkBotInfo(
         app_name=_string_field(bot, "app_name"),
