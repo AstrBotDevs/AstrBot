@@ -14,7 +14,8 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
+from astrbot.core.capabilities import LEGACY_SKILLS_KEY, SETTINGS_SCOPE, CapabilityRef
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
     get_astrbot_data_path,
@@ -25,7 +26,6 @@ from astrbot.core.utils.astrbot_path import (
 
 SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
-DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
 WORKSPACE_SKILLS_ROOT = "skills"
@@ -129,6 +129,22 @@ class SkillInfo:
     plugin_name: str = ""
     readonly: bool = False
     preset: bool = False
+    plugin_id: str | None = None
+
+    @property
+    def capability_ref(self) -> CapabilityRef:
+        if self.source_type == "plugin":
+            return CapabilityRef(
+                "skill", "plugin", self.plugin_id or self.plugin_name, self.name
+            )
+        if self.source_type in {"sandbox_only", "workspace"}:
+            return CapabilityRef(
+                "skill",
+                "sandbox" if self.source_type == "sandbox_only" else "workspace",
+                None,
+                self.name,
+            )
+        return CapabilityRef("skill", "local", None, self.name)
 
 
 def _parse_frontmatter_description(text: str) -> str:
@@ -486,19 +502,18 @@ class SkillManager:
 
         return skills
 
-    def _load_config(self) -> dict:
-        if not os.path.exists(self.config_path):
-            self._save_config(DEFAULT_SKILLS_CONFIG.copy())
-            return DEFAULT_SKILLS_CONFIG.copy()
-        with open(self.config_path, encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or "skills" not in data:
-            return DEFAULT_SKILLS_CONFIG.copy()
-        return data
-
-    def _save_config(self, config: dict) -> None:
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
+    def _legacy_switches(self) -> dict:
+        """Read imported switches, with file fallback before core initialization."""
+        legacy = sp.get(
+            LEGACY_SKILLS_KEY, None, scope=SETTINGS_SCOPE, scope_id="legacy"
+        )
+        if legacy is not None:
+            return legacy
+        path = Path(self.config_path)
+        if not path.is_file():
+            return {}
+        with path.open(encoding="utf-8") as file:
+            return json.load(file).get("skills", {})
 
     def _load_sandbox_skills_cache(self) -> dict:
         if not os.path.exists(self.sandbox_skills_cache_path):
@@ -566,6 +581,7 @@ class SkillManager:
         active_only: bool = False,
         runtime: str = "local",
         show_sandbox_path: bool = True,
+        include_same_names: bool = False,
     ) -> list[SkillInfo]:
         """List all skills.
 
@@ -573,9 +589,17 @@ class SkillManager:
             return the path as it would appear in the sandbox environment,
             otherwise return the local filesystem path.
         """
-        config = self._load_config()
-        skill_configs = config.get("skills", {})
-        modified = False
+        from astrbot.core.star.star import star_registry
+
+        skill_configs = self._legacy_switches()
+        scoped = {
+            row.key: row.value["val"] for row in sp.range_get(SETTINGS_SCOPE, "global")
+        }
+        plugins = {
+            entry.root_dir_name: entry.plugin_id
+            for entry in star_registry
+            if entry.root_dir_name
+        }
         skills_by_name: dict[str, SkillInfo] = {}
 
         sandbox_cached_paths: dict[str, str] = {}
@@ -614,10 +638,10 @@ class SkillManager:
             except OSError as exc:
                 logger.warning(f"Skip unreadable skill directory {entry}: {exc}")
                 continue
-            active = skill_configs.get(skill_name, {}).get("active", True)
-            if skill_name not in skill_configs:
-                skill_configs[skill_name] = {"active": active}
-                modified = True
+            ref = CapabilityRef("skill", "local", None, skill_name)
+            active = scoped.get(ref.key, {}).get(
+                "enabled", skill_configs.get(skill_name, {}).get("active", True)
+            )
             if active_only and not active:
                 continue
             description = ""
@@ -638,7 +662,7 @@ class SkillManager:
             else:
                 path_str = str(skill_md)
             path_str = path_str.replace("\\", "/")
-            skills_by_name[skill_name] = SkillInfo(
+            skills_by_name[ref.key if include_same_names else skill_name] = SkillInfo(
                 name=skill_name,
                 description=description,
                 path=path_str,
@@ -655,7 +679,10 @@ class SkillManager:
             skill_dir,
             preset,
         ) in self._iter_plugin_skill_dirs():
-            if skill_name in skills_by_name:
+            ref = CapabilityRef(
+                "skill", "plugin", plugins.get(plugin_name, plugin_name), skill_name
+            )
+            if (ref.key if include_same_names else skill_name) in skills_by_name:
                 continue
             try:
                 skill_md = _normalize_skill_markdown_path(
@@ -668,10 +695,9 @@ class SkillManager:
                 continue
             if skill_md is None:
                 continue
-            active = skill_configs.get(skill_name, {}).get("active", True)
-            if skill_name not in skill_configs:
-                skill_configs[skill_name] = {"active": active}
-                modified = True
+            active = scoped.get(ref.key, {}).get(
+                "enabled", skill_configs.get(skill_name, {}).get("active", True)
+            )
             if active_only and not active:
                 continue
             description = ""
@@ -689,7 +715,7 @@ class SkillManager:
                 ) or _default_sandbox_skill_path(skill_name)
             else:
                 path_str = str(skill_md)
-            skills_by_name[skill_name] = SkillInfo(
+            skills_by_name[ref.key if include_same_names else skill_name] = SkillInfo(
                 name=skill_name,
                 description=description,
                 path=path_str.replace("\\", "/"),
@@ -699,6 +725,7 @@ class SkillManager:
                 local_exists=True,
                 sandbox_exists=sandbox_exists,
                 plugin_name=plugin_name,
+                plugin_id=plugins.get(plugin_name),
                 readonly=True,
                 preset=preset,
             )
@@ -711,14 +738,21 @@ class SkillManager:
                 skill_name = str(item.get("name", "")).strip()
                 if (
                     not skill_name
-                    or skill_name in skills_by_name
+                    or (
+                        skill_name in skills_by_name
+                        if not include_same_names
+                        else any(
+                            skill.name == skill_name and skill.sandbox_exists
+                            for skill in skills_by_name.values()
+                        )
+                    )
                     or not _SKILL_NAME_RE.match(skill_name)
                 ):
                     continue
-                active = skill_configs.get(skill_name, {}).get("active", True)
-                if skill_name not in skill_configs:
-                    skill_configs[skill_name] = {"active": active}
-                    modified = True
+                ref = CapabilityRef("skill", "sandbox", None, skill_name)
+                active = scoped.get(ref.key, {}).get(
+                    "enabled", skill_configs.get(skill_name, {}).get("active", True)
+                )
                 if active_only and not active:
                     continue
                 description = sandbox_cached_descriptions.get(skill_name, "")
@@ -728,22 +762,20 @@ class SkillManager:
                 path_str = sandbox_cached_paths.get(
                     skill_name
                 ) or _default_sandbox_skill_path(skill_name)
-                skills_by_name[skill_name] = SkillInfo(
-                    name=skill_name,
-                    description=description,
-                    path=path_str.replace("\\", "/"),
-                    active=active,
-                    source_type="sandbox_only",
-                    source_label="sandbox_preset",
-                    local_exists=False,
-                    sandbox_exists=True,
+                skills_by_name[ref.key if include_same_names else skill_name] = (
+                    SkillInfo(
+                        name=skill_name,
+                        description=description,
+                        path=path_str.replace("\\", "/"),
+                        active=active,
+                        source_type="sandbox_only",
+                        source_label="sandbox_preset",
+                        local_exists=False,
+                        sandbox_exists=True,
+                    )
                 )
 
-        if modified:
-            config["skills"] = skill_configs
-            self._save_config(config)
-
-        return [skills_by_name[name] for name in sorted(skills_by_name)]
+        return sorted(skills_by_name.values(), key=lambda skill: skill.name)
 
     def is_sandbox_only_skill(self, name: str) -> bool:
         if not _is_valid_skill_name(name):
@@ -782,10 +814,22 @@ class SkillManager:
             raise PermissionError(
                 "Sandbox preset skill cannot be enabled/disabled from local skill management."
             )
-        config = self._load_config()
-        config.setdefault("skills", {})
-        config["skills"][name] = {"active": bool(active)}
-        self._save_config(config)
+        skill = next(
+            (entry for entry in self.list_skills() if entry.name == name), None
+        )
+        ref = (
+            skill.capability_ref
+            if skill
+            else CapabilityRef("skill", "local", None, name)
+        )
+        self.save_skill_switch(ref, active)
+
+    @staticmethod
+    def save_skill_switch(ref: CapabilityRef, active: bool) -> None:
+        """Store a skill switch from a synchronous install or SDK caller."""
+        sp.put(
+            ref.key, {"enabled": bool(active)}, scope=SETTINGS_SCOPE, scope_id="global"
+        )
 
     def _remove_skill_from_sandbox_cache(self, name: str) -> None:
         cache = self._load_sandbox_skills_cache()
@@ -831,10 +875,8 @@ class SkillManager:
         # to refresh cache from runtime side.
         self._remove_skill_from_sandbox_cache(name)
 
-        config = self._load_config()
-        if name in config.get("skills", {}):
-            config["skills"].pop(name, None)
-            self._save_config(config)
+        ref = CapabilityRef("skill", "local", None, name)
+        sp.remove(ref.key, scope=SETTINGS_SCOPE, scope_id="global")
 
     def install_skill_from_zip(
         self,
@@ -953,7 +995,9 @@ class SkillManager:
                         raise FileExistsError(f"Skill {skill_name} already exists.")
 
                     shutil.move(str(src_dir), str(dest_dir))
-                    self.set_skill_active(skill_name, True)
+                    self.save_skill_switch(
+                        CapabilityRef("skill", "local", None, skill_name), True
+                    )
                     installed_skills.append(skill_name)
 
                 else:
@@ -998,7 +1042,9 @@ class SkillManager:
                             shutil.rmtree(dest_dir)
 
                         shutil.move(str(src_dir), str(dest_dir))
-                        self.set_skill_active(skill_name, True)
+                        self.save_skill_switch(
+                            CapabilityRef("skill", "local", None, skill_name), True
+                        )
                         installed_skills.append(skill_name)
 
         if not installed_skills:

@@ -1146,24 +1146,24 @@ export const toolApi = {
   list(params?: ToolListParams) {
     return typed<any[]>(openApiV1.listTools({ query: generatedQuery(params) }));
   },
-  deleteSavedSettings(toolName: string) {
+  deleteSavedSettings(toolName: string, resourceKey?: string) {
     return typed<OpenConfig>(
-      openApiV1.deleteSavedToolSettings({ query: { tool_name: toolName } }),
+      openApiV1.deleteSavedToolSettings({ query: { tool_name: toolName, resource_key: resourceKey } }),
     );
   },
-  setEnabled(toolId: string, enabled: boolean) {
+  setEnabled(toolId: string, enabled: boolean, resourceKey?: string) {
     return typed<OpenConfig>(
       openApiV1.setToolEnabled({
         path: { tool_id: toolId },
-        body: { enabled },
+        body: { enabled, resource_key: resourceKey },
       }),
     );
   },
-  setPermission(toolId: string, permission: 'admin' | 'member') {
+  setPermission(toolId: string, permission: 'admin' | 'member', resourceKey?: string) {
     return typed<OpenConfig>(
       openApiV1.setToolPermission({
         path: { tool_id: toolId },
-        body: { permission },
+        body: { permission, resource_key: resourceKey },
       }),
     );
   },
@@ -1611,10 +1611,10 @@ export const skillApi = {
       openApiV1.uploadSkillsBatch({ body: { files } }),
     );
   },
-  setEnabled(skillName: string, enabled: boolean) {
+  setEnabled(skillName: string, enabled: boolean, resourceKey?: string) {
     return typed<OpenConfig>(
       openApiV1.updateSkillByName({
-        body: { skill_name: skillName, enabled },
+        body: { skill_name: skillName, enabled, resource_key: resourceKey },
       }),
     );
   },

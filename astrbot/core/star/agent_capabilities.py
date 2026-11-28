@@ -67,19 +67,19 @@ def filter_tools(event: AstrMessageEvent, tools: ToolSet) -> ToolSet:
         for tool in tools.tools:
             if isinstance(tool, MCPTool):
                 # MCP tools are not owned by plugins.
-                new_tool_set.add_tool(tool)
+                new_tool_set.tools.append(tool)
                 continue
             mp = tool.handler_module_path
             if not mp:
                 # Tools without plugin ownership include subagent handoffs.
-                new_tool_set.add_tool(tool)
+                new_tool_set.tools.append(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
                 # Preserve tools when their plugin ownership cannot be resolved.
-                new_tool_set.add_tool(tool)
+                new_tool_set.tools.append(tool)
                 continue
             if plugin.name in event.plugins_name or plugin.reserved:
-                new_tool_set.add_tool(tool)
+                new_tool_set.tools.append(tool)
         return new_tool_set
     return tools

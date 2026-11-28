@@ -404,8 +404,10 @@ class TestUpdateToolPermission:
         )
         assert "target_tool" in message
 
-        stored = await sp.global_get("tool_permissions", {})
-        assert stored["_default"]["target_tool"] == "admin"
+        stored = await sp.get_async(
+            "global_capability_settings", "global", "astrbot/tools/target_tool", {}
+        )
+        assert stored["permission"] == "admin"
 
     @pytest.mark.asyncio
     async def test_reject_runtime_tool(self):

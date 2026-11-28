@@ -148,6 +148,11 @@ async def update_skill_by_name(
             {
                 "name": skill_name,
                 "active": payload.active_value(),
+                **(
+                    {"resource_key": payload.resource_key}
+                    if payload.resource_key is not None
+                    else {}
+                ),
             }
         )
     )
@@ -277,6 +282,11 @@ async def update_skill(
             {
                 "name": skill_name,
                 "active": payload.active_value(),
+                **(
+                    {"resource_key": payload.resource_key}
+                    if payload.resource_key is not None
+                    else {}
+                ),
             }
         )
     )

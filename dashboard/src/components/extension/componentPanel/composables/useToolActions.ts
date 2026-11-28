@@ -53,7 +53,7 @@ export function useToolActions(
     const previous = tool.active;
     tool.active = !tool.active;
     try {
-      const res = await toolApi.setEnabled(tool.name, tool.active);
+      const res = await toolApi.setEnabled(tool.name, tool.active, tool.capability?.key);
       if (res.data.status === 'ok') {
         tool.inactive_configured = !tool.active;
         toast(res.data.message || successMessage);
@@ -82,7 +82,7 @@ export function useToolActions(
     errorMessage: string
   ) => {
     try {
-      const res = await toolApi.setPermission(tool.name, permission);
+      const res = await toolApi.setPermission(tool.name, permission, tool.capability?.key);
       if (res.data.status === 'ok') {
         tool.permission = permission;
         tool.permission_configured = true;
@@ -108,9 +108,9 @@ export function useToolActions(
     if (tool.registered !== false || deletingSavedTools.value.has(tool.name)) return;
     deletingSavedTools.value.add(tool.name);
     try {
-      const res = await toolApi.deleteSavedSettings(tool.name);
+      const res = await toolApi.deleteSavedSettings(tool.name, tool.resource_key);
       if (res.data.status === 'ok') {
-        tools.value = tools.value.filter(item => item.name !== tool.name || item.registered !== false);
+        tools.value = tools.value.filter(item => item.registered !== false || (item.resource_key || item.name) !== (tool.resource_key || tool.name));
         toast(successMessage, 'success');
       } else {
         toast(res.data.message || errorMessage, 'error');

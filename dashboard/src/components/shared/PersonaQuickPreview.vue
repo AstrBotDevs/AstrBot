@@ -117,13 +117,14 @@ const canEdit = computed(
 );
 async function persistCapabilities(field, nextValue, previousValue) {
   const personaId = props.modelValue;
-  personaData.value = { ...personaData.value, [field]: nextValue };
+  const changes = field === "all" ? nextValue : { [field]: nextValue };
+  personaData.value = { ...personaData.value, ...changes };
   savingCapability.value = field;
   saveError.value = "";
   saved.value = false;
 
   try {
-    const response = await personaApi.update(personaId, { [field]: nextValue });
+    const response = await personaApi.update(personaId, changes);
     if (response.data?.status !== "ok") {
       throw new Error(
         response.data?.message || tm("personaQuickPreview.unknownError"),
@@ -139,7 +140,7 @@ async function persistCapabilities(field, nextValue, previousValue) {
     return true;
   } catch (error) {
     if (props.modelValue === personaId) {
-      personaData.value = { ...personaData.value, [field]: previousValue };
+      personaData.value = { ...personaData.value, ...(field === "all" ? previousValue : { [field]: previousValue }) };
       saveError.value =
         error?.response?.data?.message ||
         error?.message ||
@@ -168,7 +169,7 @@ async function loadSkillsMeta() {
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
       const skills = Array.isArray(payload) ? payload : payload.skills || [];
-      availableSkills.value = skills.filter((skill) => skill.active !== false);
+      availableSkills.value = skills;
     } else {
       availableSkills.value = [];
     }

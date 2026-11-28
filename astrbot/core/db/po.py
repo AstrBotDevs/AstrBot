@@ -759,9 +759,9 @@ class Personality(TypedDict):
     begin_dialogs: list[str]
     mood_imitation_dialogs: list[str]
     """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
-    tools: list[str] | None
+    tools: list[str | dict] | None
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
-    skills: list[str] | None
+    skills: list[str | dict] | None
     """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
     custom_error_message: str | None
     """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""

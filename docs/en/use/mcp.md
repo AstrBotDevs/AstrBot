@@ -133,6 +133,9 @@ AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__li
 
 ![Saved tool names in the persona capabilities panel](./images/mcp-saved-persona-en.png)
 
+You can still edit existing personas. In the persona capabilities editor, choose **Preview upgrade** to review the resulting selections by MCP server, plugin, or local source. Verify suggested matches and choose a source or remove each unresolved item. Apply the preview to your draft, then save the persona to persist it.
+
+
 Open **Extensions → Manage Handlers → Function Tools** to manage the enabled state and permissions of registered MCP tools. Saved disabled states and permissions with no matching tool appear as **Unregistered**. Click the trash icon on that row and confirm to clear its saved global permission and disabled state. Reapply the settings you need to the tool's full name after an upgrade.
 
 ![An MCP tool and unregistered saved entries in Function Tools](./images/mcp-saved-settings-en.png)

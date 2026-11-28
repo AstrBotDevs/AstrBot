@@ -964,6 +964,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.mcp_server_id = kwargs.get("server_id") or mcp_server_name
 
     async def call(
         self, context: ContextWrapper[TContext], **kwargs

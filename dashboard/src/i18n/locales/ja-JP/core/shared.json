@@ -82,6 +82,16 @@
     "emptyFolder": "このフォルダーは空です"
   },
   "personaQuickPreview": {
+    "legacySelection": "このペルソナには名前で保存された選択があります。",
+    "previewUpgrade": "アップグレードをプレビュー",
+    "upgradeHelp": "適用する前に、提供元と最終的な選択を確認してください。",
+    "currentMatch": "現在の一覧からの候補です。提供元を確認してください。",
+    "chooseSource": "提供元を選択するか、この項目を削除してください。",
+    "applyUpgrade": "下書きに適用",
+    "saveUpgrade": "アップグレードを保存",
+    "nameConflict": "同名のツール {name} は一度に一つだけ選択できます。",
+    "useAllAvailable": "利用可能な項目をすべて使用",
+    "unavailableCapabilities": "選択済みで現在使用できないツールとスキル",
     "title": "ペルソナの機能",
     "titleWithName": "{name} のペルソナ機能",
     "editHint": "選択内容はこのペルソナに即時保存され、このペルソナを使用するすべての設定に反映されます。",

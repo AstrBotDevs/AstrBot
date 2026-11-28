@@ -210,8 +210,8 @@ class PersonaManager:
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None | object = NOT_GIVEN,
-        skills: list[str] | None | object = NOT_GIVEN,
+        tools: list[str | dict] | None | object = NOT_GIVEN,
+        skills: list[str | dict] | None | object = NOT_GIVEN,
         custom_error_message: str | None | object = NOT_GIVEN,
     ):
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
@@ -388,8 +388,8 @@ class PersonaManager:
         persona_id: str,
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
+        tools: list[str | dict] | None = None,
+        skills: list[str | dict] | None = None,
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,

@@ -25,6 +25,7 @@ from astrbot.core.astr_agent_runtime import AstrAgentRuntime
 from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
 from astrbot.core.astr_agent_runtime.subagents.store import SubAgentStore
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.capabilities import migrate_legacy_settings
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -199,6 +200,13 @@ class AstrBotCoreLifecycle:
         except Exception as e:
             logger.error(f"AstrBot migration failed: {e!s}")
             logger.error(traceback.format_exc())
+
+        try:
+            from astrbot.core.skills.skill_manager import SkillManager
+
+            await migrate_legacy_settings(Path(SkillManager().config_path))
+        except (OSError, ValueError):
+            logger.exception("Could not migrate legacy capability settings")
 
         # 初始化事件队列
         self.event_queue = Queue()

@@ -3124,6 +3124,10 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: resource_key
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3141,7 +3145,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EnabledPatch"
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                resource_key:
+                  type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3436,6 +3446,8 @@ paths:
                   type: boolean
                 active:
                   type: boolean
+                resource_key:
+                  type: string
               additionalProperties: true
       responses:
         "200":
@@ -6312,6 +6324,8 @@ components:
         permission:
           type: string
           enum: [admin, member]
+        resource_key:
+          type: string
       additionalProperties: false
 
     ProviderSourceConfigRequest:
@@ -6763,6 +6777,8 @@ components:
           type: string
         description:
           type: string
+        resource_key:
+          type: string
       additionalProperties: false
 
     NeoCandidateActionRequest:
@@ -6861,6 +6877,21 @@ components:
           type: number
       additionalProperties: false
 
+    CapabilityGroup:
+      type: object
+      required: [kind, source, items]
+      properties:
+        kind:
+          enum: [tool, skill]
+        source:
+          enum: [plugin, mcp, local, sandbox, astrbot]
+        source_id:
+          type: [string, "null"]
+        items:
+          type: array
+          items:
+            type: string
+
     PersonaRequest:
       type: object
       required: [persona_id, system_prompt]
@@ -6876,13 +6907,17 @@ components:
         folder_id:
           type: string
         tools:
-          type: array
+          type: [array, "null"]
           items:
-            type: string
+            oneOf:
+              - type: string
+              - $ref: "#/components/schemas/CapabilityGroup"
         skills:
-          type: array
+          type: [array, "null"]
           items:
-            type: string
+            oneOf:
+              - type: string
+              - $ref: "#/components/schemas/CapabilityGroup"
         custom_error_message:
           type: string
       additionalProperties: true

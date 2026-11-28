@@ -377,7 +377,7 @@ def collect_plugin_capabilities(
     from astrbot.core.skills.skill_manager import SkillManager
     from astrbot.core.star.agent_capabilities import filter_skills, filter_tools
 
-    registered = context.get_llm_tool_manager().get_full_tool_set()
+    registered = context.get_llm_tool_manager().get_registered_tools()
     tools = ToolSet(tools=list(registered))
     tools = filter_tools(event, tools)
     settings = context.get_config(umo=event.unified_msg_origin).get(
@@ -385,7 +385,9 @@ def collect_plugin_capabilities(
     )
     try:
         skills = SkillManager().list_skills(
-            active_only=True, runtime=settings.get("computer_use_runtime", "none")
+            active_only=True,
+            runtime=settings.get("computer_use_runtime", "none"),
+            include_same_names=True,
         )
         skills = filter_skills(
             [skill for skill in skills if skill.source_type == "plugin"],

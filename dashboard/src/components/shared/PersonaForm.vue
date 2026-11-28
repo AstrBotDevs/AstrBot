@@ -72,7 +72,6 @@
                 <PersonaCapabilitiesEditor
                   v-model:tools="personaForm.tools"
                   v-model:skills="personaForm.skills"
-                  v-model:removed-unlisted-tools="removedUnlistedTools"
                   :available-tools="availableTools"
                   :available-skills="availableSkills"
                   :loading-tools="loadingTools"
@@ -219,7 +218,6 @@ const availableSkills = ref([]);
 const loadingTools = ref(false);
 const loadingSkills = ref(false);
 const existingPersonaIds = ref([]);
-const removedUnlistedTools = ref([]);
 const personaForm = reactive({
   persona_id: "",
   system_prompt: "",
@@ -254,7 +252,6 @@ const systemPromptRules = computed(() => [
 ]);
 
 function initializeForm(persona = null) {
-  removedUnlistedTools.value = [];
   Object.assign(personaForm, {
     persona_id: persona?.persona_id || "",
     system_prompt: persona?.system_prompt || "",
@@ -298,7 +295,7 @@ async function loadSkills() {
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
       const skills = Array.isArray(payload) ? payload : payload.skills || [];
-      availableSkills.value = skills.filter((skill) => skill.active !== false);
+      availableSkills.value = skills;
     } else {
       availableSkills.value = [];
       emit("error", response.data?.message || "Failed to load skills");
@@ -340,8 +337,7 @@ async function savePersona() {
   const payload = {
     ...personaForm,
     begin_dialogs: [...personaForm.begin_dialogs],
-    tools:
-      personaForm.tools?.filter((name) => !removedUnlistedTools.value.includes(name)) ?? null,
+    tools: personaForm.tools === null ? null : [...personaForm.tools],
     skills: personaForm.skills === null ? null : [...personaForm.skills],
   };
   try {

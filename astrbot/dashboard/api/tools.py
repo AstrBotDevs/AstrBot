@@ -110,9 +110,12 @@ async def _toggle_tool(
     tool_id: str,
     enabled: bool,
     service: ToolsService,
+    resource_key: str | None = None,
 ):
     return await _run(
-        lambda: service.toggle_tool({"name": tool_id, "activate": enabled}),
+        lambda: service.toggle_tool(
+            {"name": tool_id, "activate": enabled, "resource_key": resource_key}
+        ),
         result_as_message=True,
     )
 
@@ -188,11 +191,12 @@ async def list_tools(
 @router.delete("/tools/saved")
 async def delete_saved_tool_settings(
     tool_name: str = Query(min_length=1),
+    resource_key: str | None = None,
     _auth: AuthContext = Depends(require_tool_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.delete_unregistered_tool_settings(tool_name),
+        lambda: service.delete_unregistered_tool_settings(tool_name, resource_key),
         result_as_message=True,
     )
 
@@ -204,7 +208,7 @@ async def set_tool_enabled(
     _auth: AuthContext = Depends(require_tool_scope),
     service: ToolsService = Depends(get_service),
 ):
-    return await _toggle_tool(tool_id, payload.enabled, service)
+    return await _toggle_tool(tool_id, payload.enabled, service, payload.resource_key)
 
 
 @router.patch("/tools/{tool_id:path}/permission")
@@ -216,7 +220,11 @@ async def set_tool_permission(
 ):
     return await _run(
         lambda: service.update_tool_permission(
-            {"name": tool_id, "permission": payload.permission}
+            {
+                "name": tool_id,
+                "permission": payload.permission,
+                "resource_key": payload.resource_key,
+            }
         ),
         result_as_message=True,
     )
