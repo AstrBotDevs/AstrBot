@@ -23,6 +23,7 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    is_recoverable_image_error,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
@@ -472,17 +473,34 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("Text content is empty, added a space as placeholder.")
             return types.Part.from_text(text=content_a)
 
-        async def resolve_image_url(image_url_dict: dict) -> tuple[bytes, str]:
+        async def resolve_image_url(image_url_dict: dict) -> tuple[bytes, str] | None:
             url = image_url_dict["url"]
-            image_data = await resolve_media_ref_to_base64_data(
-                url,
-                media_type="image",
-                strict=True,
-            )
-            if image_data is None:
-                raise ValueError(
-                    f"Failed to resolve Gemini history image: {describe_media_ref(url)}"
+            try:
+                image_data = await resolve_media_ref_to_base64_data(
+                    url,
+                    media_type="image",
+                    strict=True,
                 )
+            except Exception as exc:
+                if not is_recoverable_image_error(exc):
+                    raise
+                # Strict resolution exposes the cause. A declared-recoverable
+                # image error drops only this image, not the whole request.
+                logger.warning(
+                    "Conversation payload image is unavailable (%s): %s",
+                    type(exc).__name__,
+                    describe_media_ref(url),
+                )
+                return None
+            if image_data is None:
+                # Strict resolution raises instead of returning None today, so
+                # a future contract change must still skip the image rather
+                # than fail when the data is dereferenced below.
+                logger.warning(
+                    "Conversation payload image is unavailable (no data): %s",
+                    describe_media_ref(url),
+                )
+                return None
             return base64.b64decode(image_data.base64_data), image_data.mime_type
 
         async def process_audio_url(audio_url_dict: dict) -> types.Part:
@@ -532,7 +550,10 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             image_url = item["image_url"]
-                            data, mime_type = await resolve_image_url(image_url)
+                            resolved_image = await resolve_image_url(image_url)
+                            if resolved_image is None:
+                                continue
+                            data, mime_type = resolved_image
                             response = tool_responses.get(
                                 image_url.get("tool_result_index")
                             )
@@ -556,6 +577,14 @@ class ProviderGoogleGenAI(Provider):
                                 )
                         elif item["type"] == "audio_url":
                             parts.append(await process_audio_url(item["audio_url"]))
+                    if not parts and not (
+                        gemini_contents
+                        and isinstance(gemini_contents[-1], types.UserContent)
+                        and gemini_contents[-1].parts
+                    ):
+                        # An image-only turn whose image was skipped still needs
+                        # a non-empty UserContent for a valid request.
+                        parts = [types.Part.from_text(text=" ")]
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
