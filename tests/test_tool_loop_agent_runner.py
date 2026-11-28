@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import os
 import sys
 from pathlib import Path
@@ -3151,3 +3152,168 @@ async def test_running_tool_returns_its_real_result_before_steering(
     assert len(finished) == 1 and finished[0].status == "completed"
     assert finished[0].structured_result is None
     wakeup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mutating_tool_list_argument_preserves_recorded_action_and_hooks():
+    """In-place mutation of nested tool arguments must not erase recorded events or hooks."""
+    from mcp.types import CallToolResult, TextContent
+
+    order_rows = [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]
+    archived: list[dict[str, Any]] = []
+
+    async def archive_order(event, lines):
+        while lines:
+            archived.append(lines.pop(0))
+        return "Archived"
+
+    tool = FunctionTool(
+        name="archive_order",
+        description="Consume an order queue and archive its rows.",
+        parameters={
+            "type": "object",
+            "properties": {"lines": {"type": "array"}},
+            "required": ["lines"],
+        },
+        handler=archive_order,
+    )
+
+    class OrderProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    tools_call_name=["archive_order"],
+                    tools_call_args=[{"lines": order_rows}],
+                    tools_call_ids=["call_order_1"],
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            return LLMResponse(
+                role="assistant",
+                completion_text="Saved PO-1042",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    class MutatingExecutor:
+        @classmethod
+        async def execute(cls, tool, run_context, **tool_args):
+            res = await tool.handler(None, **tool_args)
+            yield CallToolResult(content=[TextContent(type="text", text=res)])
+
+    recorded_on_end: list[dict[str, Any]] = []
+
+    class CaptureHooks(BaseAgentRunHooks):
+        async def on_tool_end(self, run_context, tool, tool_args, tool_result):
+            recorded_on_end.append(tool_args)
+
+    req = ProviderRequest(
+        prompt="Archive order PO-1042",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=OrderProvider(),
+        request=req,
+        run_context=ContextWrapper(context=SimpleNamespace()),
+        tool_executor=MutatingExecutor,
+        agent_hooks=CaptureHooks(),
+        streaming=False,
+    )
+
+    events = await collect_events(runner.step_until_done(3))
+
+    assert archived == [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]
+    assert order_rows == [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]
+
+    tool_started = next(e for e in events if e.type == "tool.started")
+    assert tool_started.arguments == {
+        "lines": [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]
+    }
+    assert recorded_on_end == [
+        {"lines": [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_start_hook_nested_mutation_does_not_alter_recorded_tool_call():
+    """A tool-start hook editing nested arguments must not rewrite the model's tool call."""
+    from mcp.types import CallToolResult, TextContent
+
+    order_rows = [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]
+    executed: list[list[dict[str, Any]]] = []
+
+    async def archive_order(event, lines):
+        executed.append(copy.deepcopy(lines))
+        return "Archived"
+
+    tool = FunctionTool(
+        name="archive_order",
+        description="Archive order rows.",
+        parameters={
+            "type": "object",
+            "properties": {"lines": {"type": "array"}},
+            "required": ["lines"],
+        },
+        handler=archive_order,
+    )
+
+    class OrderProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    tools_call_name=["archive_order"],
+                    tools_call_args=[{"lines": order_rows}],
+                    tools_call_ids=["call_order_1"],
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            return LLMResponse(
+                role="assistant",
+                completion_text="Saved PO-1042",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    class Executor:
+        @classmethod
+        async def execute(cls, tool, run_context, **tool_args):
+            res = await tool.handler(None, **tool_args)
+            yield CallToolResult(content=[TextContent(type="text", text=res)])
+
+    recorded_on_end: list[dict[str, Any]] = []
+
+    class NormalizingHooks(BaseAgentRunHooks):
+        async def on_tool_start(self, run_context, tool, tool_args):
+            tool_args["lines"][0]["sku"] = "paper-a4"
+
+        async def on_tool_end(self, run_context, tool, tool_args, tool_result):
+            recorded_on_end.append(copy.deepcopy(tool_args))
+
+    req = ProviderRequest(
+        prompt="Archive order PO-1042",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=OrderProvider(),
+        request=req,
+        run_context=ContextWrapper(context=SimpleNamespace()),
+        tool_executor=Executor,
+        agent_hooks=NormalizingHooks(),
+        streaming=False,
+    )
+
+    await collect_events(runner.step_until_done(3))
+
+    # The hook still shapes the executed call, as top-level edits already do.
+    assert executed == [[{"reference": "PO-1042", "sku": "paper-a4", "cartons": 12}]]
+    # The model's recorded tool call and the end hook keep the original arguments.
+    assert order_rows == [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]
+    assert recorded_on_end == [
+        {"lines": [{"reference": "PO-1042", "sku": "PAPER-A4", "cartons": 12}]}
+    ]

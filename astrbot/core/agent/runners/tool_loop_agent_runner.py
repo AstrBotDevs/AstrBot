@@ -1788,6 +1788,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
 
+                # Keep hook edits local to execution and preserve the recorded call.
+                valid_params = copy.deepcopy(valid_params)
+
                 try:
                     await self.agent_hooks.on_tool_start(
                         self.run_context,
@@ -2124,7 +2127,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         try:
             executor = self._iter_tool_executor_results(
                 self.tool_executor.execute(
-                    tool=tool, run_context=self.run_context, **arguments
+                    tool=tool, run_context=self.run_context, **copy.deepcopy(arguments)
                 )
             )
             async for item in executor:
