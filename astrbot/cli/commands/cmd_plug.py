@@ -192,20 +192,36 @@ def install(name: str | None, local_path: Path | None, proxy: str | None) -> Non
 def remove(name: str) -> None:
     """Uninstall a plugin"""
     base_path = _get_data_path()
-    plugins = build_plug_list(base_path / "plugins")
+    plugins_dir = base_path / "plugins"
+    plugins = build_plug_list(plugins_dir)
     plugin = next((p for p in plugins if p["name"] == name), None)
 
-    if not plugin or not plugin.get("local_path"):
-        raise click.ClickException(f"Plugin {name} does not exist or is not installed")
+    plugin_path = (
+        Path(plugin["local_path"]) if plugin and plugin.get("local_path") else None
+    )
+    if plugin_path is None and plugins_dir.is_dir():
+        # Stale editable links have no readable metadata. Match direct entries only.
+        plugin_path = next(
+            (
+                entry
+                for entry in plugins_dir.iterdir()
+                if entry.name == name and entry.is_symlink() and not entry.exists()
+            ),
+            None,
+        )
 
-    plugin_path = plugin["local_path"]
+    if plugin_path is None:
+        raise click.ClickException(f"Plugin {name} does not exist or is not installed")
 
     click.confirm(
         f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True
     )
 
     try:
-        shutil.rmtree(plugin_path)
+        if plugin_path.is_symlink():
+            plugin_path.unlink()
+        else:
+            shutil.rmtree(plugin_path)
         click.echo(f"Plugin {name} has been uninstalled")
     except Exception as e:
         raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")

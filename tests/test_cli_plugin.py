@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import httpx
 import pytest
 from click import ClickException
 from click.testing import CliRunner
@@ -106,6 +107,137 @@ def test_plugin_install_editable_rejects_existing_plugin(
 
     assert result.exit_code != 0
     assert "already exists" in result.output
+
+
+@pytest.mark.parametrize("editable", [False, True], ids=["copy", "editable"])
+def test_remove_local_plugin_preserves_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    editable: bool,
+) -> None:
+    if editable:
+        request.getfixturevalue("require_symlink")
+    name = "astrbot_plugin_local_demo"
+    source = tmp_path / "source-plugin"
+    _write_astrbot_root(tmp_path)
+    _write_plugin(source, name)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        httpx.Client,
+        "get",
+        lambda self, url: httpx.Response(
+            200, request=httpx.Request("GET", url), json={}
+        ),
+    )
+
+    runner = CliRunner()
+    install_args = ["install", "-e"] if editable else ["install"]
+    installed = runner.invoke(plug, [*install_args, str(source)])
+    assert installed.exit_code == 0, installed.output
+
+    removed = runner.invoke(plug, ["remove", name], input="y\n")
+    assert removed.exit_code == 0, removed.output
+    assert not (tmp_path / "data" / "plugins" / name).exists()
+    assert (source / "main.py").read_text(encoding="utf-8") == "PLUGIN_LOADED = True\n"
+
+
+@pytest.mark.parametrize("source_state", ["moved", "deleted"])
+def test_remove_stale_editable_plugin_allows_reinstall(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    require_symlink: Path,
+    source_state: str,
+) -> None:
+    name = "astrbot_plugin_local_demo"
+    source = tmp_path / "source-plugin"
+    _write_astrbot_root(tmp_path)
+    _write_plugin(source, name)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        httpx.Client,
+        "get",
+        lambda self, url: httpx.Response(
+            200, request=httpx.Request("GET", url), json={name: {}}
+        ),
+    )
+
+    runner = CliRunner()
+    installed = runner.invoke(plug, ["install", "-e", str(source)])
+    assert installed.exit_code == 0, installed.output
+    target = tmp_path / "data" / "plugins" / name
+    if source_state == "moved":
+        source = source.rename(tmp_path / "moved-source")
+    else:
+        (source / "main.py").unlink()
+        (source / "metadata.yaml").unlink()
+        source.rmdir()
+    assert target.is_symlink() and not target.exists()
+
+    cancelled = runner.invoke(plug, ["remove", name], input="n\n")
+    assert cancelled.exit_code != 0
+    assert "Aborted" in cancelled.output
+    assert target.is_symlink()
+
+    removed = runner.invoke(plug, ["remove", name], input="y\n")
+    assert removed.exit_code == 0, removed.output
+    assert not target.is_symlink()
+    if source_state == "deleted":
+        _write_plugin(source, name)
+    assert (source / "main.py").read_text(encoding="utf-8") == "PLUGIN_LOADED = True\n"
+    reinstalled = runner.invoke(plug, ["install", "-e", str(source)])
+    assert reinstalled.exit_code == 0, reinstalled.output
+    assert target.is_symlink()
+    assert target.resolve() == source
+
+
+@pytest.mark.parametrize(
+    "absolute", [False, True], ids=["parent-path", "absolute-path"]
+)
+def test_remove_stale_plugin_rejects_paths_outside_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    require_symlink: Path,
+    absolute: bool,
+) -> None:
+    _write_astrbot_root(tmp_path)
+    outside = tmp_path / "data" / "outside"
+    outside.symlink_to(tmp_path / "missing-source", target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("astrbot.cli.commands.cmd_plug.build_plug_list", lambda _: [])
+
+    name = str(outside) if absolute else "../outside"
+    result = CliRunner().invoke(plug, ["remove", name], input="y\n")
+
+    assert result.exit_code != 0
+    assert "does not exist or is not installed" in result.output
+    assert outside.is_symlink()
+
+
+@pytest.mark.parametrize("symlink", [False, True], ids=["directory", "live-symlink"])
+def test_remove_does_not_delete_unrecognized_live_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    symlink: bool,
+) -> None:
+    if symlink:
+        request.getfixturevalue("require_symlink")
+    _write_astrbot_root(tmp_path)
+    target = tmp_path / "data" / "plugins" / "unrecognized"
+    source = tmp_path / "source" if symlink else target
+    source.mkdir()
+    (source / "keep.txt").write_text("keep\n", encoding="utf-8")
+    if symlink:
+        target.symlink_to(source, target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("astrbot.cli.commands.cmd_plug.build_plug_list", lambda _: [])
+
+    result = CliRunner().invoke(plug, ["remove", target.name], input="y\n")
+
+    assert result.exit_code != 0
+    assert "does not exist or is not installed" in result.output
+    assert (target / "keep.txt").read_text(encoding="utf-8") == "keep\n"
 
 
 def test_plugin_install_rejects_plugin_name_with_path_separator(
