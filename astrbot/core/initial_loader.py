@@ -14,6 +14,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.dashboard.server import AstrBotDashboard
 
+# docker stop 默认 10 秒后发送 SIGKILL，两段超时之和需小于它
+STOP_TIMEOUT = 5
+DASHBOARD_SHUTDOWN_TIMEOUT = 3
+
 
 class InitialLoader:
     """AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。"""
@@ -68,15 +72,39 @@ class InitialLoader:
                 # 启动核心任务和仪表板服务器
                 task = asyncio.gather(core_task, coro)
             else:
-                task = core_task
+                task = asyncio.ensure_future(core_task)
             try:
-                await task  # 整个AstrBot在这里运行
+                # shield: 收到 SIGTERM/Ctrl+C 时不直接取消 Hypercorn，
+                # 而是在下面通过 dashboard_shutdown_event 让它优雅关闭
+                await asyncio.shield(task)  # 整个AstrBot在这里运行
             except asyncio.CancelledError:
                 logger.info("🌈 Shutting down AstrBot...")
                 if sigterm_installed:
                     # 退出过程中忽略重复的 SIGTERM，避免打断 stop()
                     loop.add_signal_handler(signal.SIGTERM, lambda: None)
-                await core_lifecycle.stop()
+                stop_task = asyncio.create_task(core_lifecycle.stop())
+                try:
+                    # 不用 wait_for：它会等待被取消的 stop() 结束，卡住时仍会挂起
+                    await asyncio.wait({stop_task}, timeout=STOP_TIMEOUT)
+                    if not stop_task.done():
+                        logger.error(
+                            f"Stopping AstrBot timed out after {STOP_TIMEOUT}s."
+                        )
+                        stop_task.cancel()
+                    elif exc := stop_task.exception():
+                        logger.error(
+                            "Failed to stop AstrBot: "
+                            + "".join(traceback.format_exception(exc))
+                        )
+                    # stop() 出错或超时时也要关闭 WebUI 并释放数据库
+                    core_lifecycle.dashboard_shutdown_event.set()
+                    await asyncio.wait({task}, timeout=DASHBOARD_SHUTDOWN_TIMEOUT)
+                    if not task.done():
+                        task.cancel()
+                    elif not task.cancelled() and (exc := task.exception()):
+                        logger.error(f"AstrBot exited with an error: {exc!r}")
+                finally:
+                    await self.db.engine.dispose()
         finally:
             if sigterm_installed:
                 loop.remove_signal_handler(signal.SIGTERM)
