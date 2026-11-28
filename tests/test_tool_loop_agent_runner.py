@@ -606,11 +606,20 @@ async def test_max_step_final_request_includes_limit_prompt(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("structured", [None, {"total": 3}, {}])
 async def test_tool_loop_next_request_includes_tool_result(
-    runner, provider_request, mock_tool_executor, mock_hooks
+    runner, provider_request, mock_tool_executor, mock_hooks, structured
 ):
-    """Tool-loop provider contexts must be recomputed after tool results append."""
+    """Tool-loop provider contexts keep the result and its call ID."""
     provider = CapturingToolLoopProvider("test_tool")
+    if structured is not None:
+        from mcp.types import CallToolResult
+
+        class StructuredExecutor:
+            async def execute(self, tool, run_context, **tool_args):
+                yield CallToolResult(content=[], structuredContent=structured)
+
+        mock_tool_executor = StructuredExecutor()
 
     await runner.reset(
         provider=provider,
@@ -634,7 +643,12 @@ async def test_tool_loop_next_request_includes_tool_result(
     tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
-    assert "工具执行结果" in tool_messages[0].content
+    if structured is None:
+        assert tool_messages[0].content == "工具执行结果"
+    else:
+        import json
+
+        assert json.loads(tool_messages[0].content) == structured
 
 
 @pytest.mark.asyncio
