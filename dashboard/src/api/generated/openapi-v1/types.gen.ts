@@ -239,6 +239,10 @@ export type ConfigRouteUpsertRequest = {
 
 export type ConversationBatchDeleteRequest = {
     conversations: Array<ConversationRef>;
+    /**
+     * Delete alias and sender metadata for the sessions when no other conversation still references them.
+     */
+    cleanup_metadata?: boolean;
 };
 
 export type ConversationExportRequest = {
@@ -3507,6 +3511,10 @@ export type DeleteConversationData = {
         conversation_id: string;
     };
     query: {
+        /**
+         * Delete alias and sender metadata for the session when no other conversation still references it.
+         */
+        cleanup_metadata?: boolean;
         user_id: string;
     };
 };

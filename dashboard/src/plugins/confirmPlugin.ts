@@ -11,7 +11,11 @@ export default {
     vNode.appContext = app._context;
     render(vNode, mountNode);
 
-    const confirm = (options: { title?: string; message?: string }) => {
+    const confirm = (options: {
+      title?: string;
+      message?: string;
+      checkbox?: { label: string; hint?: string };
+    }) => {
       return new Promise<boolean>((resolve) => {
         vNode.component?.exposed?.open(options).then(resolve); // ✅ 确保返回 `Promise<boolean>`
       });

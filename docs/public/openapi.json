@@ -6610,6 +6610,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "cleanup_metadata",
+            "in": "query",
+            "required": false,
+            "description": "Delete alias and sender metadata for the session when no other conversation still references it.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -8608,6 +8618,11 @@
             "items": {
               "$ref": "#/components/schemas/ConversationRef"
             }
+          },
+          "cleanup_metadata": {
+            "type": "boolean",
+            "default": false,
+            "description": "Delete alias and sender metadata for the sessions when no other conversation still references them."
           }
         },
         "additionalProperties": false

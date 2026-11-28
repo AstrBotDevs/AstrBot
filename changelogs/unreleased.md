@@ -17,6 +17,7 @@
 - Audio: Outbound voice messages no longer transcode MP3 payloads to WAV, which inflated base64 bodies by roughly 4.4x for long audio and could exceed platform frame limits; Satori and WebChat now derive the MIME type and file extension from the actual payload.
 
 - Session waiters now wake their timeout task immediately when completed early, avoiding stale asyncio tasks for the remainder of the configured timeout.
+- Add an optional cleanup checkbox to the single and batch conversation deletion dialogs in Data & Logs → Conversations. When selected, alias and sender metadata is removed only for sessions with no remaining conversations; off by default, and metadata is retained while other conversations still reference the session. Expose the same choice through `cleanup_metadata` on the delete APIs.
 
 - 「插件 → 管理行为 → 函数工具」现在只列出插件工具。Agent 运行时工具由配置文件的 AI 功能设置控制，MCP 工具可在「插件 → MCP」查看。
 - Extensions → Handlers → Function Tools now lists plugin tools. Configure Agent runtime tools in the profile's AI capability settings and view MCP tools under Extensions → MCP Servers.
