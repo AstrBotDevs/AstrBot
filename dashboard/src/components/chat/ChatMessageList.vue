@@ -358,18 +358,29 @@
             <span v-if="isUserMessage(msg) && msg.created_at">{{
               formatTime(msg.created_at)
             }}</span>
+            <!-- A disabled button cannot take focus, so the span does instead
+                 and carries the reason, for keyboard users to reach the hint. -->
             <span
               v-if="canEditMessage(msg, msgIndex)"
-              :title="
+              v-bind="
                 msg.can_edit === false
-                  ? tm(
-                      `history.${
-                        msg.edit_unavailable_reason || 'context_unavailable'
-                      }`,
-                    )
-                  : tm('history.edit')
+                  ? {
+                      tabindex: 0,
+                      role: 'button',
+                      'aria-disabled': 'true',
+                      'aria-label': `${tm('messageActions.edit.title')}: ${editUnavailableReason(msg)}`,
+                    }
+                  : {}
               "
             >
+              <ActionTooltip
+                :title="tm('messageActions.edit.title')"
+                :description="
+                  msg.can_edit === false
+                    ? editUnavailableReason(msg)
+                    : tm('messageActions.edit.description')
+                "
+              />
               <v-btn
                 icon
                 size="x-small"
@@ -377,11 +388,7 @@
                 :disabled="msg.can_edit === false"
                 :aria-label="
                   msg.can_edit === false
-                    ? tm(
-                        `history.${
-                          msg.edit_unavailable_reason || 'context_unavailable'
-                        }`,
-                      )
+                    ? editUnavailableReason(msg)
                     : tm('history.edit')
                 "
                 @click="emit('openEdit', msg)"
@@ -409,9 +416,14 @@
               icon
               size="x-small"
               variant="text"
+              :aria-label="tm('actions.copy')"
               @click="copyMessage(msg)"
             >
               <Copy :size="14" :stroke-width="2" />
+              <ActionTooltip
+                :title="tm('messageActions.copy.title')"
+                :description="tm('messageActions.copy.description')"
+              />
             </v-btn>
             <v-menu
               v-if="messageContent(msg).agentStats"
@@ -419,8 +431,18 @@
               transition="none"
             >
               <template #activator="{ props: statsProps }">
-                <v-btn v-bind="statsProps" icon size="x-small" variant="text">
+                <v-btn
+                  v-bind="statsProps"
+                  icon
+                  size="x-small"
+                  variant="text"
+                  :aria-label="tm('messageActions.stats.title')"
+                >
                   <Info :size="14" :stroke-width="2" />
+                  <ActionTooltip
+                    :title="tm('messageActions.stats.title')"
+                    :description="tm('messageActions.stats.description')"
+                  />
                 </v-btn>
               </template>
               <v-card class="stats-card" elevation="4">
@@ -553,6 +575,7 @@ import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBl
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import ButtonActionRow from "@/components/chat/ButtonActionRow.vue";
+import ActionTooltip from "@/components/chat/message_list_comps/ActionTooltip.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -691,6 +714,10 @@ function isEditingMessage(message: ChatRecord) {
     message.id != null &&
     String(props.editingMessageId) === String(message.id)
   );
+}
+
+function editUnavailableReason(message: ChatRecord) {
+  return tm(`history.${message.edit_unavailable_reason || "context_unavailable"}`);
 }
 
 function canEditMessage(message: ChatRecord, _messageIndex: number) {
