@@ -37,6 +37,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.agent_output_content import content_from_chain
 from astrbot.core.exceptions import ConversationPersistenceError, EmptyModelOutputError
+from astrbot.core.message.components import Plain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -146,6 +147,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "If unfinished, tell the user they can simply ask you to continue with a fresh "
         "step budget. Optionally, they can raise the tool-call round limit in "
         "AstrBot WebUI to allow longer runs."
+    )
+    EMPTY_FINAL_REPAIR_PROMPT = (
+        "[SYSTEM NOTICE: Empty final response] "
+        "Your previous reply had no user-visible content, and nothing reached the "
+        "user this turn. Give the final answer now, based on the tool results and "
+        "context above. Do not call tools unless one is strictly necessary."
     )
     SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
         "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
@@ -366,6 +373,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._step_budget_max: int | None = None
         self._step_budget_used = 0
         self._step_budget_notified: set[int] = set()
+        # Per-run guards for the empty-final repair: repair at most once, and
+        # never when the model already delivered via send_message_to_user.
+        self._empty_final_repaired = False
+        self._delivered_via_message_tool = False
 
         self.tool_schema_mode = tool_schema_mode
         self._light_tool_set: ToolSet | None = None
@@ -1367,6 +1378,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
+            # An empty final answer is only expected when the model already
+            # delivered its reply through send_message_to_user in this run.
+            # Otherwise (empty completion, or reasoning with no answer text) the
+            # user would see silence, so ask for the answer once before finishing.
+            has_media = bool(llm_resp.result_chain) and any(
+                not isinstance(comp, Plain) for comp in llm_resp.result_chain.chain
+            )
+            if (
+                not (llm_resp.completion_text or "").strip()
+                and not has_media
+                and not self._empty_final_repaired
+                and not self._delivered_via_message_tool
+            ):
+                self._empty_final_repaired = True
+                logger.warning(
+                    "LLM finished with an empty final response; asking for the answer once more."
+                )
+                self.run_context.messages.append(
+                    Message(role="user", content=self.EMPTY_FINAL_REPAIR_PROMPT)
+                )
+                return
             await self._complete_with_assistant_response(llm_resp)
 
         content = []
@@ -1546,9 +1578,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             limit_message._turn_continuation = True
             await self._append_context_messages([limit_message])
             # 再执行最后一步
+            repair_armed = not self._empty_final_repaired
             async with aclosing(self.step()) as responses:
                 async for resp in responses:
                     yield resp
+            # The forced step does not finish on an empty final; it schedules
+            # the one-shot repair instead. Drive that single repair step so
+            # the run actually completes instead of staying RUNNING forever.
+            if not self.done() and repair_armed and self._empty_final_repaired:
+                async with aclosing(self.step()) as responses:
+                    async for resp in responses:
+                        yield resp
 
     async def prepare_tool_result(
         self, *, result: CallToolResult, tool_call_id: str, tool_name: str
@@ -1894,6 +1934,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             if len(tool_call_result_blocks) > tool_result_blocks_start:
                 tool_result_content = str(tool_call_result_blocks[-1].content)
+                # A successful send_message_to_user means the reply already
+                # reached the user this run; a later empty final is intentional.
+                # It only counts when aimed at this run's own session: a
+                # proactive send to another session leaves the current user
+                # waiting. Unverifiable target counts as elsewhere, so the
+                # empty-final repair still fires rather than risking silence.
+                if func_tool_name == "send_message_to_user" and not (
+                    tool_result_content.startswith("error:")
+                ):
+                    target_session = (func_tool_args or {}).get("session")
+                    if target_session:
+                        event = getattr(
+                            getattr(self.run_context, "context", None), "event", None
+                        )
+                        current_session = getattr(event, "unified_msg_origin", None)
+                        target_session = str(target_session)
+                        if current_session and (
+                            target_session == str(current_session)
+                            or (
+                                ":" not in target_session
+                                and target_session
+                                == str(current_session).rsplit(":", 1)[-1]
+                            )
+                        ):
+                            self._delivered_via_message_tool = True
+                    else:
+                        # No session argument: the tool targets the current one.
+                        self._delivered_via_message_tool = True
                 logger.info(f"Tool `{func_tool_name}` Result: {tool_result_content}")
 
         # 处理函数调用响应
@@ -1924,8 +1992,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @staticmethod
     def _has_meaningful_assistant_reply(llm_resp: LLMResponse) -> bool:
-        text = (llm_resp.completion_text or "").strip()
-        return bool(text)
+        if (llm_resp.completion_text or "").strip():
+            return True
+        # A media-only reply is a real answer too, same as in the final path.
+        chain = llm_resp.result_chain
+        return bool(chain) and any(not isinstance(comp, Plain) for comp in chain.chain)
 
     def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
         """Build a subset of tools from the given tool set based on tool names."""
