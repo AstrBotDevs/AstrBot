@@ -25,7 +25,7 @@ Always reference these instructions first and fallback to search or bash command
 
 ### Testing
 - Unjustified test diffs get deleted in review.
-- **Default: no new tests** — nothing under `tests/` unless the task explicitly asks for tests.
+- **Default: no new tests** — do not add tests unless the task explicitly asks for tests.
 - **Scratch verification is fine; committing it is NOT**: write a throwaway test, run it, delete it, paste the output in the PR.
 - **Bug fix: at most one fast, deterministic regression test** (no network, no sleeps, no full app boot). Startup / dashboard / platform bugs: `uv run scripts/smoke_startup_check.py` + manual steps in the PR.
 - **Feature: at most three behavioral tests** asserting the new user-visible behavior (not implementation details), justified in the PR description.

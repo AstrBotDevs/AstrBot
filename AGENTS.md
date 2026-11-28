@@ -43,7 +43,7 @@ ruff check .
 
 Every new test taxes every future PR, so unjustified test diffs get deleted in review.
 
-- **Default: no new tests** — nothing under `tests/` unless the task explicitly asks for tests.
+- **Default: no new tests** — do not add tests unless the task explicitly asks for tests.
 - **Scratch verification is fine; committing it is NOT.** Need to prove your change? Write a throwaway test, run it, delete it, paste the output in the PR.
 - **Bug fix: at most one fast, deterministic regression test** (no network, no sleeps, no full app boot). Startup / dashboard / platform bugs: verify with `uv run scripts/smoke_startup_check.py` plus manual steps in the PR.
 - **Feature: at most three behavioral tests** asserting the new user-visible behavior (not implementation details), justified in the PR description.
