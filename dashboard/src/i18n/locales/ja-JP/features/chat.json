@@ -98,7 +98,8 @@
     "interrupted": "中断（結果不明）",
     "interruptedDetail": "結果を受け取る前に実行が中断されました（停止・タイムアウト・エラー）。操作が反映されている可能性があるため、再実行の前に確認してください。",
     "done": "完了",
-    "running": "実行中"
+    "running": "実行中",
+    "awaitingApproval": "承認待ち"
   },
   "thread": {
     "title": "分岐",
@@ -319,5 +320,33 @@
     },
     "configureModels": "モデルを設定",
     "details": "詳細を表示"
+  },
+  "actionCard": {
+    "approved": "許可済み",
+    "rejected": "承認されませんでした",
+    "showDetails": "詳細を表示",
+    "hideDetails": "詳細を隠す",
+    "chosen": "選択済み：{label}",
+    "expired": "期限切れ"
+  },
+  "permissionMode": {
+    "title": "権限",
+    "workspace": {
+      "label": "ワークスペース",
+      "description": "この会話のワークスペースのみ読み書きし、shell と Python はサンドボックスで実行（確認なし）"
+    },
+    "workspace_no_ask": {
+      "label": "ワークスペース · 確認なし",
+      "description": "引き続きこの会話のワークスペースのみ。この会話では確認しません。もう一度「ワークスペース」を選ぶと確認を再開します"
+    },
+    "ask": {
+      "label": "承認を求める",
+      "description": "設定どおりのアクセス。リスト内のツールは毎回確認"
+    },
+    "full": {
+      "label": "フルアクセス",
+      "description": "設定どおりのアクセス。どのツールも確認しない"
+    },
+    "saveFailed": "権限モードを適用できませんでした：{error}"
   }
 }

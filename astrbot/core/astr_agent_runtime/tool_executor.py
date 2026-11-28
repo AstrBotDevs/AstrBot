@@ -19,6 +19,7 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent_wakeup import wake_main_agent
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.astr_agent_runtime.tool_approval import check_tool_approval
 from astrbot.core.astr_agent_runtime.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -150,6 +151,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        denied = await check_tool_approval(tool, run_context, tool_args)
+        if denied:
+            yield mcp.types.CallToolResult(
+                content=[mcp.types.TextContent(type="text", text=denied)]
+            )
+            return
+
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             # Caller-owned outputs must settle before the turn's stream closes.

@@ -26,6 +26,7 @@ async def wake_main_agent(
     agent_session: "AgentSessionRef | None" = None,
     tool_result: "tuple[str, CallToolResult] | None" = None,
     source_event: "AstrMessageEvent | None" = None,
+    permission_mode: str | None = None,
 ) -> None:
     """Queue a triggered user turn without waiting for agent execution.
 
@@ -40,6 +41,8 @@ async def wake_main_agent(
         agent_session: Original runtime conversation when selection must not drift.
         tool_result: Tool name and typed output, kept separate from trigger instructions.
         source_event: Original caller identity and restrictions for background work.
+        permission_mode: ChatUI permission mode the run keeps from the
+            conversation that scheduled it ("workspace" narrows Local access).
 
     Raises:
         ValueError: If the source or target session is invalid,
@@ -67,4 +70,6 @@ async def wake_main_agent(
     )
     if stop_signal is not None:
         event.set_extra("_background_stop_signal", stop_signal)
+    if permission_mode:
+        event.set_extra("permission_mode", permission_mode)
     await ctx.get_event_queue().put(event)

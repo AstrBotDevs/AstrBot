@@ -16,6 +16,10 @@
         <TriangleAlert :size="14" aria-hidden="true" />
         {{ tm("toolStatus.interrupted") }}
       </span>
+      <span v-else-if="awaitingApproval" class="tool-call-interrupted awaiting">
+        <v-icon size="14">mdi-hand-back-right-outline</v-icon>
+        {{ tm("toolStatus.awaitingApproval") }}
+      </span>
       <ChevronRight
         :size="22"
         class="tool-call-expand-icon"
@@ -88,9 +92,15 @@ let timer = null;
 const interrupted = computed(
   () => !props.toolCall.finished_ts && props.toolCall.phase === "unknown",
 );
+// An approval card for this call is open (see useMessages).
+const awaitingApproval = computed(
+  () =>
+    !props.toolCall.finished_ts && props.toolCall.phase === "awaiting_approval",
+);
 
 const elapsedTime = computed(() => {
-  if (props.toolCall.finished_ts || interrupted.value) return "";
+  if (props.toolCall.finished_ts || interrupted.value || awaitingApproval.value)
+    return "";
   const startTime = Number(props.toolCall.ts);
   if (!Number.isFinite(startTime) || startTime <= 0) return "";
   return formatDuration(currentTime.value - startTime);
@@ -152,9 +162,13 @@ const updateTime = () => {
   currentTime.value = Date.now() / 1000;
 };
 
-// Tick only while the call runs; it can finish or be interrupted after mount.
+// Tick only while the call runs; it can wait for approval, finish or be
+// interrupted after mount.
 watch(
-  () => !props.toolCall.finished_ts && !interrupted.value,
+  () =>
+    !props.toolCall.finished_ts &&
+    !interrupted.value &&
+    !awaitingApproval.value,
   (running) => {
     if (timer !== null) clearInterval(timer);
     timer = null;
@@ -235,6 +249,10 @@ onUnmounted(() => {
   flex-shrink: 0;
   font-size: 12px;
   color: rgb(var(--v-theme-warning));
+}
+
+.tool-call-interrupted.awaiting {
+  color: rgb(var(--v-theme-info));
 }
 
 .tool-call-interrupted-detail {

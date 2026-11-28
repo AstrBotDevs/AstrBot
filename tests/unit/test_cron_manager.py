@@ -761,6 +761,36 @@ class TestRunActiveAgentJob:
         assert "Continue the scheduled task." in kwargs["user_prompt"]
         assert kwargs["user_prompt"].startswith("<system_reminder>\n")
         assert kwargs["user_prompt"].endswith("\n</system_reminder>")
+        assert kwargs["permission_mode"] is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("stored", "expected"), [("workspace", "workspace"), ("full", None)]
+    )
+    async def test_job_keeps_only_the_narrowing_chatui_mode(
+        self, cron_manager, sample_cron_job, mock_context, monkeypatch, stored, expected
+    ):
+        """A task from a "workspace" conversation runs with the same narrowing.
+
+        Args:
+            cron_manager: Scheduler under test.
+            sample_cron_job: Job carrying the stored mode.
+            mock_context: Services resolving the caller's permissions.
+            monkeypatch: Pytest patch manager.
+            stored: Mode stored in the job payload.
+            expected: Mode handed to the wakeup run.
+        """
+        wake = AsyncMock()
+        monkeypatch.setattr("astrbot.core.agent_wakeup.wake_main_agent", wake)
+        cron_manager.ctx = mock_context
+        sample_cron_job.payload = {
+            "session": "webchat:FriendMessage:room",
+            "permission_mode": stored,
+        }
+        await cron_manager._run_active_agent_job(
+            sample_cron_job, datetime(2026, 11, 1, tzinfo=timezone.utc)
+        )
+        assert wake.await_args.kwargs["permission_mode"] == expected
 
     """Tests for _run_basic_job method."""
 

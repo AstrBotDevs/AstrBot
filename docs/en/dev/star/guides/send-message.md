@@ -148,6 +148,17 @@ async def confirm(self, event: AstrMessageEvent):
 - `Button.UrlAction` opens a link without invoking a plugin callback and is unaffected by `action_timeout`. `fallback_text` is used on platforms without button support, rather than as an expiry notice.
 - `@filter.button_action()` without an ID matches all button callbacks. Use `event.get_button_interaction()` to access the `ButtonInteraction` event component.
 
+`ActionRow` has a few more optional fields. Only WebChat (ChatUI) uses them for now; other platforms ignore them:
+
+| Field | Purpose |
+| --- | --- |
+| `single_use` | Default `False`. `True` means the row needs one answer: after a click the row locks and shows "Chosen:" followed by the button label. |
+| `title` | Card heading. |
+| `detail` | Secondary text, collapsed by default behind "Show details". |
+| `tool_call_id` | ID of the tool call the row asks about. ChatUI marks that tool card as "Waiting for approval". |
+
+With `action_timeout` set, ChatUI shows the buttons as "Expired" once the deadline passes. The [tool approval](../../../use/tool-approval.md) card is built this way.
+
 ## Sending Video Messages
 
 ```python

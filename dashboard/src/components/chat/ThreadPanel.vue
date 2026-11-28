@@ -57,8 +57,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  readChatSessionPrefs,
+  writeChatSessionPref,
+} from "@/utils/chatSessionPrefs.mjs";
 import "@/components/chat/chatPanelTransition.css";
-import { nextTick, provide, ref, watch } from "vue";
+import { computed, nextTick, provide, ref, watch } from "vue";
 import { streamViewAction, viewActionKey, workbenchKey } from "@/utils/chatViews";
 import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
@@ -68,19 +72,18 @@ import {
   appendReasoningPart,
   buildChatRequestFlags,
   extractReasoningText,
-  finishToolCall,
   hasPlainText,
   markMessageStarted,
   normalizeMessageParts,
-  parseJsonSafe,
   payloadText,
-  upsertToolCall,
+  processToolStreamPayload,
   type ChatRecord,
   type MessagePart,
   type ChatThread,
 } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import { forgetChosenCallback } from "@/composables/useActionRowChoices";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -105,6 +108,24 @@ const draft = ref("");
 const sending = ref(false);
 const activeBotRecord = ref<ChatRecord | null>(null);
 const messagesEl = ref<HTMLElement | null>(null);
+// A thread has its own permission mode, stored under the thread's ID and
+// starting from the conversation's: "allow for this conversation" in a thread
+// switches only the thread, never the conversation it belongs to.
+const permissionMode = ref("ask");
+const approvalPermissionMode = computed({
+  get: () => permissionMode.value,
+  set: (mode: string) => {
+    permissionMode.value = mode;
+    if (props.thread) {
+      writeChatSessionPref(
+        props.thread.thread_id,
+        "permission_mode",
+        mode === "ask" ? "" : mode,
+      );
+    }
+  },
+});
+provide("approvalPermissionMode", approvalPermissionMode);
 
 provide(viewActionKey, (viewId, input) => {
   if (sending.value) return Promise.reject(new Error("Wait for the current reply to finish."));
@@ -134,6 +155,12 @@ watch(
   () => props.thread?.thread_id,
   (threadId) => {
     if (threadId) {
+      permissionMode.value = String(
+        readChatSessionPrefs(threadId).permission_mode ||
+          readChatSessionPrefs(props.thread?.parent_session_id || "")
+            .permission_mode ||
+          "ask",
+      );
       loadThread(threadId);
     } else {
       messages.value = [];
@@ -204,6 +231,10 @@ async function send() {
           locale: locale.value,
           selected_provider: selection.providerId,
           selected_model: selection.modelName,
+          // A thread uses the options of the conversation it belongs to,
+          // except for its own permission mode.
+          ...readChatSessionPrefs(props.thread.parent_session_id),
+          permission_mode: permissionMode.value,
         }),
         signal: abort.signal,
       },
@@ -228,7 +259,7 @@ async function handleButtonClick(payload: {
   message: ChatRecord;
   callbackData: string;
 }) {
-  if (!props.thread || sending.value || !payload.callbackData) return;
+  if (!props.thread || !payload.callbackData) return;
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const botRecord: ChatRecord = {
     id: `local-thread-button-bot-${messageId}`,
@@ -248,8 +279,13 @@ async function handleButtonClick(payload: {
     scrollToBottom();
   };
 
-  activeBotRecord.value = botRecord;
-  sending.value = true;
+  // An approval card can be answered while the thread reply still streams:
+  // that reply keeps owning the busy state.
+  const ownsStream = !sending.value;
+  if (ownsStream) {
+    activeBotRecord.value = botRecord;
+    sending.value = true;
+  }
   try {
     const response = await fetchWithAuth(
       chatApi.sendThreadMessageUrl(props.thread.thread_id),
@@ -283,9 +319,13 @@ async function handleButtonClick(payload: {
     showBotRecord();
     appendError(botRecord, error, "connection_error");
     console.error("Failed to send thread button interaction:", error);
+    // An undelivered choice unlocks its card for a retry.
+    forgetChosenCallback(payload.callbackData);
   } finally {
-    sending.value = false;
-    activeBotRecord.value = null;
+    if (ownsStream) {
+      sending.value = false;
+      activeBotRecord.value = null;
+    }
   }
 }
 
@@ -407,23 +447,12 @@ function processPayload(
     return;
   }
 
-  if (type === "end") {
-    markMessageStarted(botRecord);
-    return;
-  }
+  if (processToolStreamPayload(botRecord, type, chainType, data)) return;
 
   if (type === "plain") {
     markMessageStarted(botRecord);
     if (chainType === "reasoning") {
       appendReasoningPart(botRecord, payloadText(data));
-      return;
-    }
-    if (chainType === "tool_call") {
-      upsertToolCall(botRecord, parseJsonSafe(data));
-      return;
-    }
-    if (chainType === "tool_call_result") {
-      finishToolCall(botRecord, parseJsonSafe(data));
       return;
     }
     appendPlain(botRecord, payloadText(data), normalized.streaming !== false);

@@ -81,7 +81,7 @@ from ..message import (
 from ..output import OutputComponent, PlainOutput, ReasoningOutput
 from ..response import AgentResponse, AgentStats
 from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
+from ..tool_executor import CURRENT_TOOL_CALL_ID, BaseFunctionToolExecutor
 from .base import AgentState, BaseAgentRunner
 
 if sys.version_info >= (3, 12):
@@ -2121,6 +2121,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         self._tool_execution_started = True
         executor = None
+        call_token = CURRENT_TOOL_CALL_ID.set(call_id)
         try:
             executor = self._iter_tool_executor_results(
                 self.tool_executor.execute(
@@ -2178,6 +2179,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             error = RuntimeErrorInfo(code=type(exc).__name__, message=str(exc))
             raise
         finally:
+            CURRENT_TOOL_CALL_ID.reset(call_token)
             if executor is not None:
                 await self._close_executor(executor)
             if self._events.active:

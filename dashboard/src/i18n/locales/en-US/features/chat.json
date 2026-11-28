@@ -98,7 +98,8 @@
     "interrupted": "Interrupted, result unknown",
     "interruptedDetail": "Execution was interrupted (stopped, timed out or failed) before a result arrived. The action may have taken effect; check before retrying.",
     "done": "Done",
-    "running": "Running"
+    "running": "Running",
+    "awaitingApproval": "Waiting for approval"
   },
   "thread": {
     "title": "Thread",
@@ -319,5 +320,33 @@
     },
     "configureModels": "Configure models",
     "details": "View details"
+  },
+  "actionCard": {
+    "approved": "Allowed",
+    "rejected": "Not approved",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
+    "chosen": "Chosen: {label}",
+    "expired": "Expired"
+  },
+  "permissionMode": {
+    "title": "Permissions",
+    "workspace": {
+      "label": "Workspace",
+      "description": "Read and write only this conversation's workspace; shell and Python run sandboxed, without asking"
+    },
+    "workspace_no_ask": {
+      "label": "Workspace · not asking",
+      "description": "Still only this conversation's workspace; this conversation no longer asks. Choose Workspace again to ask again"
+    },
+    "ask": {
+      "label": "Ask for approval",
+      "description": "Configured access; listed tools ask every time"
+    },
+    "full": {
+      "label": "Full access",
+      "description": "Configured access; no tool asks for approval"
+    },
+    "saveFailed": "Could not apply the permission mode: {error}"
   }
 }

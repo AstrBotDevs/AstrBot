@@ -7,6 +7,9 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core import db_helper
+from astrbot.core.astr_agent_runtime.permission_mode import (
+    set_conversation_permission_mode,
+)
 from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.message.components import InteractiveView
 from astrbot.core.message.interactive_ui import view_store
@@ -26,7 +29,10 @@ from .message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
 )
-from .request_flags import resolve_webchat_request_flags
+from .request_flags import (
+    resolve_webchat_chat_options,
+    resolve_webchat_request_flags,
+)
 from .webchat_event import WebChatMessageEvent
 from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
@@ -139,6 +145,9 @@ class WebChatAdapter(Platform):
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
                     exc_info=True,
                 )
+                # Nobody would see an unsaved message: fail the send so callers
+                # (e.g. a tool approval request) do not wait for an answer.
+                raise
             await super().send_by_session(session, message_chain)
             return
 
@@ -165,6 +174,7 @@ class WebChatAdapter(Platform):
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
                     exc_info=True,
                 )
+                raise
 
         await super().send_by_session(session, message_chain)
 
@@ -329,6 +339,17 @@ class WebChatAdapter(Platform):
                     "selected_provider", payload.get("selected_provider")
                 )
                 message_event.set_extra("selected_model", payload.get("selected_model"))
+                for key, value in resolve_webchat_chat_options(payload).items():
+                    message_event.set_extra(key, value)
+                # Sub-agents and queued calls of this conversation follow the
+                # mode of its latest message (a thread keeps its own). Requests
+                # that do not state a mode (button clicks in threads, plugin
+                # view actions, other clients) must not reset it.
+                if "permission_mode" in payload:
+                    set_conversation_permission_mode(
+                        message_event.session_id,
+                        message_event.get_extra("permission_mode"),
+                    )
                 message_event.set_extra("action_type", payload.get("action_type"))
                 message_event.set_extra("turn_id", payload.get("turn_id"))
                 message_event.set_extra(

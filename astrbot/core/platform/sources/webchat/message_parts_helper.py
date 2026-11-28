@@ -572,6 +572,8 @@ async def message_chain_to_storage_message_parts(
 
         if isinstance(comp, ActionRow):
             row_data = comp.toDict()["data"]
+            if comp.action_expires_at is not None:
+                row_data["expires_at"] = comp.action_expires_at
             for button, serialized_button in zip(
                 comp.buttons,
                 row_data["buttons"],

@@ -107,12 +107,22 @@ export type ChatMessageRegenerateRequest = {
     locale?: string;
     selected_provider?: string;
     selected_model?: string;
+    permission_mode?: ChatPermissionMode;
     /**
      * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
      * @deprecated
      */
     enable_streaming?: boolean;
     flags?: ChatFlags;
+};
+
+/**
+ * ChatUI permission mode of the conversation for this request. It only narrows the role's configured access (workspace), skips approval prompts (full), or does both (workspace_no_ask); omit to ask for approval as configured.
+ */
+export type ChatPermissionMode = 'workspace' | 'workspace_no_ask' | 'ask' | 'full';
+
+export type ChatPermissionModeRequest = {
+    mode: ChatPermissionMode;
 };
 
 export type ChatProjectRequest = {
@@ -153,6 +163,7 @@ export type ChatRequest = {
     config_name?: string;
     selected_provider?: string;
     selected_model?: string;
+    permission_mode?: ChatPermissionMode;
     /**
      * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
      * @deprecated
@@ -199,6 +210,7 @@ export type ChatThreadMessageRequest = {
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
+    permission_mode?: ChatPermissionMode;
     /**
      * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
      * @deprecated
@@ -1578,6 +1590,17 @@ export type DeleteChatSessionData = {
 export type DeleteChatSessionResponse = (SuccessEnvelope);
 
 export type DeleteChatSessionError = unknown;
+
+export type SetChatPermissionModeData = {
+    body: ChatPermissionModeRequest;
+    path: {
+        session_id: string;
+    };
+};
+
+export type SetChatPermissionModeResponse = (SuccessEnvelope);
+
+export type SetChatPermissionModeError = (unknown);
 
 export type StopChatSessionData = {
     path: {

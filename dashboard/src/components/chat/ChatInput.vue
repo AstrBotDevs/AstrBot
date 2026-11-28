@@ -6,6 +6,8 @@
         'has-attachments': hasStagedAttachments,
       }"
     >
+      <!-- Extension above the input, e.g. the pending approval card -->
+      <slot name="extension" />
       <!-- 引用预览区 -->
       <transition name="slideReply" @after-leave="handleReplyAfterLeave">
         <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
@@ -253,6 +255,51 @@
               }}</v-list-item-title>
             </v-list-item>
           </StyledMenu>
+          <!-- Per-conversation permission mode, when the parent binds it -->
+          <StyledMenu
+            v-if="permissionMode && !recordingMode"
+            offset="8"
+            location="top start"
+          >
+            <template #activator="{ props: modeMenuProps }">
+              <button
+                v-bind="modeMenuProps"
+                type="button"
+                class="permission-mode-trigger"
+                :class="`mode-${permissionMode}`"
+              >
+                {{ tm(`permissionMode.${permissionMode}.label`) }}
+              </button>
+            </template>
+            <v-list-subheader class="permission-mode-header">
+              {{ tm("permissionMode.title") }}
+            </v-list-subheader>
+            <!-- "Workspace, don't ask" is shown on the workspace item;
+                 choosing workspace again asks again. -->
+            <v-list-item
+              v-for="mode in MENU_MODES"
+              :key="mode"
+              class="styled-menu-item permission-mode-item"
+              :class="`mode-${mode}`"
+              rounded="md"
+              :active="menuMode === mode"
+              @click="emit('update:permissionMode', mode)"
+            >
+              <v-list-item-title>{{
+                tm(`permissionMode.${mode}.label`)
+              }}</v-list-item-title>
+              <v-list-item-subtitle>{{
+                tm(
+                  `permissionMode.${
+                    mode === menuMode ? permissionMode : mode
+                  }.description`,
+                )
+              }}</v-list-item-subtitle>
+              <template #append>
+                <v-icon v-if="menuMode === mode" size="16">mdi-check</v-icon>
+              </template>
+            </v-list-item>
+          </StyledMenu>
           <v-btn
             v-if="recordingMode !== 'audio'"
             icon
@@ -462,6 +509,12 @@ import type {
 } from "@/composables/useMediaHandling";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
+export type ChatPermissionMode =
+  | "workspace"
+  | "workspace_no_ask"
+  | "ask"
+  | "full";
+
 interface StagedFileInfo {
   attachment_id: string;
   filename: string;
@@ -504,6 +557,7 @@ interface Props {
   showProviderSelector?: boolean;
   tokenUsage?: TokenUsageInfo | null;
   placeholder?: string;
+  permissionMode?: ChatPermissionMode | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -521,10 +575,12 @@ const props = withDefaults(defineProps<Props>(), {
   recordingMode: null,
   voiceBusy: false,
   audioLevels: () => [],
+  permissionMode: null,
 });
 
 const emit = defineEmits<{
   "update:prompt": [value: string];
+  "update:permissionMode": [mode: ChatPermissionMode];
   send: [];
   stop: [];
   openSettings: [];
@@ -544,6 +600,14 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+// ChatUI permission modes. "workspace_no_ask" (set by "Don't ask again in
+// this conversation" from workspace) is not a menu item of its own.
+const MENU_MODES: ChatPermissionMode[] = ["workspace", "ask", "full"];
+const menuMode = computed(() =>
+  props.permissionMode === "workspace_no_ask"
+    ? "workspace"
+    : props.permissionMode,
+);
 const { t } = useI18n();
 const isDark = computed(
   () => useCustomizerStore().uiTheme === "PurpleThemeDark",
@@ -1209,10 +1273,39 @@ defineExpose({
   align-items: center;
   flex: 0 0 auto !important;
   justify-content: center !important;
-  gap: 0 !important;
+  gap: 4px !important;
   min-width: auto !important;
   margin-top: 0 !important;
   overflow: visible !important;
+}
+
+.permission-mode-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.permission-mode-trigger:hover {
+  background: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.permission-mode-trigger.mode-full,
+.permission-mode-item.mode-full :deep(.v-list-item-title) {
+  color: rgb(var(--v-theme-warning));
+}
+
+.permission-mode-header {
+  min-height: 28px;
+  font-size: 0.75rem;
 }
 
 .input-right-actions {

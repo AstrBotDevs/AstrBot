@@ -867,6 +867,17 @@ export const chatApi = {
   batchDeleteSessions(payload: ChatSessionBatchDeleteRequest) {
     return typed<any>(openApiV1.batchDeleteChatSessions({ body: payload }));
   },
+  setPermissionMode(
+    sessionId: string,
+    mode: "workspace" | "workspace_no_ask" | "ask" | "full",
+  ) {
+    return typed<{ mode: string }>(
+      openApiV1.setChatPermissionMode({
+        path: { session_id: sessionId },
+        body: { mode },
+      }),
+    );
+  },
   stopSession(sessionId: string) {
     return typed<any>(
       openApiV1.stopChatSession({ path: { session_id: sessionId } }),

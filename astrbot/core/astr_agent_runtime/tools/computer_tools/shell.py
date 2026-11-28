@@ -373,7 +373,7 @@ class ShellSessionTool(FunctionTool):
         Returns:
             JSON session operation result or a user-facing error.
         """
-        _, permission_error = check_local_execution_permission(
+        local_policy, permission_error = check_local_execution_permission(
             context,
             "Shell session management",
         )
@@ -426,6 +426,11 @@ class ShellSessionTool(FunctionTool):
                             requester_is_admin=requester_is_admin,
                             session_id=session_id,
                             chars=f"{chars}\n" if action == "write_line" else chars,
+                            # A permission mode change (e.g. ChatUI "workspace")
+                            # also applies to sessions opened before it.
+                            require_sandboxed=bool(
+                                local_policy and local_policy.requires_sandbox
+                            ),
                         )
                     result = await sb.shell.poll_session(
                         owner_id=owner_id,

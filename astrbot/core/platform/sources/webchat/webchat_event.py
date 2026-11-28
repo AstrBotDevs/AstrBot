@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import shutil
+import time
 from pathlib import Path, PurePosixPath
 
 from astrbot.api import logger
@@ -114,6 +115,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                     return None
             elif isinstance(comp, ActionRow):
                 row_data = comp.toDict()["data"]
+                if comp.action_expires_at is not None:
+                    row_data["expires_at"] = comp.action_expires_at
+                    row_data["expires_in"] = max(
+                        0, comp.action_expires_at - time.time()
+                    )
                 for button, serialized_button in zip(
                     comp.buttons,
                     row_data["buttons"],
@@ -231,7 +237,7 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain | None) -> None:
+    async def send(self, message: MessageChain | None) -> bool:
         message_id = self.message_obj.message_id
         session_id = self.get_extra("view_session_id", self.session_id)
         reasoning = self._extras.pop("_webchat_pending_reasoning", None)
@@ -253,13 +259,14 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },
             )
-        await WebChatMessageEvent._send(
+        delivered = await WebChatMessageEvent._send(
             message_id,
             message,
             session_id=session_id,
             history_platform_id=self.get_extra("view_history_platform_id", "webchat"),
         )
         await super().send(message if message is not None else MessageChain([]))
+        return delivered is not None
 
     async def send_typing(self) -> None:
         """Emit a run-start signal before an independent LLM request."""

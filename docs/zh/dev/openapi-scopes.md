@@ -167,6 +167,7 @@ outline: deep
 | `DELETE` | `/api/v1/chat/sessions/{session_id}` | — |
 | `PATCH` | `/api/v1/chat/sessions/{session_id}/messages/{message_id}` | — |
 | `POST` | `/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate` | — |
+| `PUT` | `/api/v1/chat/sessions/{session_id}/permission-mode` | — |
 | `POST` | `/api/v1/chat/sessions/{session_id}/stop` | — |
 | `POST` | `/api/v1/chat/threads` | — |
 | `GET` | `/api/v1/chat/threads/{thread_id}` | — |

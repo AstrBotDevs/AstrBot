@@ -1,4 +1,9 @@
 import { computed, onBeforeUnmount, provide, reactive, ref, type Ref } from "vue";
+import { readChatSessionPrefs } from "@/utils/chatSessionPrefs.mjs";
+import {
+  approvalCardState,
+  forgetChosenCallback,
+} from "@/composables/useActionRowChoices";
 import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
@@ -50,8 +55,9 @@ export interface ToolCall {
   result?: unknown;
   ts?: number;
   finished_ts?: number;
+  // "awaiting_approval": an approval card for this call is open;
   // "unknown": the turn ended before this call returned.
-  phase?: "unknown";
+  phase?: "awaiting_approval" | "unknown";
   [key: string]: unknown;
 }
 
@@ -65,7 +71,8 @@ export interface ChatContent {
 }
 
 export interface MessageDisplayBlock {
-  kind: "thinking" | "content";
+  // "approval": answered tool approval records, part of the run details.
+  kind: "thinking" | "content" | "approval";
   parts: MessagePart[];
 }
 
@@ -624,6 +631,29 @@ export function useMessages(options: UseMessagesOptions) {
     callbackData,
   }: SendButtonInteractionOptions) {
     if (!sessionId || !callbackData) return;
+    // Answering an approval card ends the wait of the call it names.
+    for (const record of messagesBySession[sessionId] || []) {
+      const parts = record.content?.message || [];
+      const row = parts.find(
+        (part) =>
+          part.type === "actionrow" &&
+          Array.isArray(part.buttons) &&
+          part.buttons.some(
+            (button: any) => button?.action?.callback_data === callbackData,
+          ),
+      );
+      if (!row?.tool_call_id) continue;
+      for (const part of parts) {
+        for (const tool of part.tool_calls || []) {
+          if (
+            tool.id === row.tool_call_id &&
+            tool.phase === "awaiting_approval"
+          ) {
+            delete tool.phase;
+          }
+        }
+      }
+    }
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const botRecord = reactive<ChatRecord>({
       id: `local-button-bot-${messageId}`,
@@ -788,6 +818,7 @@ export function useMessages(options: UseMessagesOptions) {
           body: JSON.stringify({
             selected_provider: selectedProvider,
             selected_model: selectedModel,
+            ...readChatSessionPrefs(sessionId),
             flags: buildChatRequestFlags(enableStreaming, enableReasoning),
             locale: locale.value,
           }),
@@ -919,6 +950,7 @@ export function useMessages(options: UseMessagesOptions) {
         locale: locale.value,
         selected_provider: selectedProvider,
         selected_model: selectedModel,
+        ...readChatSessionPrefs(sessionId),
         _skip_user_history: skipUserHistory,
         _turn_id: turnId || undefined,
       }),
@@ -934,6 +966,12 @@ export function useMessages(options: UseMessagesOptions) {
         });
       })
       .catch((error) => {
+        // An undelivered button choice unlocks its card for a retry.
+        for (const part of parts) {
+          if (part.type === "button_interaction" && part.callback_data) {
+            forgetChosenCallback(String(part.callback_data));
+          }
+        }
         if (abort.signal.aborted) return;
         ensureBotRecordVisible(connection);
         appendError(botRecord, error, "connection_error");
@@ -1078,6 +1116,7 @@ export function useMessages(options: UseMessagesOptions) {
       locale: locale.value,
       selected_provider: selectedProvider,
       selected_model: selectedModel,
+      ...readChatSessionPrefs(sessionId),
     });
   }
 
@@ -1398,31 +1437,14 @@ export function useMessages(options: UseMessagesOptions) {
       }
       return;
     }
-    if (msgType === "end") {
-      if (connection) connection.completed = true;
-      markMessageStarted(botRecord);
-      // Calls still without a result when the turn ends never returned; the
-      // backend stores them the same way.
-      for (const part of botRecord.content.message) {
-        for (const tool of part.tool_calls || []) {
-          if (!tool.finished_ts) tool.phase = "unknown";
-        }
-      }
-      return;
-    }
+    // Upstream reconciles history when a stream ends without this event.
+    if (msgType === "end" && connection) connection.completed = true;
+    if (processToolStreamPayload(botRecord, msgType, chainType, data)) return;
 
     if (msgType === "plain") {
       markMessageStarted(botRecord);
       if (chainType === "reasoning") {
         appendReasoningPart(botRecord, payloadText(data));
-        return;
-      }
-      if (chainType === "tool_call") {
-        upsertToolCall(botRecord, parseJsonSafe(data));
-        return;
-      }
-      if (chainType === "tool_call_result") {
-        finishToolCall(botRecord, parseJsonSafe(data));
         return;
       }
       appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
@@ -1641,6 +1663,26 @@ export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
   for (const part of parts) {
     if (isEmptyPlainPart(part)) continue;
 
+    // Approval cards never merge with reply text, which would keep them out
+    // of the folded run details (e.g. cards of background sub-agents asking
+    // while the turn waits). An answered one is a process record; the open
+    // one stays a visible block of its own.
+    if (part.type === "actionrow" && part.single_use && part.tool_call_id) {
+      if (currentKind && currentParts.length) {
+        blocks.push({ kind: currentKind, parts: currentParts });
+      }
+      currentKind = null;
+      currentParts = [];
+      const kind = approvalCardState(part).open ? "content" : "approval";
+      const last = blocks[blocks.length - 1];
+      if (kind === "approval" && last?.kind === "approval") {
+        last.parts.push({ ...part });
+      } else {
+        blocks.push({ kind, parts: [{ ...part }] });
+      }
+      continue;
+    }
+
     const nextKind: MessageDisplayBlock["kind"] = isThinkingPart(part)
       ? "thinking"
       : "content";
@@ -1743,6 +1785,15 @@ function normalizePartsInternal(parts: unknown): MessagePart[] {
         think: String(part.think ?? part.text ?? ""),
       };
     }
+    // Anchor a streamed approval deadline on the local clock once, so a
+    // skewed browser clock cannot expire the card early or late.
+    if (part.type === "actionrow" && Number.isFinite(part.expires_in)) {
+      const { expires_in: remaining, ...row } = part;
+      return {
+        ...row,
+        expires_at: Date.now() / 1000 + Math.max(0, Number(remaining)),
+      };
+    }
     return { ...part };
   });
 }
@@ -1828,7 +1879,8 @@ export function finishToolCall(record: ChatRecord, result: any) {
     if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
-      // A late result supersedes an earlier "unknown" mark.
+      // A late result supersedes an earlier "awaiting_approval" or "unknown"
+      // mark.
       delete tool.phase;
       tool.result = result.result;
       tool.finished_ts = result.ts || Date.now() / 1000;
@@ -1877,4 +1929,82 @@ export function parseJsonSafe(value: unknown) {
   } catch {
     return value;
   }
+}
+
+/**
+ * Apply the tool-related stream payloads shared by the chat and thread views.
+ *
+ * @param botRecord The reply being streamed.
+ * @param msgType The payload type.
+ * @param chainType The payload chain type.
+ * @param data The payload data.
+ * @returns Whether the payload was handled here.
+ */
+export function processToolStreamPayload(
+  botRecord: ChatRecord,
+  msgType: string,
+  chainType: string | undefined,
+  data: any,
+): boolean {
+  if (msgType === "end") {
+    markMessageStarted(botRecord);
+    // Calls still without a result when the turn ends never returned; the
+    // backend stores them the same way.
+    for (const part of botRecord.content.message) {
+      for (const tool of part.tool_calls || []) {
+        if (!tool.finished_ts) tool.phase = "unknown";
+      }
+    }
+    return true;
+  }
+  if (msgType === "plain" && chainType === "tool_call") {
+    markMessageStarted(botRecord);
+    upsertToolCall(botRecord, parseJsonSafe(data));
+    return true;
+  }
+  if (msgType === "plain" && chainType === "tool_call_result") {
+    markMessageStarted(botRecord);
+    finishToolCall(botRecord, parseJsonSafe(data));
+    return true;
+  }
+  if (msgType === "plain" && chainType === "approval_result") {
+    // The backend's decision on an approval card of this reply; it also ends
+    // the wait of the call (when the card was answered elsewhere).
+    markMessageStarted(botRecord);
+    const result = parseJsonSafe(data) || {};
+    for (const part of botRecord.content.message) {
+      if (
+        part.type === "actionrow" &&
+        part.tool_call_id === result.tool_call_id
+      ) {
+        part.outcome = result.outcome;
+      }
+      for (const tool of part.tool_calls || []) {
+        if (
+          tool.id === result.tool_call_id &&
+          tool.phase === "awaiting_approval"
+        ) {
+          delete tool.phase;
+        }
+      }
+    }
+    return true;
+  }
+  if (msgType === "actionrow" && data && typeof data === "object") {
+    markMessageStarted(botRecord);
+    // An approval card names its tool call: show that call as waiting.
+    const askedId = data.tool_call_id;
+    for (const part of askedId ? botRecord.content.message : []) {
+      for (const tool of part.tool_calls || []) {
+        if (tool.id === askedId && !tool.finished_ts) {
+          tool.phase = "awaiting_approval";
+        }
+      }
+    }
+    botRecord.content.message.push(
+      ...normalizeMessageParts([{ ...data, type: "actionrow" }]),
+    );
+    return true;
+  }
+  return false;
 }
