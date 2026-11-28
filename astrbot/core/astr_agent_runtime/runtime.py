@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from astrbot import logger
-from astrbot.core.agent.runtime import AgentInput, AgentRuntime, AgentSession, AgentTurn
+from astrbot.core.agent.runtime import (
+    AgentInput,
+    AgentRuntime,
+    AgentSession,
+    AgentTurn,
+    SessionState,
+)
 from astrbot.core.platform.agent_wakeup_event import AgentWakeupEvent
 
 from .delegated_session import DelegatedAgentInput, DelegatedAgentSession
@@ -23,12 +30,15 @@ if TYPE_CHECKING:
 class AstrAgentRuntime(AgentRuntime):
     """AstrBot host services around native main and delegated execution."""
 
+    MAX_IDLE_SESSIONS: int = 256
+
     def __init__(
         self,
         context: Context,
         *,
         agent_configs: AgentConfigStore,
         subagents: SubAgentService,
+        max_idle_sessions: int = MAX_IDLE_SESSIONS,
     ) -> None:
         """Bind native execution to explicit configuration and delegation services.
 
@@ -36,13 +46,16 @@ class AstrAgentRuntime(AgentRuntime):
             context: Host provider, plugin, platform and conversation services.
             agent_configs: Shared storage for reusable agent configurations.
             subagents: Delegation scheduler sharing the application's runtime registry.
+            max_idle_sessions: Soft limit for retained idle session handles.
         """
         self.context = context
         self.agent_configs = agent_configs
         self.subagents = subagents
-        self._sessions: dict[tuple[str, str], AgentSession] = {}
+        self._max_idle_sessions = max(1, max_idle_sessions)
+        self._sessions: OrderedDict[tuple[str, str], AgentSession] = OrderedDict()
         self._opening = asyncio.Lock()
         self._active_main: dict[str, AgentTurn] = {}
+        self._session_deleted_callback_registered = False
         self._closed = False
 
     def normalize_config(self, config: dict, *, delegated: bool = False) -> dict:
@@ -132,6 +145,15 @@ class AstrAgentRuntime(AgentRuntime):
 
     async def initialize(self) -> None:
         """Initialize native execution environments before plugins can use them."""
+        conv_mgr = getattr(self.context, "conversation_manager", None)
+        if (
+            not self._session_deleted_callback_registered
+            and conv_mgr is not None
+            and hasattr(conv_mgr, "register_on_session_deleted")
+        ):
+            conv_mgr.register_on_session_deleted(self.evict_umo)
+            self._session_deleted_callback_registered = True
+
         if sys.platform == "win32" and any(
             config.get("provider_settings", {}).get("computer_use_runtime") == "local"
             for config in self.context.astrbot_config_mgr.confs.values()
@@ -182,6 +204,7 @@ class AstrAgentRuntime(AgentRuntime):
                 session_id = target.session_id
         manager = self.context.conversation_manager
         if profile == "subagent":
+            evicted: list[AgentSession] = []
             async with self._opening:
                 if self._closed:
                     raise ValueError("AstrBot agent runtime is closed")
@@ -209,8 +232,12 @@ class AstrAgentRuntime(AgentRuntime):
                     )
                 if session.umo != umo:
                     raise ValueError("Agent session belongs to another UMO")
-                self._sessions[(profile, session.id)] = session
-                return session
+                key = (profile, session.id)
+                self._sessions[key] = session
+                self._sessions.move_to_end(key)
+                evicted = self._pop_idle_sessions(keep=key)
+            await self._close_sessions(evicted)
+            return session
         if profile != "main":
             raise ValueError(f"Unknown built-in agent session profile: {profile}")
         conversation = None
@@ -254,20 +281,70 @@ class AstrAgentRuntime(AgentRuntime):
             raise ValueError("Agent conversation is missing or belongs to another UMO")
         # Existing conversations perform all database reads outside this registry
         # lock. Their execution lock controls when fresh history is loaded.
+        evicted: list[AgentSession] = []
         async with self._opening:
             if self._closed:
                 raise ValueError("AstrBot agent runtime closed during session creation")
-            session = self._sessions.get((profile, session_id))
+            key = (profile, session_id)
+            session = self._sessions.get(key)
             if session is None or session.closed:
                 if session is not None:
                     await session.close()
                 if self._closed:
                     raise ValueError("AstrBot agent runtime is closed")
                 session = MainAgentSession(self, session_id, umo)
-                self._sessions[(profile, session_id)] = session
+                self._sessions[key] = session
             elif session.umo != umo:
                 raise ValueError("Agent session belongs to another UMO")
-            return session
+            self._sessions.move_to_end(key)
+            evicted = self._pop_idle_sessions(keep=key)
+        await self._close_sessions(evicted)
+        return session
+
+    def _pop_idle_sessions(
+        self, *, keep: tuple[str, str] | None = None
+    ) -> list[AgentSession]:
+        """Evict the oldest idle or closed sessions beyond ``_max_idle_sessions``."""
+        evicted: list[AgentSession] = []
+        if len(self._sessions) <= self._max_idle_sessions:
+            return evicted
+        for key in list(self._sessions):
+            if len(self._sessions) <= self._max_idle_sessions:
+                break
+            if key == keep:
+                continue
+            session = self._sessions[key]
+            if session.state in (SessionState.IDLE, SessionState.CLOSED):
+                self._sessions.pop(key, None)
+                evicted.append(session)
+        return evicted
+
+    async def _close_sessions(self, sessions: list[AgentSession]) -> None:
+        if sessions:
+            await asyncio.gather(
+                *(session.close() for session in sessions),
+                return_exceptions=True,
+            )
+
+    async def evict_umo(self, umo: str) -> None:
+        """Evict idle sessions and delegated callers belonging to a deleted UMO.
+
+        Args:
+            umo: Unified message origin whose conversations were removed.
+        """
+        evicted: list[AgentSession] = []
+        async with self._opening:
+            for key in list(self._sessions):
+                session = self._sessions[key]
+                if session.umo == umo and session.state in (
+                    SessionState.IDLE,
+                    SessionState.CLOSED,
+                ):
+                    self._sessions.pop(key, None)
+                    evicted.append(session)
+        await self._close_sessions(evicted)
+        if hasattr(self.subagents, "evict_umo"):
+            self.subagents.evict_umo(umo)
 
     def active_turn(self, umo: str) -> AgentTurn | None:
         """Find main's active execution without exposing its native runner.

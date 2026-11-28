@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -41,13 +42,22 @@ if TYPE_CHECKING:
 class SubAgentService:
     """Expose one session API while agent runtimes own their execution details."""
 
-    def __init__(self, store: SubAgentStore, runtimes: dict[str, AgentRuntime]) -> None:
+    MAX_CACHED_CALLERS: int = 256
+
+    def __init__(
+        self,
+        store: SubAgentStore,
+        runtimes: dict[str, AgentRuntime],
+        *,
+        max_cached_callers: int = MAX_CACHED_CALLERS,
+    ) -> None:
         self.store = store
         self.runtimes = runtimes
+        self._max_cached_callers = max(1, max_cached_callers)
         self._turn_handles: dict[str, AgentTurn] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
         self._deliveries: dict[str, set[asyncio.Task[None]]] = {}
-        self._callers: dict[AgentScope, AgentCaller] = {}
+        self._callers: OrderedDict[AgentScope, AgentCaller] = OrderedDict()
         self._task_callers: dict[tuple[str, int], AgentCaller] = {}
         self.delivery = AgentResultDelivery(store, self._callers, self.runtimes)
         self._changed = asyncio.Condition()
@@ -128,7 +138,44 @@ class SubAgentService:
             limits=previous.limits if previous is not None else {},
         )
         self._callers[caller.scope] = caller
+        self._callers.move_to_end(caller.scope)
+        self._evict_idle_callers(keep=caller.scope)
         return caller
+
+    def _scope_has_active_work(self, scope: AgentScope) -> bool:
+        """Return whether a caller scope still owns active workers or pending results."""
+        for (delivery_scope, _parent), task in self.delivery._notifications.items():
+            if delivery_scope == scope and not task.done():
+                return True
+        for agent in self.store.list(scope):
+            worker = self._workers.get(agent.agent_id)
+            if worker is not None and not worker.done():
+                return True
+            if any(not turn.finished for turn in agent.turns):
+                return True
+        return False
+
+    def _evict_idle_callers(self, *, keep: AgentScope | None = None) -> None:
+        """Evict the oldest idle caller entries beyond ``_max_cached_callers``."""
+        if len(self._callers) <= self._max_cached_callers:
+            return
+        for scope in list(self._callers):
+            if len(self._callers) <= self._max_cached_callers:
+                break
+            if scope == keep:
+                continue
+            if not self._scope_has_active_work(scope):
+                self._callers.pop(scope, None)
+
+    def evict_umo(self, umo: str) -> None:
+        """Remove cached idle callers belonging to a deleted UMO.
+
+        Args:
+            umo: Unified message origin whose conversations were removed.
+        """
+        for scope in list(self._callers):
+            if scope.umo == umo and not self._scope_has_active_work(scope):
+                self._callers.pop(scope, None)
 
     async def spawn(
         self,
