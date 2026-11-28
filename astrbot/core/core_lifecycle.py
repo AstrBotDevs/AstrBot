@@ -382,6 +382,8 @@ class AstrBotCoreLifecycle:
                     f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler()
+            except asyncio.CancelledError:
+                raise
             except BaseException:
                 logger.error(traceback.format_exc())
 
