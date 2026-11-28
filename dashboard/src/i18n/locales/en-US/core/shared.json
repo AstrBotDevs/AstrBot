@@ -104,7 +104,7 @@
     "toolDialogHint": "Choose which function tools this persona can use.",
     "selectAllTools": "Select all tools",
     "toolCount": "{selected}/{total} tools selected",
-    "unlistedSavedTools": "Saved tools not listed above",
+    "unlistedSavedTools": "Selected tools currently unavailable",
     "undoToolRemoval": "Undo",
     "skillDialogTitle": "Configure skills for {name}",
     "skillDialogHint": "Choose which skills this persona can use.",
