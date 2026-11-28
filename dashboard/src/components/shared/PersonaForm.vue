@@ -213,8 +213,8 @@ const { smAndDown } = useDisplay();
 const saving = ref(false);
 const formValid = ref(false);
 const expandedPanels = ref([]);
-const availableTools = ref([]);
-const availableSkills = ref([]);
+const availableTools = ref(null);
+const availableSkills = ref(null);
 const loadingTools = ref(false);
 const loadingSkills = ref(false);
 const existingPersonaIds = ref([]);
@@ -277,11 +277,11 @@ async function loadTools() {
     if (response.data?.status === "ok") {
       availableTools.value = response.data?.data || [];
     } else {
-      availableTools.value = [];
+      availableTools.value = null;
       emit("error", response.data?.message || "Failed to load tools");
     }
   } catch (error) {
-    availableTools.value = [];
+    availableTools.value = null;
     emit("error", error?.response?.data?.message || "Failed to load tools");
   } finally {
     loadingTools.value = false;
@@ -297,11 +297,11 @@ async function loadSkills() {
       const skills = Array.isArray(payload) ? payload : payload.skills || [];
       availableSkills.value = skills;
     } else {
-      availableSkills.value = [];
+      availableSkills.value = null;
       emit("error", response.data?.message || "Failed to load skills");
     }
   } catch (error) {
-    availableSkills.value = [];
+    availableSkills.value = null;
     emit("error", error?.response?.data?.message || "Failed to load skills");
   } finally {
     loadingSkills.value = false;

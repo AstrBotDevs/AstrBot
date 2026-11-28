@@ -6,8 +6,8 @@ import PersonaCapabilityList from "./PersonaCapabilityList.vue";
 const props = defineProps({
   tools: { type: Array, default: null },
   skills: { type: Array, default: null },
-  availableTools: { type: Array, default: () => [] },
-  availableSkills: { type: Array, default: () => [] },
+  availableTools: { type: Array, default: null },
+  availableSkills: { type: Array, default: null },
   readonly: Boolean,
   saving: { type: String, default: "" },
   error: { type: String, default: "" },
@@ -27,10 +27,8 @@ const removed = ref([]);
 const conflict = ref("");
 const removeChoice = "remove";
 const catalog = computed(() => ({
-  tools: props.availableTools
-    .filter(
-      (tool) => ["plugin", "mcp"].includes(tool.origin) && tool.resource,
-    )
+  tools: (props.availableTools ?? [])
+    .filter((tool) => ["plugin", "mcp"].includes(tool.origin) && tool.resource)
     .map((tool) => ({
       ...tool,
       ...tool.resource,
@@ -38,7 +36,7 @@ const catalog = computed(() => ({
       kind: "tool",
       label: tool.origin_display_name || tool.origin_name,
     })),
-  skills: props.availableSkills
+  skills: (props.availableSkills ?? [])
     .filter((skill) => skill.resource)
     .map((skill) => ({
       ...skill,
@@ -223,6 +221,18 @@ function toggle(field, candidates) {
   );
 }
 
+function toggleAll(field) {
+  const candidates = groups.value[field].flatMap((group) => group.eligible);
+  if (
+    candidates.some((item) => !selected(field, item)) &&
+    !unavailable.value.some((row) => row.field === field) &&
+    !removed.value.some((row) => row.field === field)
+  ) {
+    return applySelection(field, null);
+  }
+  return toggle(field, candidates);
+}
+
 function toggleAllInDialog() {
   const { eligible } = selectionDialog.value.group;
   const keys = selectionDialog.value.keys;
@@ -260,6 +270,17 @@ const legacy = computed(() =>
   ),
 );
 
+const canPreviewUpgrade = computed(() =>
+  legacy.value.every(({ field }) =>
+    field === "tools"
+      ? props.availableTools !== null && !props.loadingTools
+      : props.availableSkills !== null && !props.loadingSkills,
+  ),
+);
+const matchedLegacy = computed(() =>
+  legacy.value.filter((row) => row.candidates.length > 0),
+);
+
 const unavailable = computed(() =>
   fields.flatMap((field) =>
     (props[field] || []).flatMap((entry) => {
@@ -295,9 +316,7 @@ const unavailable = computed(() =>
             field,
             item,
             label: [
-              source?.label ||
-                entry.source_id ||
-                entry.source,
+              source?.label || entry.source_id || entry.source,
               name,
             ].join(" / "),
             id: JSON.stringify([field, entry.source, entry.source_id, name]),
@@ -305,6 +324,17 @@ const unavailable = computed(() =>
         ];
       });
     }),
+  ),
+);
+
+const unavailableByField = computed(() =>
+  Object.fromEntries(
+    fields.map((field) => [
+      field,
+      [...unavailable.value, ...removed.value].filter(
+        (row) => row.field === field,
+      ),
+    ]),
   ),
 );
 
@@ -328,7 +358,7 @@ async function toggleUnavailable(row) {
 
 function openUpgrade() {
   decisions.value = Object.fromEntries(
-    legacy.value.map(({ id, candidates }) => [
+    matchedLegacy.value.map(({ id, candidates }) => [
       id,
       candidates.length === 1 ? candidates[0].key : null,
     ]),
@@ -343,10 +373,8 @@ const upgraded = computed(() => {
       props[field]?.filter((entry) => typeof entry !== "string") ?? null,
     ]),
   );
-  for (const { id, field } of legacy.value) {
-    const item = catalog.value[field].find(
-      (item) => item.key === decisions.value[id],
-    );
+  for (const { id, field, candidates } of matchedLegacy.value) {
+    const item = candidates.find((item) => item.key === decisions.value[id]);
     if (item) addItem(value[field], item);
   }
   return value;
@@ -355,10 +383,11 @@ const upgraded = computed(() => {
 const upgradeReady = computed(
   () =>
     legacy.value.length > 0 &&
-    legacy.value.every(
-      ({ id, field }) =>
+    canPreviewUpgrade.value &&
+    matchedLegacy.value.every(
+      ({ id, candidates }) =>
         decisions.value[id] === removeChoice ||
-        catalog.value[field].some((item) => item.key === decisions.value[id]),
+        candidates.some((item) => item.key === decisions.value[id]),
     ),
 );
 </script>
@@ -370,7 +399,7 @@ const upgradeReady = computed(
       <template v-if="!readonly" #append>
         <v-btn
           variant="text"
-          :disabled="Boolean(saving) || loadingTools || loadingSkills"
+          :disabled="Boolean(saving) || !canPreviewUpgrade"
           @click="openUpgrade"
         >
           {{ tm("personaQuickPreview.previewUpgrade") }}
@@ -417,77 +446,60 @@ const upgradeReady = computed(
         :saving="Boolean(saving)"
         :loading="field === 'tools' ? loadingTools : loadingSkills"
         @toggle="toggle(field, $event.eligible)"
-        @toggle-all="
-          toggle(
-            field,
-            groups[field].flatMap((group) => group.eligible),
-          )
-        "
+        @toggle-all="toggleAll(field)"
         @configure="openSelection(field, $event)"
       />
-      <v-btn
-        v-if="!readonly && props[field] !== null"
-        class="justify-self-start"
-        size="small"
-        variant="text"
-        :disabled="Boolean(saving)"
-        @click="applySelection(field, null)"
+      <v-sheet
+        v-if="
+          !(field === 'tools' ? loadingTools : loadingSkills) &&
+          unavailableByField[field].length
+        "
+        border
+        rounded="lg"
+        class="pa-3"
       >
-        {{ tm("personaQuickPreview.useAllAvailable") }}
-      </v-btn>
-    </template>
-
-    <v-sheet
-      v-if="
-        !loadingTools &&
-        !loadingSkills &&
-        (unavailable.length || removed.length)
-      "
-      border
-      rounded="lg"
-      class="pa-3"
-    >
-      <div class="text-subtitle-2 mb-1">
-        {{
-          tm(
-            [...unavailable, ...removed].every((row) => row.field === "tools")
-              ? "personaQuickPreview.unlistedSavedTools"
-              : "personaQuickPreview.unavailableSelections",
-          )
-        }}
-      </div>
-      <div
-        v-for="row in [...unavailable, ...removed]"
-        :key="row.id"
-        class="d-flex align-center justify-space-between ga-2"
-      >
-        <span
-          class="text-break"
-          :class="{
-            'text-decoration-line-through': removed.some(
-              (item) => item.id === row.id,
-            ),
-          }"
-          >{{ row.label }}</span
-        >
-        <v-btn
-          v-if="!readonly"
-          type="button"
-          variant="text"
-          size="small"
-          :disabled="Boolean(saving)"
-          @click="toggleUnavailable(row)"
-        >
+        <div class="text-subtitle-2 mb-1">
           {{
             tm(
-              removed.some((item) => item.id === row.id)
-                ? "personaQuickPreview.undoToolRemoval"
-                : "personaQuickPreview.removeSavedTool",
+              field === "tools"
+                ? "personaQuickPreview.unlistedSavedTools"
+                : "personaQuickPreview.unlistedSavedSkills",
             )
           }}
-        </v-btn>
-      </div>
-    </v-sheet>
+        </div>
+        <div
+          v-for="row in unavailableByField[field]"
+          :key="row.id"
+          class="d-flex align-center justify-space-between ga-2"
+        >
+          <span
+            class="text-break"
+            :class="{
+              'text-decoration-line-through': removed.some(
+                (item) => item.id === row.id,
+              ),
+            }"
+            >{{ row.label }}</span
+          >
+          <v-btn
+            v-if="!readonly"
+            type="button"
+            variant="text"
+            size="small"
+            :disabled="Boolean(saving)"
+            @click="toggleUnavailable(row)"
+          >
+            {{
+              tm(
+                removed.some((item) => item.id === row.id)
+                  ? "personaQuickPreview.undoToolRemoval"
+                  : "personaQuickPreview.removeSavedTool",
+              )
+            }}
+          </v-btn>
+        </div>
+      </v-sheet>
+    </template>
 
     <v-dialog
       :model-value="Boolean(selectionDialog)"
@@ -629,17 +641,16 @@ const upgradeReady = computed(
               }}
             </h3>
             <v-select
-              v-for="row in legacy.filter((entry) => entry.field === field)"
+              v-for="row in matchedLegacy.filter(
+                (entry) => entry.field === field,
+              )"
               :key="row.id"
               v-model="decisions[row.id]"
               :label="row.name"
               density="compact"
               variant="outlined"
               :items="[
-                ...(row.candidates.length
-                  ? row.candidates
-                  : catalog[field]
-                ).map((item) => ({
+                ...row.candidates.map((item) => ({
                   title: [item.source, item.label || item.source_id, item.name]
                     .filter(Boolean)
                     .join(' / '),

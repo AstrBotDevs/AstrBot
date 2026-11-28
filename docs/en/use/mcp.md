@@ -133,7 +133,7 @@ AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__li
 
 ![Saved tool names in the persona capabilities panel](./images/mcp-saved-persona-en.png)
 
-You can still edit existing personas. In the persona capabilities editor, choose **Preview upgrade** to review the resulting selections by MCP server, plugin, or local source. Verify suggested matches and choose a source or remove each unresolved item. Apply the preview to your draft, then save the persona to persist it.
+You can still edit existing personas. In the persona capabilities editor, choose **Preview upgrade** to review the resulting selections by MCP server, plugin, or local source. Verify suggested matches, then choose a source or remove each ambiguous item. The upgrade removes legacy selections with no matching source. Apply the preview to your draft, then save the persona to persist it.
 
 Persona selections and global tool settings are matched by server name and original tool name. If you delete a server and add it again with the same name, matching tools inherit any saved selections and settings that were kept.
 

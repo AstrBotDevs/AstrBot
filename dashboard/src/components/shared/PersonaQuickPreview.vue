@@ -94,8 +94,8 @@ const { tm } = useModuleI18n("core.shared");
 
 const loading = ref(false);
 const personaData = ref(null);
-const availableTools = ref([]);
-const availableSkills = ref([]);
+const availableTools = ref(null);
+const availableSkills = ref(null);
 const savingCapability = ref("");
 const saveError = ref("");
 const saved = ref(false);
@@ -156,10 +156,10 @@ async function loadToolsMeta() {
   try {
     const response = await toolApi.list();
     availableTools.value =
-      response.data?.status === "ok" ? response.data?.data || [] : [];
+      response.data?.status === "ok" ? response.data?.data || [] : null;
   } catch (error) {
     console.error("Failed to load tools metadata:", error);
-    availableTools.value = [];
+    availableTools.value = null;
   }
 }
 
@@ -171,11 +171,11 @@ async function loadSkillsMeta() {
       const skills = Array.isArray(payload) ? payload : payload.skills || [];
       availableSkills.value = skills;
     } else {
-      availableSkills.value = [];
+      availableSkills.value = null;
     }
   } catch (error) {
     console.error("Failed to load skills metadata:", error);
-    availableSkills.value = [];
+    availableSkills.value = null;
   }
 }
 
