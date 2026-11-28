@@ -145,6 +145,7 @@ class KBHelper:
         self.kb_files_dir = Path(self.kb_dir) / "files" / self.kb.kb_id
         self._vec_db_lock: asyncio.Lock | None = None
         self._vec_db_mutation_lock: asyncio.Lock | None = None
+        self._vec_db_mutation_version = 0
         self._vec_db_provider_pair: tuple[object, object] | None = None
         self._superseded = False
 
@@ -478,6 +479,9 @@ class KBHelper:
                             f"Knowledge base helper for KB {self.kb.kb_id} has been superseded"
                         )
                     await self._ensure_vec_db()
+                    self._vec_db_mutation_version = (
+                        getattr(self, "_vec_db_mutation_version", 0) + 1
+                    )
                     await self.vec_db.insert_batch(
                         contents=contents,
                         metadatas=metadatas,

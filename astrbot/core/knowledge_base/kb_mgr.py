@@ -257,6 +257,7 @@ class KnowledgeBaseManager:
                 kb.top_m_final = top_m_final
 
             # Build a new helper first. Keep current vec_db alive until new init succeeds.
+            start_mutation_version = getattr(kb_helper, "_vec_db_mutation_version", 0)
             new_helper = KBHelper(
                 kb_db=self.kb_db,
                 kb=kb,
@@ -317,6 +318,13 @@ class KnowledgeBaseManager:
             self.kb_insts[kb_id] = new_helper
             old_helper._superseded = True
             await old_helper.terminate()
+            if (
+                getattr(old_helper, "_vec_db_mutation_version", 0)
+                != start_mutation_version
+            ):
+                # Reload index after any overlapping upload finalized via old_helper.
+                await new_helper.terminate()
+                await new_helper.initialize()
             new_helper.init_error = None
             return new_helper
 

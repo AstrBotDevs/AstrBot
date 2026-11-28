@@ -393,9 +393,15 @@ async def test_create_kb_cleans_up_helper_when_commit_fails(
     kb_mgr.kb_insts = {}
     kb_mgr.retrieval_manager = MagicMock()
 
+    mock_vec_db = MagicMock()
+    mock_vec_db.initialize = AsyncMock()
+    mock_vec_db.close = AsyncMock()
+
     with (
-        patch.object(KBHelper, "initialize", new_callable=AsyncMock),
-        patch.object(KBHelper, "delete_vec_db", new_callable=AsyncMock) as mock_delete,
+        patch(
+            "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+            return_value=mock_vec_db,
+        ),
         pytest.raises(RuntimeError, match="commit failed"),
     ):
         await kb_mgr.create_kb(
@@ -403,8 +409,9 @@ async def test_create_kb_cleans_up_helper_when_commit_fails(
             embedding_provider_id="emb-1",
         )
 
-    mock_delete.assert_awaited_once()
+    mock_vec_db.close.assert_awaited_once()
     assert kb_mgr.kb_insts == {}
+    assert not any(tmp_path.iterdir())
 
 
 @pytest.mark.asyncio
@@ -446,9 +453,15 @@ async def test_update_kb_rolls_back_state_and_terminates_new_helper_on_commit_er
     mock_db_context.__aexit__ = AsyncMock(return_value=False)
     mock_kb_db.get_db.return_value = mock_db_context
 
+    mock_new_vec_db = MagicMock()
+    mock_new_vec_db.initialize = AsyncMock()
+    mock_new_vec_db.close = AsyncMock()
+
     with (
-        patch.object(KBHelper, "initialize", new_callable=AsyncMock),
-        patch.object(KBHelper, "terminate", new_callable=AsyncMock) as mock_term,
+        patch(
+            "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+            return_value=mock_new_vec_db,
+        ),
         pytest.raises(RuntimeError, match="db write failed"),
     ):
         await kb_mgr.update_kb(
@@ -460,7 +473,7 @@ async def test_update_kb_rolls_back_state_and_terminates_new_helper_on_commit_er
     assert mock_knowledge_base.kb_name == "test_kb"
     assert mock_knowledge_base.embedding_provider_id == "test-embedding-provider"
     assert kb_mgr.kb_insts[mock_knowledge_base.kb_id] is old_helper
-    mock_term.assert_awaited_once()
+    mock_new_vec_db.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

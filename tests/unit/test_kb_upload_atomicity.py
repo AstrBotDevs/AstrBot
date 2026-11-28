@@ -658,9 +658,10 @@ async def test_upload_document_records_saved_media_count_and_kb_db_busy_timeout(
     stub_provider_manager_module,
 ) -> None:
     """upload_document persists media_count matching saved media and kb.db sets busy_timeout."""
-    from sqlalchemy import text
+    from sqlalchemy import select, text
 
     from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+    from astrbot.core.knowledge_base.models import KBDocument, KBMedia
 
     KBHelper = _import_kb_helper()
 
@@ -672,72 +673,88 @@ async def test_upload_document_records_saved_media_count_and_kb_db_busy_timeout(
                 await session.execute(text("PRAGMA busy_timeout"))
             ).scalar_one()
         assert busy_timeout == 30000
+
+        kb = KnowledgeBase(
+            kb_name="Test KB",
+            description="",
+            embedding_provider_id="emb",
+        )
+        async with kb_db.get_db() as session, session.begin():
+            session.add(kb)
+
+        helper = KBHelper.__new__(KBHelper)
+        helper.kb = kb
+        helper.kb_db = kb_db
+        helper.refresh_kb = AsyncMock()
+        helper.refresh_document = AsyncMock()
+        helper.vec_db = AsyncMock()
+        helper.vec_db.insert_batch = AsyncMock()
+        helper.vec_db.count_documents = AsyncMock(return_value=1)
+        helper.kb_medias_dir = tmp_path / "medias"
+        helper.kb_medias_dir.mkdir()
+        helper.chunker = AsyncMock()
+        helper.chunker.chunk = AsyncMock(return_value=["hello world"])
+
+        saved_items: list[KBMedia] = []
+
+        async def fake_save_media(**kwargs):
+            media = KBMedia(
+                doc_id=kwargs["doc_id"],
+                kb_id=kb.kb_id,
+                media_type=kwargs["media_type"],
+                file_name=kwargs["file_name"],
+                file_path=str(helper.kb_medias_dir / kwargs["file_name"]),
+                file_size=len(kwargs["content"]),
+                mime_type=kwargs.get("mime_type") or "",
+            )
+            saved_items.append(media)
+            return media
+
+        helper._save_media = AsyncMock(side_effect=fake_save_media)
+
+        parse_result = MagicMock()
+        parse_result.text = "hello world"
+        parse_result.media = [
+            MagicMock(
+                media_type="image",
+                file_name="a.png",
+                content=b"a",
+                mime_type="image/png",
+            ),
+            MagicMock(
+                media_type="image",
+                file_name="b.png",
+                content=b"b",
+                mime_type="image/png",
+            ),
+        ]
+
+        with (
+            patch(
+                "astrbot.core.knowledge_base.kb_helper.select_parser",
+                new=AsyncMock(
+                    return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+                ),
+            ),
+            patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        ):
+            doc = await helper.upload_document(
+                file_name="demo.txt",
+                file_content=b"hello world",
+                file_type="txt",
+            )
+
+        assert doc.media_count == 2
+        assert len(saved_items) == 2
+        async with kb_db.get_db() as session:
+            persisted_doc = (
+                await session.execute(
+                    select(KBDocument).where(KBDocument.doc_id == doc.doc_id)
+                )
+            ).scalar_one()
+        assert persisted_doc.media_count == 2
     finally:
         await kb_db.close()
-
-    helper = KBHelper.__new__(KBHelper)
-    helper.kb = KnowledgeBase(
-        kb_name="Test KB",
-        description="",
-        embedding_provider_id="emb",
-    )
-    helper.kb_db = MagicMock()
-    helper.kb_db.update_kb_stats = AsyncMock()
-    helper.refresh_kb = AsyncMock()
-    helper.refresh_document = AsyncMock()
-    helper.vec_db = AsyncMock()
-    helper.vec_db.insert_batch = AsyncMock()
-    helper.kb_medias_dir = tmp_path / "medias"
-    helper.kb_medias_dir.mkdir()
-    helper.chunker = AsyncMock()
-    helper.chunker.chunk = AsyncMock(return_value=["hello world"])
-
-    saved_items: list[MagicMock] = []
-
-    async def fake_save_media(**kwargs):
-        media = MagicMock()
-        media.file_path = str(helper.kb_medias_dir / kwargs["file_name"])
-        saved_items.append(media)
-        return media
-
-    helper._save_media = AsyncMock(side_effect=fake_save_media)
-    session = _session_with_begin()
-    helper.kb_db.get_db = _successful_get_db(session)
-
-    parse_result = MagicMock()
-    parse_result.text = "hello world"
-    parse_result.media = [
-        MagicMock(
-            media_type="image",
-            file_name="a.png",
-            content=b"a",
-            mime_type="image/png",
-        ),
-        MagicMock(
-            media_type="image",
-            file_name="b.png",
-            content=b"b",
-            mime_type="image/png",
-        ),
-    ]
-
-    with (
-        patch(
-            "astrbot.core.knowledge_base.kb_helper.select_parser",
-            new=AsyncMock(
-                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
-            ),
-        ),
-        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
-    ):
-        doc = await helper.upload_document(
-            file_name="demo.txt",
-            file_content=b"hello world",
-            file_type="txt",
-        )
-
-    assert doc.media_count == 2
-    assert len(saved_items) == 2
 
 
 @pytest.mark.asyncio
