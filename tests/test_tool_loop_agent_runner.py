@@ -1364,6 +1364,61 @@ async def test_fallback_provider_used_when_primary_returns_err(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [RuntimeError, EmptyModelOutputError])
+@pytest.mark.parametrize("started", [False, True])
+async def test_stream_failure_only_uses_fallback_before_output(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    monkeypatch,
+    error_type,
+    started,
+):
+    class FailingStreamProvider(MockProvider):
+        async def text_chat_stream(self, **kwargs):
+            self.call_count += 1
+            if started:
+                yield LLMResponse(
+                    role="assistant", completion_text="Partial answer", is_chunk=True
+                )
+            raise error_type("stream ended early")
+
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MAX_S", 0)
+    primary = FailingStreamProvider()
+    fallback = MockProvider()
+    fallback.should_call_tools = False
+    await runner.reset(
+        provider=primary,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+        fallback_providers=[fallback],
+    )
+
+    await collect_events(runner.step_until_done(5))
+
+    response = runner.get_final_llm_resp()
+    assert response is not None
+    if started:
+        assert primary.call_count == 1
+        assert fallback.call_count == 0
+        assert response.role == "err"
+        assert "stream ended early" in response.completion_text
+    else:
+        assert primary.call_count == (
+            runner.EMPTY_OUTPUT_RETRY_ATTEMPTS
+            if error_type is EmptyModelOutputError
+            else 1
+        )
+        assert fallback.call_count == 1
+        assert response.role == "assistant"
+
+
+@pytest.mark.asyncio
 async def test_empty_output_is_retried_before_succeeding(
     runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
 ):

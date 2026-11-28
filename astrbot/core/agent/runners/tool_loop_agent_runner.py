@@ -20,7 +20,7 @@ from mcp.types import (
 )
 from tenacity import (
     AsyncRetrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -798,6 +798,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         total_candidates = len(candidates)
         last_exception: Exception | None = None
         last_err_response: LLMResponse | None = None
+        has_stream_output = False
+        retry_empty_output = retry_if_exception(
+            lambda exc: not has_stream_output and isinstance(exc, EmptyModelOutputError)
+        )
 
         async def wait_before_retry(delay: float) -> None:
             await self._await_or_stop(asyncio.sleep(delay), interrupt_for_steering=True)
@@ -817,7 +821,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 retrying = AsyncRetrying(
                     sleep=wait_before_retry,
-                    retry=retry_if_exception_type(EmptyModelOutputError),
+                    retry=retry_empty_output,
                     stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
                     wait=wait_exponential(
                         multiplier=1,
@@ -830,7 +834,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 async for attempt in retrying:
                     if self._is_stop_requested():
                         return
-                    has_stream_output = False
                     with attempt:
                         try:
                             async with aclosing(
@@ -889,6 +892,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     exc,
                     exc_info=True,
                 )
+                if has_stream_output:
+                    yield LLMResponse(
+                        role="err",
+                        completion_text="The chat model stream ended early after output started.",
+                    )
+                    return
                 continue
 
         if last_err_response:
