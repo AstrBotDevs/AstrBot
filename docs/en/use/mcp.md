@@ -129,7 +129,7 @@ After connecting, make sure the tools are available to the current conversation:
 
 The default persona uses all available capabilities. Create or edit a custom persona to restrict the selection. Selecting a globally disabled tool in a persona does not enable it again.
 
-AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. The persona capabilities panel shows selections missing from the current list under **Saved tools not listed above**. Select a tool by its full name to use it after a rename.
+AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. The persona capabilities panel shows selections missing from the current list under **Saved tools not listed above**. When editing a persona, click **Delete** to mark an entry for removal or **Undo** to restore it before saving. Select a tool by its full name to use it after a rename.
 
 ![Saved tool names in the persona capabilities panel](./images/mcp-saved-persona-en.png)
 

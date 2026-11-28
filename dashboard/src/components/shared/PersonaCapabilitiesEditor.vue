@@ -8,6 +8,10 @@ const props = defineProps({
     type: [Array, null],
     default: null,
   },
+  removedUnlistedTools: {
+    type: [Array, null],
+    default: null,
+  },
   skills: {
     type: [Array, null],
     default: null,
@@ -46,7 +50,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:tools", "update:skills"]);
+const emit = defineEmits([
+  "update:tools",
+  "update:skills",
+  "update:removedUnlistedTools",
+]);
 const { t } = useI18n();
 const { tm } = useModuleI18n("core.shared");
 
@@ -131,6 +139,16 @@ const unlistedSavedTools = computed(() => {
   const listedNames = new Set(toolGroups.value.flatMap((group) => group.toolNames));
   return [...new Set(props.tools.filter((name) => !listedNames.has(name)))];
 });
+
+function toggleUnlistedToolRemoval(name) {
+  const removed = props.removedUnlistedTools;
+  emit(
+    "update:removedUnlistedTools",
+    removed.includes(name)
+      ? removed.filter((item) => item !== name)
+      : [...removed, name],
+  );
+}
 
 const skillItems = computed(() => {
   const items = [];
@@ -404,8 +422,34 @@ async function saveSelectionDialog() {
 
     <v-sheet v-if="!loadingTools && unlistedSavedTools.length" border rounded="lg" class="pa-3">
       <div class="text-subtitle-2 mb-1">{{ tm('personaQuickPreview.unlistedSavedTools') }}</div>
-      <ul class="ps-4 text-body-2">
-        <li v-for="name in unlistedSavedTools" :key="name" class="text-break">{{ name }}</li>
+      <ul class="pa-0 text-body-2">
+        <li
+          v-for="name in unlistedSavedTools"
+          :key="name"
+          class="d-flex align-center justify-space-between ga-2"
+        >
+          <span
+            class="text-break"
+            :class="{
+              'text-decoration-line-through text-medium-emphasis': removedUnlistedTools?.includes(name),
+            }"
+          >
+            {{ name }}
+          </span>
+          <v-btn
+            v-if="removedUnlistedTools && !readonly"
+            type="button"
+            variant="text"
+            size="small"
+            :color="removedUnlistedTools.includes(name) ? 'primary' : 'error'"
+            :disabled="Boolean(saving)"
+            :ripple="false"
+            :aria-label="`${removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : t('core.common.delete')} ${name}`"
+            @click="toggleUnlistedToolRemoval(name)"
+          >
+            {{ removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : t('core.common.delete') }}
+          </v-btn>
+        </li>
       </ul>
     </v-sheet>
 

@@ -105,6 +105,7 @@
     "selectAllTools": "选择全部工具",
     "toolCount": "已选 {selected}/{total} 个工具",
     "unlistedSavedTools": "已保存但未列出的工具",
+    "undoToolRemoval": "撤销",
     "skillDialogTitle": "配置 {name} 的技能",
     "skillDialogHint": "选择该人格可以使用的技能。",
     "selectAllSkills": "选择全部技能",
