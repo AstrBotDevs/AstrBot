@@ -1,7 +1,9 @@
 """Behavioral contract for runtime turns, independent of native model execution."""
 
 import asyncio
+import gc
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -170,3 +172,237 @@ async def test_repeated_close_waits_for_cleanup_without_cancelling_it_twice():
     release_cleanup.set()
     await asyncio.wait_for(asyncio.gather(first_close, second_close), 1)
     assert (await turn.result()).status == TurnStatus.CANCELLED
+
+
+class _DummyTurn:
+    done = False
+
+    async def cancel(self) -> None:
+        return None
+
+
+def _make_astr_runtime(*, max_idle_sessions: int = 2):
+    from astrbot.core.astr_agent_runtime.runtime import AstrAgentRuntime
+
+    conversations: dict[str, SimpleNamespace] = {}
+
+    class FakeStore:
+        async def get_metadata(self, cid: str):
+            return conversations.get(cid)
+
+    conv_mgr = MagicMock()
+    conv_mgr.db = SimpleNamespace(conversation_store=FakeStore())
+    conv_mgr.register_on_session_deleted = MagicMock()
+    conv_mgr.register_on_conversation_deleted = MagicMock()
+    subagents = MagicMock()
+    subagents.store = SimpleNamespace(find_native_conversation=lambda umo, cid: None)
+    subagents.evict_umo = MagicMock()
+    subagents.evict_scope = MagicMock()
+    context = SimpleNamespace(
+        conversation_manager=conv_mgr,
+        astrbot_config_mgr=SimpleNamespace(confs={}),
+    )
+    runtime = AstrAgentRuntime(
+        context,
+        agent_configs=MagicMock(),
+        subagents=subagents,
+        max_idle_sessions=max_idle_sessions,
+    )
+    return runtime, conversations, conv_mgr, subagents
+
+
+@pytest.mark.asyncio
+async def test_astr_runtime_lru_eviction_preserves_live_handles_without_closing():
+    """LRU cache eviction pops handles without closing retained caller references."""
+    runtime, conversations, _, _ = _make_astr_runtime(max_idle_sessions=2)
+    for cid in ("c1", "c2", "c3", "c4"):
+        conversations[cid] = SimpleNamespace(umo=f"p:FriendMessage:{cid}")
+
+    s1 = await runtime.open_session("p:FriendMessage:c1", session_id="c1")
+    s2 = await runtime.open_session("p:FriendMessage:c2", session_id="c2")
+
+    active_turn = _DummyTurn()
+    s1._turns.add(active_turn)
+    s1.active_turn = active_turn
+
+    s3 = await runtime.open_session("p:FriendMessage:c3", session_id="c3")
+    assert ("main", "c1") in runtime._sessions
+    assert ("main", "c2") not in runtime._sessions
+    # LRU eviction does not close retained handles so callers/follow-ups stay valid.
+    assert s2.closed is False
+    assert ("main", "c3") in runtime._sessions
+
+    # While caller holds s2, re-opening reuses the exact live instance.
+    s2_reopened = await runtime.open_session("p:FriendMessage:c2", session_id="c2")
+    assert s2_reopened is s2
+    assert ("main", "c3") not in runtime._sessions
+    assert s3.closed is False
+
+    # Settling s1 trims over-capacity idle entries via on_session_idle.
+    s1._turns.clear()
+    s1.active_turn = None
+    s1._on_turn_settled()
+    assert len(runtime._sessions) <= 2
+
+    # Dropping strong references lets WeakValueDictionary release c3.
+    del s3
+    gc.collect()
+    s3_fresh = await runtime.open_session("p:FriendMessage:c3", session_id="c3")
+    assert s3_fresh.closed is False
+
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_astr_runtime_deletion_callbacks_and_deferred_active_close():
+    """Explicit deletion closes idle sessions immediately and active ones once settled."""
+    runtime, conversations, conv_mgr, subagents = _make_astr_runtime(
+        max_idle_sessions=8
+    )
+    conversations["c1"] = SimpleNamespace(umo="p:FriendMessage:u1")
+    conversations["c2"] = SimpleNamespace(umo="p:FriendMessage:u1")
+    conversations["c3"] = SimpleNamespace(umo="p:FriendMessage:u2")
+
+    await runtime.initialize()
+    conv_mgr.register_on_session_deleted.assert_called_once_with(runtime.evict_umo)
+    conv_mgr.register_on_conversation_deleted.assert_called_once_with(
+        runtime.evict_conversation
+    )
+
+    s1 = await runtime.open_session("p:FriendMessage:u1", session_id="c1")
+    s2 = await runtime.open_session("p:FriendMessage:u1", session_id="c2")
+    s3 = await runtime.open_session("p:FriendMessage:u2", session_id="c3")
+
+    active_turn = _DummyTurn()
+    s1._turns.add(active_turn)
+    s1.active_turn = active_turn
+
+    await runtime.evict_umo("p:FriendMessage:u1")
+    assert ("main", "c1") not in runtime._sessions
+    assert ("main", "c2") not in runtime._sessions
+    assert s2.closed is True
+    assert s1.closed is False
+    subagents.evict_umo.assert_called_once_with("p:FriendMessage:u1")
+
+    # Once active turn settles, _on_turn_settled schedules deferred close.
+    s1._turns.clear()
+    s1.active_turn = None
+    s1._on_turn_settled()
+    await asyncio.sleep(0)
+    await asyncio.gather(*list(runtime._deferred_close_tasks), return_exceptions=True)
+    assert s1.closed is True
+
+    # Single-conversation deletion closes its session and evicts subagent scope.
+    await runtime.evict_conversation("p:FriendMessage:u2", "c3")
+    assert s3.closed is True
+    subagents.evict_scope.assert_called_once_with("p:FriendMessage:u2", "c3")
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_astr_runtime_close_sessions_logs_errors(caplog):
+    """_close_sessions logs close failures instead of silently swallowing them."""
+    runtime, _, _, _ = _make_astr_runtime()
+    bad_session = SimpleNamespace(
+        id="bad-sess",
+        close=AsyncMock(side_effect=RuntimeError("boom")),
+    )
+    await runtime._close_sessions([bad_session])
+    assert "Failed to close evicted session bad-sess: boom" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_conversation_manager_delete_conversation_triggers_callback(monkeypatch):
+    """delete_conversation notifies registered conversation-deletion listeners."""
+    from astrbot.core import sp
+    from astrbot.core.conversation_mgr import ConversationManager
+
+    mgr = ConversationManager.__new__(ConversationManager)
+    mgr._selection_locks = SimpleNamespace(
+        acquire_lock=lambda _umo: AsyncMock(
+            __aenter__=AsyncMock(return_value=None),
+            __aexit__=AsyncMock(return_value=False),
+        )
+    )
+    mgr._load_selection = AsyncMock(return_value="cid-1")
+    mgr._delete_records = AsyncMock()
+    mgr.on_current_conversation_deleted = None
+    mgr.session_conversations = {"p:FriendMessage:u1": "cid-1"}
+    mgr._on_conversation_deleted_callbacks = []
+    monkeypatch.setattr(sp, "session_remove", AsyncMock())
+
+    received: list[tuple[str, str]] = []
+
+    async def on_deleted(umo: str, cid: str) -> None:
+        received.append((umo, cid))
+
+    mgr.register_on_conversation_deleted(on_deleted)
+    await mgr.delete_conversation("p:FriendMessage:u1")
+
+    assert received == [("p:FriendMessage:u1", "cid-1")]
+
+
+@pytest.mark.asyncio
+async def test_subagent_service_evicts_idle_callers_and_defers_deleted_active_scope():
+    """SubAgentService evicts idle callers, keeps active ones, and cleans up on settle."""
+    from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
+    from astrbot.core.astr_agent_runtime.subagents.service import SubAgentService
+    from astrbot.core.astr_agent_runtime.subagents.store import (
+        AgentRecord,
+        AgentScope,
+        AgentState,
+        SubAgentStore,
+        TaskRecord,
+    )
+
+    store = SubAgentStore(MagicMock())
+    service = SubAgentService(store, {}, max_cached_callers=2)
+
+    scope1 = AgentScope("p:FriendMessage:u1", "c1")
+    scope2 = AgentScope("p:FriendMessage:u2", "c2")
+    scope3 = AgentScope("p:FriendMessage:u3", "c3")
+
+    active_record = AgentRecord(
+        agent_id="agent-1",
+        scope=scope1,
+        runtime="astrbot",
+        name="worker",
+        conversation_id="sub-1",
+        options={},
+        owner={"sender_id": "u1"},
+        parent=SimpleNamespace(runtime="astrbot", session_id="c1"),
+        turns=[
+            TaskRecord(1, [{"type": "text", "text": "hi"}], state=AgentState.RUNNING)
+        ],
+    )
+    store.agents[active_record.agent_id] = active_record
+
+    def real_ctx(scope: AgentScope) -> SubAgentContext:
+        ctx = SubAgentContext.__new__(SubAgentContext)
+        event = MagicMock()
+        event.get_extra.return_value = None
+        ctx.context = MagicMock()
+        ctx.event = event
+        ctx.subagent_scope = scope
+        ctx.is_subagent = False
+        ctx.agent_session = SimpleNamespace(
+            runtime="astrbot", session_id=scope.conversation_id
+        )
+        ctx.delegable_tools = MagicMock()
+        return ctx
+
+    service._caller(real_ctx(scope1))
+    service._caller(real_ctx(scope2))
+    service._caller(real_ctx(scope3))
+
+    assert scope1 in service._callers
+    assert scope2 not in service._callers
+    assert scope3 in service._callers
+
+    # Deletion while active defers cleanup until work settles.
+    service.evict_scope("p:FriendMessage:u1", "c1")
+    assert scope1 in service._callers
+    active_record.turns[0].state = AgentState.COMPLETED
+    service.on_scope_settled(scope1)
+    assert scope1 not in service._callers
+    assert scope3 in service._callers

@@ -440,6 +440,7 @@ class AgentSession(ABC):
                         )
                 turn.emit(TurnFinished(result=result))
                 self._turns.discard(turn)
+                self._on_turn_settled()
             return result
 
         task = asyncio.create_task(execute())
@@ -456,9 +457,14 @@ class AgentSession(ABC):
                     )
                 )
                 self._turns.discard(turn)
+                self._on_turn_settled()
 
         task.add_done_callback(completed)
         return turn
+
+    def _on_turn_settled(self) -> None:
+        """Notify subclasses or owning runtimes after a turn leaves ``_turns``."""
+        return None
 
     def _execution_scope(self) -> AbstractAsyncContextManager[object]:
         """Acquire implementation-owned guards before Core's queued admission.
