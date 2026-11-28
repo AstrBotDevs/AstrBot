@@ -1,12 +1,6 @@
 <script setup>
-import { computed } from "vue";
-
 const props = defineProps({
   title: {
-    type: String,
-    required: true,
-  },
-  icon: {
     type: String,
     required: true,
   },
@@ -40,44 +34,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["toggle", "toggle-all", "configure"]);
-
-const selectableItems = computed(() =>
-  props.items.filter((item) => !item.disabled),
-);
-const selectedCount = computed(
-  () => selectableItems.value.filter((item) => item.selected).length,
-);
-const allSelected = computed(
-  () =>
-    selectableItems.value.length > 0 &&
-    selectedCount.value === selectableItems.value.length,
-);
-const partiallySelected = computed(
-  () =>
-    props.items.some((item) => item.indeterminate) ||
-    (selectedCount.value > 0 && !allSelected.value),
-);
+defineEmits(["toggle", "configure"]);
 </script>
 
 <template>
-  <div class="capability-list">
-    <div class="capability-list__header">
-      <v-checkbox-btn
-        :model-value="allSelected"
-        :indeterminate="partiallySelected"
-        :disabled="readonly || saving || selectableItems.length === 0"
-        :aria-label="title"
-        density="compact"
-        @click.stop="emit('toggle-all')"
-      />
-      <v-icon size="18">{{ icon }}</v-icon>
-      <span class="capability-list__title">{{ title }}</span>
-      <span class="capability-list__count">
-        {{ selectedCount }}/{{ selectableItems.length }}
-      </span>
-    </div>
-
+  <div class="capability-list" role="group" :aria-label="title">
     <div v-if="loading || items.length === 0" class="capability-list__empty">
       <v-progress-circular v-if="loading" indeterminate size="18" width="2" />
       <span v-else>{{ emptyText }}</span>
@@ -89,7 +50,7 @@ const partiallySelected = computed(
         :key="item.key || item.name"
         :disabled="readonly || saving || item.disabled"
         class="capability-list__item"
-        @click="emit('toggle', item)"
+        @click="$emit('toggle', item)"
       >
         <template #prepend>
           <v-checkbox-btn
@@ -98,7 +59,7 @@ const partiallySelected = computed(
             :disabled="readonly || saving || item.disabled"
             :aria-label="item.name"
             density="compact"
-            @click.stop="emit('toggle', item)"
+            @click.stop="$emit('toggle', item)"
           />
         </template>
 
@@ -137,7 +98,7 @@ const partiallySelected = computed(
                   variant="text"
                   :aria-label="configureText"
                   :disabled="readonly || saving"
-                  @click.stop="emit('configure', item)"
+                  @click.stop="$emit('configure', item)"
                 />
               </template>
             </v-tooltip>
@@ -155,31 +116,6 @@ const partiallySelected = computed(
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 8px;
   background: rgb(var(--v-theme-surface));
-}
-
-.capability-list__header {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 2px 10px 2px 4px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  gap: 6px;
-}
-
-.capability-list__title {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.82rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capability-list__count {
-  margin-left: auto;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 0.74rem;
-  opacity: 0.6;
 }
 
 .capability-list__items {

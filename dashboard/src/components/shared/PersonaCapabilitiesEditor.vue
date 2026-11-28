@@ -20,6 +20,23 @@ const emit = defineEmits(["update:tools", "update:skills"]);
 const { t } = useI18n();
 const { tm } = useModuleI18n("core.shared");
 const fields = ["tools", "skills"];
+const fieldLabels = {
+  tools: "personaQuickPreview.toolsLabel",
+  skills: "personaQuickPreview.skillsLabel",
+};
+const modeLabels = {
+  tools: {
+    all: "personaQuickPreview.selectAllTools",
+    partial: "personaQuickPreview.selectPartialTools",
+    none: "personaQuickPreview.selectNoTools",
+  },
+  skills: {
+    all: "personaQuickPreview.selectAllSkills",
+    partial: "personaQuickPreview.selectPartialSkills",
+    none: "personaQuickPreview.selectNoSkills",
+  },
+};
+const editingPartial = ref({ tools: false, skills: false });
 const selectionDialog = ref(null);
 const upgradeDialog = ref(false);
 const decisions = ref({});
@@ -124,33 +141,50 @@ function removeItem(field, value, item) {
   });
 }
 
-function editItems(field, targets, isSelected, allFromSource = false) {
-  let value = [...(props[field] || [])];
+function editableSelection(field) {
+  const value = [...(props[field] || [])];
   if (props[field] === null)
     defaultItems(field).forEach((item) => addItem(value, item));
-  if (allFromSource && targets.length) {
-    const target = targets[0];
-    const { kind, source, source_id } = target;
-    value = value.filter((entry) =>
-      typeof entry === "string"
-        ? !targets.some(
-            (item) =>
-              item.legacyName === entry && matches(field, entry).length === 1,
-          )
-        : !sameSource(entry, target),
-    );
-    value.push({ kind, source, source_id: source_id ?? null, items: null });
-    return value;
-  }
-  for (const item of targets) {
-    if (isSelected(item)) {
-      if (!selected(field, item, value)) addItem(value, item);
-    } else {
-      value = removeItem(field, value, item);
-      if (matches(field, item.legacyName).length === 1) {
-        value = value.filter((entry) => entry !== item.legacyName);
-      }
+  return value;
+}
+
+function selectionMode(field) {
+  const value = props[field];
+  if (value === null) return "all";
+  return value?.length ||
+    editingPartial.value[field] ||
+    removed.value.some((row) => row.field === field)
+    ? "partial"
+    : "none";
+}
+
+async function setSelectionMode(field, mode) {
+  if (props.readonly || props.saving || mode === selectionMode(field)) return;
+  if (mode === "partial") {
+    if (props[field] === null) {
+      if (!catalogReady.value[field]) return;
+      if (!(await applySelection(field, editableSelection(field)))) return;
     }
+    editingPartial.value[field] = true;
+  } else if (await applySelection(field, mode === "all" ? null : [])) {
+    editingPartial.value[field] = false;
+    removed.value = removed.value.filter((row) => row.field !== field);
+  }
+}
+
+function replaceSource(field, group, items) {
+  const target = group.items[0];
+  const value = editableSelection(field).filter((entry) =>
+    typeof entry === "string"
+      ? !group.items.some(
+          (item) =>
+            item.legacyName === entry && matches(field, entry).length === 1,
+        )
+      : !sameSource(entry, target),
+  );
+  if (items === null || items.length > 0) {
+    const { kind, source, source_id } = target;
+    value.push({ kind, source, source_id: source_id ?? null, items });
   }
   return value;
 }
@@ -237,77 +271,85 @@ const groups = computed(() =>
   ),
 );
 
-function toggle(field, candidates, sourceGroup = false) {
-  if (!candidates.length) return;
-  const turnOn = !candidates.every((item) => selected(field, item));
-  return applySelection(
-    field,
-    editItems(field, candidates, () => turnOn, sourceGroup && turnOn),
-  );
-}
-
-function toggleAll(field) {
-  const candidates = groups.value[field].flatMap((group) => group.eligible);
-  if (
-    candidates.some((item) => !selected(field, item)) &&
-    !unavailable.value.some((row) => row.field === field) &&
-    !removed.value.some((row) => row.field === field)
-  ) {
-    return applySelection(field, null);
-  }
-  return toggle(field, candidates);
-}
-
-function toggleAllInDialog() {
-  const dialog = selectionDialog.value;
-  const { eligible } = dialog.group;
-  const { keys } = dialog;
-  dialog.allFromSource = !eligible.every((item) => keys.includes(item.key));
-  dialog.changed = true;
-  if (!dialog.allFromSource) {
-    dialog.keys = keys.filter(
-      (key) => !eligible.some((item) => item.key === key),
+function toggleGroup(field, group) {
+  if (group.eligible.length === 0) return;
+  if (!group.individual) {
+    return applySelection(
+      field,
+      replaceSource(field, group, group.selected ? [] : null),
     );
-  } else {
-    dialog.keys = [...new Set([...keys, ...eligible.map((item) => item.key)])];
   }
+
+  const [item] = group.eligible;
+  let value = editableSelection(field);
+  if (group.selected) {
+    value = removeItem(field, value, item);
+    if (matches(field, item.legacyName).length === 1) {
+      value = value.filter((entry) => entry !== item.legacyName);
+    }
+  } else {
+    addItem(value, item);
+  }
+  return applySelection(field, value);
+}
+
+function openSelection(field, group) {
+  const saved = (props[field] || []).find(
+    (entry) => typeof entry !== "string" && sameSource(entry, group.items[0]),
+  );
+  const keys = group.items
+    .filter((item) => selected(field, item))
+    .map((item) => item.key);
+  const mode =
+    saved?.items === null || (props[field] === null && group.selected)
+      ? "all"
+      : keys.length || saved?.items?.length
+      ? "partial"
+      : "none";
+  selectionDialog.value = {
+    field,
+    group,
+    mode,
+    initialMode: mode,
+    keys,
+    changed: false,
+    unlistedItems:
+      saved?.items?.filter(
+        (name) => !group.items.some((item) => item.name === name),
+      ) ?? [],
+  };
 }
 
 function toggleDialogItem(item, enabled) {
   const dialog = selectionDialog.value;
-  dialog.allFromSource = false;
   dialog.changed = true;
   dialog.keys = enabled
     ? [...dialog.keys, item.key]
     : dialog.keys.filter((key) => key !== item.key);
 }
 
-function openSelection(field, group) {
-  selectionDialog.value = {
-    field,
-    group,
-    changed: false,
-    allFromSource: false,
-    keys: group.items
-      .filter((item) => selected(field, item))
-      .map((item) => item.key),
-  };
-}
-
 async function saveSelectionDialog() {
-  const { field, group, keys, changed, allFromSource } = selectionDialog.value;
-  if (
-    !changed ||
-    (await applySelection(
-      field,
-      editItems(
-        field,
-        group.eligible,
-        (item) => keys.includes(item.key),
-        allFromSource,
-      ),
-    ))
-  ) {
+  const { field, group, keys, mode, initialMode, changed, unlistedItems } =
+    selectionDialog.value;
+  if (mode === initialMode && !changed) {
+    selectionDialog.value = null;
+    return;
+  }
+
+  const items =
+    mode === "all"
+      ? null
+      : mode === "none"
+      ? []
+      : [
+          ...new Set([
+            ...group.items
+              .filter((item) => keys.includes(item.key))
+              .map((item) => item.name),
+            ...unlistedItems,
+          ]),
+        ];
+  if (await applySelection(field, replaceSource(field, group, items))) {
     selectionDialog.value = null;
   }
 }
@@ -325,12 +367,12 @@ const legacy = computed(() =>
   ),
 );
 
+const catalogReady = computed(() => ({
+  tools: props.availableTools !== null && !props.loadingTools,
+  skills: props.availableSkills !== null && !props.loadingSkills,
+}));
 const canPreviewUpgrade = computed(() =>
-  legacy.value.every(({ field }) =>
-    field === "tools"
-      ? props.availableTools !== null && !props.loadingTools
-      : props.availableSkills !== null && !props.loadingSkills,
-  ),
+  legacy.value.every(({ field }) => catalogReady.value[field]),
 );
 const matchedLegacy = computed(() =>
   legacy.value.filter((row) => row.candidates.length > 0),
@@ -493,16 +535,40 @@ const upgradeReady = computed(
       {{ tm("personaQuickPreview.nameConflict", { name: conflict }) }}
     </v-alert>
 
-    <template v-for="field in fields" :key="field">
+    <section v-for="field in fields" :key="field" class="persona-selection">
+      <h3 class="persona-selection__title">
+        <v-icon size="18">{{
+          field === "tools" ? "mdi-tools" : "mdi-lightning-bolt"
+        }}</v-icon>
+        {{ tm(fieldLabels[field]) }}
+      </h3>
+      <v-radio-group
+        :model-value="selectionMode(field)"
+        :aria-label="tm(fieldLabels[field])"
+        :disabled="readonly || Boolean(saving)"
+        class="persona-selection__modes"
+        density="compact"
+        hide-details
+        inline
+        @update:model-value="setSelectionMode(field, $event)"
+      >
+        <v-radio
+          v-for="(label, mode) in modeLabels[field]"
+          :key="mode"
+          :label="tm(label)"
+          :value="mode"
+          :disabled="
+            readonly ||
+            Boolean(saving) ||
+            (mode === 'partial' &&
+              props[field] === null &&
+              !catalogReady[field])
+          "
+        />
+      </v-radio-group>
       <PersonaCapabilityList
-        :title="
-          tm(
-            field === 'tools'
-              ? 'personaQuickPreview.toolsLabel'
-              : 'personaQuickPreview.skillsLabel',
-          )
-        "
-        :icon="field === 'tools' ? 'mdi-tools' : 'mdi-lightning-bolt'"
+        v-if="selectionMode(field) === 'partial'"
+        :title="tm(fieldLabels[field])"
         :items="groups[field]"
         :empty-text="
           tm(
@@ -528,12 +594,12 @@ const upgradeReady = computed(
         :readonly="readonly"
         :saving="Boolean(saving)"
         :loading="field === 'tools' ? loadingTools : loadingSkills"
-        @toggle="toggle(field, $event.eligible, !$event.individual)"
-        @toggle-all="toggleAll(field)"
+        @toggle="toggleGroup(field, $event)"
         @configure="openSelection(field, $event)"
       />
       <v-sheet
         v-if="
+          selectionMode(field) === 'partial' &&
           !(field === 'tools' ? loadingTools : loadingSkills) &&
           unavailableByField[field].length
         "
@@ -582,7 +648,7 @@ const upgradeReady = computed(
           </v-btn>
         </div>
       </v-sheet>
-    </template>
+    </section>
 
     <v-dialog
       :model-value="Boolean(selectionDialog)"
@@ -613,25 +679,30 @@ const upgradeReady = computed(
             class="mb-3"
             >{{ error }}</v-alert
           >
-          <v-btn
-            variant="text"
-            size="small"
+          <v-radio-group
+            v-model="selectionDialog.mode"
+            :aria-label="selectionDialog.group.name"
             :disabled="Boolean(saving)"
-            @click="toggleAllInDialog"
+            class="persona-selection__modes"
+            density="compact"
+            hide-details
+            inline
           >
-            {{
-              tm(
-                selectionDialog.field === "tools"
-                  ? "personaQuickPreview.selectAllTools"
-                  : "personaQuickPreview.selectAllSkills",
-              )
-            }}
-          </v-btn>
-          <v-list density="compact">
+            <v-radio
+              v-for="(label, mode) in modeLabels[selectionDialog.field]"
+              :key="mode"
+              :label="tm(label)"
+              :value="mode"
+            />
+          </v-radio-group>
+          <v-list
+            v-if="selectionDialog.mode === 'partial'"
+            class="mt-3"
+            density="compact"
+          >
             <v-list-item
               v-for="item in selectionDialog.group.items"
               :key="item.key"
-              :subtitle="item.description"
             >
               <template #prepend>
                 <v-checkbox-btn
@@ -642,6 +713,9 @@ const upgradeReady = computed(
                 />
               </template>
               <v-list-item-title>{{ item.name }}</v-list-item-title>
+              <v-list-item-subtitle v-if="item.description">{{
+                item.description
+              }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-card-text>
@@ -798,5 +872,23 @@ const upgradeReady = computed(
   display: grid;
   min-width: 0;
   gap: 14px;
+}
+
+.persona-selection {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.persona-selection__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.persona-selection__modes :deep(.v-selection-control-group--inline) {
+  gap: 2px 12px;
 }
 </style>

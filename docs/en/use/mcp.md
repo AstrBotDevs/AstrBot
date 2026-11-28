@@ -124,7 +124,7 @@ For environment variables, use the JSON `env` object directly. This is a format 
 After connecting, make sure the tools are available to the current conversation:
 
 1. Open **Personas** and edit the persona used by that conversation.
-2. Under **Persona Capabilities**, find the MCP server in the tools list. Select the entire server to include its current and future available tools, or open its cog menu to choose specific tools. Then save the persona.
+2. Under **Persona Capabilities**, you can select all tools, select specific tools, or select no tools. To configure an MCP server individually, choose **Select specific tools**. Then select the server to include its current and future available tools, or open its cog menu to choose all, specific, or no tools from that server. Save the persona.
 3. Make sure the conversation uses that persona and describe the task naturally, for example, “Search for recent multimodal RAG papers and give me their titles and links.”
 
 The default persona uses all available capabilities. Create or edit a custom persona to restrict the selection. Selecting a globally disabled tool in a persona does not enable it again.

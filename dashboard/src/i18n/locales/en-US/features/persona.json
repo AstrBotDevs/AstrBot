@@ -30,7 +30,7 @@
     "userMessage": "User Message",
     "assistantMessage": "Assistant Message",
     "capabilities": "Persona Capabilities",
-    "capabilitiesHelp": "Choose the tools and Skills available to this persona by source. Use the cog button to select individual capabilities.",
+    "capabilitiesHelp": "Choose Select specific tools or Select specific skills to configure them by source. Use the cog button to pick individual items from that source.",
     "tools": "Tool Selection",
     "toolsHelp": "Select available tools for this persona. Tools allow the bot to perform specific functions such as searching, calculating, getting information, etc.",
     "toolsSelection": "Tool Selection Actions",

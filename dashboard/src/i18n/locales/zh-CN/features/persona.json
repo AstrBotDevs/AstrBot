@@ -30,7 +30,7 @@
     "userMessage": "用户消息",
     "assistantMessage": "AI 回答",
     "capabilities": "人格能力",
-    "capabilitiesHelp": "按来源选择这个人格可使用的工具与技能；点击齿轮可进一步选择其中的具体能力。",
+    "capabilitiesHelp": "选择部分工具或技能后，可以按来源配置。点击齿轮可选择该来源的具体项目。",
     "tools": "工具 / MCP 工具选择",
     "toolsHelp": "为这个人格选择可用的外部工具。外部工具给了 AI 接触外部环境的能力，如搜索、计算、获取信息等。",
     "toolsSelection": "工具选择操作",
