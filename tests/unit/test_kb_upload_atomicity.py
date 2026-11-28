@@ -650,3 +650,181 @@ async def test_cleanup_failed_upload_real_vec_db_by_kb_doc_id(
     await helper._cleanup_failed_upload(doc_id=kb_doc_id, media_paths=[])
     assert await vec_db.count_documents(metadata_filter={"kb_doc_id": kb_doc_id}) == 0
     await vec_db.close()
+
+
+@pytest.mark.asyncio
+async def test_upload_document_records_saved_media_count_and_kb_db_busy_timeout(
+    tmp_path: Path,
+    stub_provider_manager_module,
+) -> None:
+    """upload_document persists media_count matching saved media and kb.db sets busy_timeout."""
+    from sqlalchemy import select, text
+
+    from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+    from astrbot.core.knowledge_base.models import KBDocument, KBMedia
+
+    KBHelper = _import_kb_helper()
+
+    kb_db = KBSQLiteDatabase(str(tmp_path / "kb.db"))
+    await kb_db.initialize()
+    try:
+        async with kb_db.get_db() as session:
+            busy_timeout = (
+                await session.execute(text("PRAGMA busy_timeout"))
+            ).scalar_one()
+        assert busy_timeout == 30000
+
+        kb = KnowledgeBase(
+            kb_name="Test KB",
+            description="",
+            embedding_provider_id="emb",
+        )
+        async with kb_db.get_db() as session, session.begin():
+            session.add(kb)
+
+        helper = KBHelper.__new__(KBHelper)
+        helper.kb = kb
+        helper.kb_db = kb_db
+        helper.refresh_kb = AsyncMock()
+        helper.refresh_document = AsyncMock()
+        helper.vec_db = AsyncMock()
+        helper.vec_db.insert_batch = AsyncMock()
+        helper.vec_db.count_documents = AsyncMock(return_value=1)
+        helper.kb_medias_dir = tmp_path / "medias"
+        helper.kb_medias_dir.mkdir()
+        helper.chunker = AsyncMock()
+        helper.chunker.chunk = AsyncMock(return_value=["hello world"])
+
+        saved_items: list[KBMedia] = []
+
+        async def fake_save_media(**kwargs):
+            media = KBMedia(
+                doc_id=kwargs["doc_id"],
+                kb_id=kb.kb_id,
+                media_type=kwargs["media_type"],
+                file_name=kwargs["file_name"],
+                file_path=str(helper.kb_medias_dir / kwargs["file_name"]),
+                file_size=len(kwargs["content"]),
+                mime_type=kwargs.get("mime_type") or "",
+            )
+            saved_items.append(media)
+            return media
+
+        helper._save_media = AsyncMock(side_effect=fake_save_media)
+
+        parse_result = MagicMock()
+        parse_result.text = "hello world"
+        parse_result.media = [
+            MagicMock(
+                media_type="image",
+                file_name="a.png",
+                content=b"a",
+                mime_type="image/png",
+            ),
+            MagicMock(
+                media_type="image",
+                file_name="b.png",
+                content=b"b",
+                mime_type="image/png",
+            ),
+        ]
+
+        with (
+            patch(
+                "astrbot.core.knowledge_base.kb_helper.select_parser",
+                new=AsyncMock(
+                    return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+                ),
+            ),
+            patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        ):
+            doc = await helper.upload_document(
+                file_name="demo.txt",
+                file_content=b"hello world",
+                file_type="txt",
+            )
+
+        assert doc.media_count == 2
+        assert len(saved_items) == 2
+        async with kb_db.get_db() as session:
+            persisted_doc = (
+                await session.execute(
+                    select(KBDocument).where(KBDocument.doc_id == doc.doc_id)
+                )
+            ).scalar_one()
+        assert persisted_doc.media_count == 2
+    finally:
+        await kb_db.close()
+
+
+@pytest.mark.asyncio
+async def test_upload_document_rejects_superseded_helper_before_insert(
+    tmp_path: Path,
+    stub_provider_manager_module,
+) -> None:
+    """upload_document should abort stage 3 and clean up if helper is superseded mid-upload."""
+    from astrbot.core.exceptions import KnowledgeBaseUploadError
+
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.vec_db.insert_batch = AsyncMock()
+    helper.vec_db.delete_documents = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+
+    async def supersede_during_chunk(*args, **kwargs):
+        helper._superseded = True
+        return ["hello world"]
+
+    helper.chunker.chunk = AsyncMock(side_effect=supersede_during_chunk)
+
+    media_path = helper.kb_medias_dir / "temp.png"
+
+    async def fake_save_media(**kwargs):
+        media_path.write_bytes(b"img")
+        media = MagicMock()
+        media.file_path = str(media_path)
+        return media
+
+    helper._save_media = AsyncMock(side_effect=fake_save_media)
+    helper.kb_db.get_db = _successful_get_db(_session_with_begin())
+
+    parse_result = MagicMock()
+    parse_result.text = "hello world"
+    parse_result.media = [
+        MagicMock(
+            media_type="image",
+            file_name="temp.png",
+            content=b"img",
+            mime_type="image/png",
+        ),
+    ]
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(
+                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+            ),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        pytest.raises(KnowledgeBaseUploadError) as exc_info,
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    assert exc_info.value.stage == "storage"
+    helper.vec_db.insert_batch.assert_not_awaited()
+    assert not media_path.exists()

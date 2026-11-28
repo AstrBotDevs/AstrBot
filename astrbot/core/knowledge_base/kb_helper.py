@@ -143,6 +143,11 @@ class KBHelper:
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
         self.kb_files_dir = Path(self.kb_dir) / "files" / self.kb.kb_id
+        self._vec_db_lock: asyncio.Lock | None = None
+        self._vec_db_mutation_lock: asyncio.Lock | None = None
+        self._vec_db_mutation_version = 0
+        self._vec_db_provider_pair: tuple[object, object] | None = None
+        self._superseded = False
 
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
@@ -176,31 +181,68 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> "FaissVecDB":
-        if not self.kb.embedding_provider_id:
-            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+        """Initialize or reuse the vector store matching current providers."""
+        lock = getattr(self, "_vec_db_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._vec_db_lock = lock
+        async with lock:
+            if getattr(self, "_superseded", False):
+                raise RuntimeError(
+                    f"Knowledge base helper for KB {self.kb.kb_id} has been superseded"
+                )
+            if not self.kb.embedding_provider_id:
+                raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
-        ep = await self.get_ep()
-        rp: RerankProvider | None = None
-        try:
-            rp = await self.get_rp()
-        except Exception as e:
-            logger.warning(
-                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+            ep = await self.get_ep()
+            rp: RerankProvider | None = None
+            try:
+                rp = await self.get_rp()
+            except Exception as e:
+                logger.warning(
+                    f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+                )
+
+            existing = getattr(self, "vec_db", None)
+            if existing is not None and getattr(self, "init_error", None) is None:
+                provider_pair = getattr(self, "_vec_db_provider_pair", None)
+                if provider_pair == (ep, rp) or (
+                    getattr(existing, "embedding_provider", None) is ep
+                    and getattr(existing, "rerank_provider", None) is rp
+                ):
+                    self._vec_db_provider_pair = (ep, rp)
+                    return existing  # type: ignore[return-value]
+
+            from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
+            vec_db = FaissVecDB(
+                doc_store_path=str(self.kb_dir / "doc.db"),
+                index_store_path=str(self.kb_dir / "index.faiss"),
+                embedding_provider=ep,
+                rerank_provider=rp,
             )
+            try:
+                await vec_db.initialize()
+            except BaseException:
+                try:
+                    await vec_db.close()
+                except Exception:
+                    pass
+                raise
 
-        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
-
-        vec_db = FaissVecDB(
-            doc_store_path=str(self.kb_dir / "doc.db"),
-            index_store_path=str(self.kb_dir / "index.faiss"),
-            embedding_provider=ep,
-            rerank_provider=rp,
-        )
-        await vec_db.initialize()
-        self.vec_db = vec_db
-        # Clear stale init_error once initialization succeeds.
-        self.init_error = None
-        return vec_db
+            old_vec_db = getattr(self, "vec_db", None)
+            self.vec_db = vec_db
+            self._vec_db_provider_pair = (ep, rp)
+            # Clear stale init_error once initialization succeeds.
+            self.init_error = None
+            if old_vec_db is not None and old_vec_db is not vec_db:
+                try:
+                    await old_vec_db.close()
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to close superseded vector store for KB {self.kb.kb_id}: {exc}"
+                    )
+            return vec_db
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
@@ -211,8 +253,21 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if hasattr(self, "vec_db") and self.vec_db:
-            await self.vec_db.close()
+        """Close the active vector store after in-flight mutations finish."""
+        mutation_lock = getattr(self, "_vec_db_mutation_lock", None)
+        if mutation_lock is None:
+            mutation_lock = asyncio.Lock()
+            self._vec_db_mutation_lock = mutation_lock
+        init_lock = getattr(self, "_vec_db_lock", None)
+        if init_lock is None:
+            init_lock = asyncio.Lock()
+            self._vec_db_lock = init_lock
+        async with mutation_lock, init_lock:
+            vec_db = getattr(self, "vec_db", None)
+            if vec_db:
+                await vec_db.close()
+                self.vec_db = None  # type: ignore[assignment]
+            self._vec_db_provider_pair = None
 
     async def upload_document(
         self,
@@ -414,15 +469,28 @@ class KBHelper:
                     await progress_callback("embedding", current, total)
 
             try:
-                await self.vec_db.insert_batch(
-                    contents=contents,
-                    metadatas=metadatas,
-                    batch_size=batch_size,
-                    tasks_limit=tasks_limit,
-                    max_retries=max_retries,
-                    progress_callback=embedding_progress_callback,
-                    embedding_contents=embedding_contents,
-                )
+                mutation_lock = getattr(self, "_vec_db_mutation_lock", None)
+                if mutation_lock is None:
+                    mutation_lock = asyncio.Lock()
+                    self._vec_db_mutation_lock = mutation_lock
+                async with mutation_lock:
+                    if getattr(self, "_superseded", False):
+                        raise RuntimeError(
+                            f"Knowledge base helper for KB {self.kb.kb_id} has been superseded"
+                        )
+                    await self._ensure_vec_db()
+                    self._vec_db_mutation_version = (
+                        getattr(self, "_vec_db_mutation_version", 0) + 1
+                    )
+                    await self.vec_db.insert_batch(
+                        contents=contents,
+                        metadatas=metadatas,
+                        batch_size=batch_size,
+                        tasks_limit=tasks_limit,
+                        max_retries=max_retries,
+                        progress_callback=embedding_progress_callback,
+                        embedding_contents=embedding_contents,
+                    )
             except KnowledgeBaseUploadError:
                 raise
             except Exception as exc:
@@ -446,7 +514,7 @@ class KBHelper:
                 # file_path=str(file_path),
                 file_path="",
                 chunk_count=len(chunks_text),
-                media_count=0,
+                media_count=len(saved_media),
             )
             try:
                 async with self.kb_db.get_db() as session:
@@ -531,17 +599,22 @@ class KBHelper:
         from sqlmodel import col
 
         # 1) chunks + vectors first (most common orphan after partial insert)
-        vec_db = getattr(self, "vec_db", None)
-        if vec_db is not None:
-            try:
-                await vec_db.delete_documents(
-                    metadata_filters={"kb_doc_id": doc_id},
-                )
-            except Exception as ve:
-                logger.warning(
-                    f"Failed to roll back chunks/vectors for failed upload "
-                    f"(doc_id={doc_id}): {ve}",
-                )
+        mutation_lock = getattr(self, "_vec_db_mutation_lock", None)
+        if mutation_lock is None:
+            mutation_lock = asyncio.Lock()
+            self._vec_db_mutation_lock = mutation_lock
+        async with mutation_lock:
+            vec_db = getattr(self, "vec_db", None)
+            if vec_db is not None:
+                try:
+                    await vec_db.delete_documents(
+                        metadata_filters={"kb_doc_id": doc_id},
+                    )
+                except Exception as ve:
+                    logger.warning(
+                        f"Failed to roll back chunks/vectors for failed upload "
+                        f"(doc_id={doc_id}): {ve}",
+                    )
 
         # 2) residual KBDocument / KBMedia rows only (normally none yet)
         try:

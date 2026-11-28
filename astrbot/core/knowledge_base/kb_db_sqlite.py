@@ -49,6 +49,7 @@ class KBSQLiteDatabase:
             """Apply per-connection SQLite durability and bounded memory PRAGMAs."""
             cursor = connection.cursor()
             try:
+                cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA temp_store=MEMORY")
                 cursor.execute("PRAGMA cache_size=-4000")
