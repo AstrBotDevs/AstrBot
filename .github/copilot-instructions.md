@@ -24,7 +24,15 @@ Always reference these instructions first and fallback to search or bash command
 - Dashboard creates optimized production build in `dashboard/dist/`
 
 ### Testing
-- Do not generate test files for now.
+- Unjustified test diffs get deleted in review.
+- **Default: no new tests** — do not add tests unless the task explicitly asks for tests.
+- **Scratch verification is fine; committing it is NOT**: write a throwaway test, run it, delete it, paste the output in the PR.
+- **Bug fix: at most one fast, deterministic regression test** (no network, no sleeps, no full app boot). Startup / dashboard / platform bugs: `uv run scripts/smoke_startup_check.py` + manual steps in the PR.
+- **Feature: at most three behavioral tests** asserting the new user-visible behavior (not implementation details), justified in the PR description.
+- **Refactor: no new tests** — behavior is unchanged; the existing suite passing is the proof.
+- **Never commit**: exhaustive enumeration; mock-heavy tests asserting implementation details; tests for trivial code; tests needing real API keys or the running app (if truly unavoidable: `tests/integration/` with `@pytest.mark.slow`).
+- **Never weaken an existing test** to make your change pass — fix the change. Updating tests for an intentional behavior change is fine; say so in the PR.
+- **Always run** the existing tests your change touches and paste the results in the PR.
 
 ### Code Quality and Linting
 - Install ruff linter: `uv add --dev ruff`
@@ -59,4 +67,4 @@ Always reference these instructions first and fallback to search or bash command
 - UI supports internationalization
 - Default language is Chinese
 
-Remember: This is a production chatbot framework with real users. Always test thoroughly and ensure changes don't break existing functionality.
+Remember: This is a production chatbot framework with real users. Always verify changes against existing behavior instead of adding new tests.
