@@ -123,7 +123,20 @@
 </template>
 
 <script lang="ts">
+import { ref } from "vue";
+
 let logoCount = 0;
+
+// SMIL ignores the reduced-motion media query, so follow it here, including
+// a change while a reply is in progress. One listener serves every logo.
+const reducedMotionQuery =
+  typeof window !== "undefined"
+    ? window.matchMedia?.("(prefers-reduced-motion: reduce)")
+    : undefined;
+const reduceMotion = ref(Boolean(reducedMotionQuery?.matches));
+reducedMotionQuery?.addEventListener("change", (event) => {
+  reduceMotion.value = event.matches;
+});
 
 const LARGE_STAR =
   "m246.3 328.1-17.8 41.2c-6.4 14.8-26.9 14.8-33.3 0l-17.8-41.2c-14.9-34.2-41.8-61.4-75.3-76.3l-48.8-21.6c-14.7-6.5-14.7-27.9 0-34.4l47.2-21c34.4-15.3 61.7-43.5 76.4-78.8l18-43.7c6.3-15.2 27.3-15.2 33.6 0l18 43.7c14.7 35.3 42 63.6 76.4 78.8l47.2 21c14.7 6.5 14.7 27.9 0 34.4l-48.8 21.6c-33.5 14.8-60.4 42.1-75.3 76.2z";
@@ -193,7 +206,7 @@ const TIDES = [
 </script>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed } from "vue";
 
 // The AstrBot mark: a large star and a small one. While a reply is in progress
 // the small star circles the large one on a tilted orbit, passing behind and in
@@ -204,20 +217,6 @@ const props = defineProps<{
   animated?: boolean;
 }>();
 
-// SMIL ignores the reduced-motion media query, so follow it here, including
-// a change while a reply is in progress.
-const reducedMotionQuery =
-  typeof window !== "undefined"
-    ? window.matchMedia?.("(prefers-reduced-motion: reduce)")
-    : undefined;
-const reduceMotion = ref(Boolean(reducedMotionQuery?.matches));
-const onReducedMotionChange = (event: MediaQueryListEvent) => {
-  reduceMotion.value = event.matches;
-};
-reducedMotionQuery?.addEventListener("change", onReducedMotionChange);
-onBeforeUnmount(() =>
-  reducedMotionQuery?.removeEventListener("change", onReducedMotionChange),
-);
 const moving = computed(() => Boolean(props.animated) && !reduceMotion.value);
 
 // Several logos share a page, so each needs its own element ids.
