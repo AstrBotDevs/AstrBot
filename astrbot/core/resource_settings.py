@@ -163,7 +163,11 @@ async def write_legacy_setting(key: str, value) -> None:
 
 
 async def migrate_legacy_settings(filename: Path) -> None:
-    """Copy compatibility rules before retiring their former storage locations."""
+    """Copy compatibility rules before retiring their former storage locations.
+
+    Args:
+        filename: Path of the old skill settings file.
+    """
     for key in ("inactivated_plugins", "inactivated_llm_tools", "tool_permissions"):
         original = await sp.global_get(key, None)
         if original is None:
@@ -172,19 +176,25 @@ async def migrate_legacy_settings(filename: Path) -> None:
             await write_legacy_setting(key, original)
         await sp.remove_async("global", "global", key)
 
-    if await sp.get_async(SETTINGS_SCOPE, "legacy", LEGACY_SKILLS_KEY, None) is None:
-        legacy = {}
-        if filename.is_file():
-            with filename.open(encoding="utf-8") as file:
-                data = json.load(file)
-            if not isinstance(data, dict) or not isinstance(data.get("skills"), dict):
-                raise ValueError("Invalid legacy skill settings")
-            legacy = {
-                name: entry
-                for name, entry in data["skills"].items()
-                if isinstance(entry, dict)
-            }
+    imported = await sp.get_async(SETTINGS_SCOPE, "legacy", LEGACY_SKILLS_KEY, None)
+    if not filename.is_file():
+        if imported is None:
+            await write_legacy_setting(LEGACY_SKILLS_KEY, {})
+        return
+
+    with filename.open(encoding="utf-8") as file:
+        data = json.load(file)
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("skills"), dict)
+        or any(not isinstance(entry, dict) for entry in data["skills"].values())
+    ):
+        raise ValueError("Invalid legacy skill settings")
+
+    legacy = data["skills"]
+    if imported is None:
         await write_legacy_setting(LEGACY_SKILLS_KEY, legacy)
-    archive = filename.with_suffix(".json.migrated")
-    if filename.is_file() and not archive.exists():
-        filename.rename(archive)
+    elif imported != legacy:
+        # A retry can remove the imported file, but a later replacement may contain new data.
+        return
+    filename.unlink(missing_ok=True)

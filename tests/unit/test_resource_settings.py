@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import Tool
@@ -24,15 +25,23 @@ async def test_migration_copies_rules_before_retiring_the_old_storage(
         await preferences.global_put("inactivated_llm_tools", ["search"])
         await preferences.global_put("tool_permissions", {"_default": {"search": "admin"}})
         skills = tmp_path / "skills.json"
-        skills.write_text(json.dumps({"skills": {"research": {"active": False}}}))
+        old_switches = json.dumps({"skills": {"research": {"active": False}}})
+        skills.write_text(old_switches)
 
         await resource_settings.migrate_legacy_settings(skills)
-        await resource_settings.migrate_legacy_settings(skills)
-
         for key in ("inactivated_plugins", "inactivated_llm_tools", "tool_permissions"):
             assert await preferences.global_get(key) is None
         assert not skills.exists()
-        assert skills.with_suffix(".json.migrated").is_file()
+        assert not skills.with_suffix(".json.migrated").exists()
+
+        skills.write_text(old_switches)
+        await resource_settings.migrate_legacy_settings(skills)
+        assert not skills.exists()
+
+        replacement = json.dumps({"skills": {"research": {"active": True}}})
+        skills.write_text(replacement)
+        await resource_settings.migrate_legacy_settings(skills)
+        assert skills.read_text() == replacement
         assert await resource_settings.legacy_setting("inactivated_plugins", []) == [
             "data.plugins.notes.main"
         ]
@@ -46,6 +55,24 @@ async def test_migration_copies_rules_before_retiring_the_old_storage(
     finally:
         await preferences.close()
         await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_skill_settings_file_survives_a_failed_database_write(tmp_path, monkeypatch):
+    preferences = SimpleNamespace(
+        global_get=AsyncMock(return_value=None),
+        get_async=AsyncMock(return_value=None),
+        put_async=AsyncMock(side_effect=OSError("Write failed")),
+    )
+    monkeypatch.setattr(resource_settings, "sp", preferences)
+    skills = tmp_path / "skills.json"
+    old_switches = json.dumps({"skills": {"research": {"active": False}}})
+    skills.write_text(old_switches)
+
+    with pytest.raises(OSError, match="Write failed"):
+        await resource_settings.migrate_legacy_settings(skills)
+
+    assert skills.read_text() == old_switches
 
 
 def test_grouped_selection_pins_the_source_even_with_a_legacy_name():
