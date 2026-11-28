@@ -1169,15 +1169,28 @@ watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
 provide("isDark", isDark);
 
 watch(
-  [chatHeaderTitle, chatHeaderSubtitle, activeProject],
-  ([title, subtitle, project]) => {
+  [chatHeaderTitle, chatHeaderSubtitle, activeProject, currentSession, isProviderWorkspace],
+  ([title, subtitle, project, session, providers]) => {
     chatHeader.SET_CONTEXT({
       title,
       subtitle,
       projectId: project?.project_id,
+      // Only the chat workspace renames its conversation, not the model pages.
+      titleRenamable: Boolean(session) && !providers,
     });
   },
   { immediate: true },
+);
+
+watch(
+  () => chatHeader.renameRequested,
+  (requested) => {
+    if (!requested) return;
+    chatHeader.renameRequested = false;
+    // REQUEST_RENAME already requires a renamable title (a conversation open
+    // in the chat workspace).
+    if (currentSession.value) editSidebarSessionTitle(currentSession.value);
+  },
 );
 
 watch(

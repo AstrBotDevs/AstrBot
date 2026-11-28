@@ -4,6 +4,10 @@ export const useChatHeaderStore = defineStore("chatHeader", {
   state: () => ({
     title: "",
     subtitle: "",
+    // Double-clicking the header title asks the chat page to rename the
+    // current conversation with its usual dialog.
+    titleRenamable: false,
+    renameRequested: false,
     projectId: "",
     workspaceFilesOpen: false,
     workbenchWidth: null as number | null,
@@ -14,6 +18,7 @@ export const useChatHeaderStore = defineStore("chatHeader", {
       title?: string;
       subtitle?: string;
       projectId?: string;
+      titleRenamable?: boolean;
     }) {
       const nextProjectId = payload.projectId || "";
       if (this.projectId !== nextProjectId) {
@@ -22,6 +27,10 @@ export const useChatHeaderStore = defineStore("chatHeader", {
       this.title = payload.title || "";
       this.subtitle = payload.subtitle || "";
       this.projectId = nextProjectId;
+      this.titleRenamable = Boolean(payload.titleRenamable);
+    },
+    REQUEST_RENAME() {
+      if (this.titleRenamable) this.renameRequested = true;
     },
     TOGGLE_WORKSPACE_FILES() {
       if (this.projectId) {
@@ -36,6 +45,8 @@ export const useChatHeaderStore = defineStore("chatHeader", {
       this.subtitle = "";
       this.projectId = "";
       this.workspaceFilesOpen = false;
+      this.titleRenamable = false;
+      this.renameRequested = false;
     },
   },
 });
