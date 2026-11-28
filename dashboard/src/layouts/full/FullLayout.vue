@@ -25,6 +25,7 @@ const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
+const isOnboardingRoute = computed(() => route.path === "/chat/onboarding");
 const isPluginViewRoute = computed(
   () => route.path.startsWith("/plugin-view/") || route.path.startsWith("/plugin-page/"),
 );
@@ -45,7 +46,9 @@ const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const { smAndDown } = useDisplay();
 const showSidebar = computed(
-  () => !isCurrentChatRoute.value || (customizer.chatNavigationInSidebar && !smAndDown.value),
+  () =>
+    !isCurrentChatRoute.value ||
+    (!isOnboardingRoute.value && customizer.chatNavigationInSidebar && !smAndDown.value),
 );
 
 const hasFirstNotice = ref(false);
@@ -67,7 +70,7 @@ watch(
 );
 
 const maybeShowFirstNotice = async () => {
-  if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
+  if (isOnboardingRoute.value || localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
     return;
   }
 
@@ -143,6 +146,7 @@ onMounted(() => {
           class="page-wrapper"
           :class="{
             'chat-mode-container': isCurrentChatRoute,
+            'onboarding-mode-container': isOnboardingRoute,
             'viewport-locked-container':
               isProviderPageRoute || isPlatformPageRoute,
             'fullscreen-container': isFullScreenRoute,
@@ -238,6 +242,11 @@ onMounted(() => {
   overflow: hidden;
   border: 0;
   border-radius: 16px;
+}
+
+:global(.page-wrapper.onboarding-mode-container) {
+  width: calc(100% - 2 * var(--astrbot-content-gap));
+  margin: 0 auto;
 }
 
 /* Let the content fill the available width on small screens. */

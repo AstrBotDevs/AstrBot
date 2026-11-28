@@ -49,7 +49,37 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 
 ## Login
 
-For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
+For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`). Change the password immediately after logging in.
+
+## Getting Started
+
+On a new AstrBot installation, Getting Started opens directly inside **ChatUI** (`/chat/onboarding`) after account setup. The assistant emits inline configuration widgets in the native ChatUI conversation stream, then transitions into an explicit **Try your model** card for live streaming replies. It does not open automatically after an upgrade, a password reset, or a later login.
+
+### Set Up AstrBot
+
+1. **Confirm the usage notice**: review the inline **Before we begin** card and select **I understand, continue** (or reply `continue` in the composer).
+2. **Configure an AI model**: the assistant emits a model widget. Pick a provider, enter the API Key, API Base URL, and model name (or use **Fetch models**), and expand **Advanced Configuration** if needed; select **Test connection** to probe reachability, then **Save & continue**.
+3. **Try your model**: once saved, the model is synced as the default ChatUI model and the assistant presents the **Try your model** widget. Click a starter prompt or send any message in the composer to verify live streaming replies; click **Change model** anytime to edit settings.
+4. **Connect a messaging platform**: select **Connect platform** (or type `next`) to open the platform adapter widget for QQ, Lark, Telegram, and more. Skip it if you only want Web ChatUI for now.
+
+When finished, select **Get started** on the welcome card to open Overview, or **Open ChatUI** to continue seamlessly in the same ChatUI session.
+
+![Enter your model connection details](/webui-onboarding-en.png)
+
+![Try a conversation during setup](/webui-onboarding-trial-en.png)
+
+### Skip or Return Later
+
+Account setup is required, while every onboarding card is optional. Selecting **Skip setup** opens the overview page without modifying configuration; skipping a card leaves its unsaved draft untouched. Skipping model setup jumps directly to the messaging platform card.
+
+To return later, open `System Settings → Maintenance → Reopen setup`. Existing model and messaging platform settings are prefilled automatically so you can confirm or edit them without recreating adapters.
+
+> [!TIP]
+> Reopening the guide does not clear your configuration. Saved settings are kept, and skipping a later card does not undo earlier saves. Selecting Save in a platform's configuration profile editor also takes effect immediately.
+
+![Review or edit an existing messaging platform](/webui-onboarding-adapter-en.png)
+
+The guide does not install plugins or configure computer access. Install plugins from `Extensions → Plugins → AstrBot Plugin Market`. Computer-access permissions are under `Config → AI → Capabilities → Agent Computer Use`.
 
 ## Two-Factor Authentication
 
@@ -150,7 +180,7 @@ The page title and section navigation stay fixed while only the settings pane on
 - `Appearance`: theme colors.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
-- `Maintenance`: backup, restore, diagnostic export, and restart.
+- `Maintenance`: backup, restore, diagnostic export, restart, and Reopen setup.
 - `OpenAPI`: developer access keys.
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.

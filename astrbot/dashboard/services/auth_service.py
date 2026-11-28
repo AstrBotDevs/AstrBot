@@ -261,11 +261,17 @@ class AuthService:
         except ValueError as exc:
             return self.error(str(exc))
 
+        # Only a newly created configuration opts in; upgrades default to false.
+        onboarding_required = self.config["dashboard"].get("onboarding_pending") is True
+        onboarding_required = onboarding_required and not any(
+            self.config.get(key) for key in ("platform", "provider", "provider_sources")
+        )
         username = new_username.strip()
         self.config["dashboard"]["username"] = username
         set_dashboard_password_hashes(self.config, new_password)
         await set_password_storage_upgraded(self.db, self.config, True)
         await set_password_change_required(self.db, self.config, False)
+        self.config["dashboard"]["onboarding_pending"] = False
         self.config.save_config()
 
         token = self.generate_jwt(username)
@@ -276,6 +282,7 @@ class AuthService:
                 "change_pwd_hint": False,
                 "md5_pwd_hint": False,
                 "password_upgrade_required": False,
+                "onboarding_required": onboarding_required,
             },
             message="Setup completed successfully",
             jwt_token=token,
