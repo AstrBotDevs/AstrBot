@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -264,6 +266,149 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime
     )
 
 
+def _whitelist_run_context(runtime: str, extra_provider_settings: dict | None = None):
+    provider_settings = {"computer_use_runtime": runtime}
+    if extra_provider_settings:
+        provider_settings.update(extra_provider_settings)
+    event = _DummyEvent()
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_llm_tool_manager=lambda: FunctionToolManager(),
+    )
+    return ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+
+def test_build_handoff_toolset_whitelist_keeps_computer_use_tools(monkeypatch):
+    # The persona whitelist only lists plugin/MCP tools, but the builtin
+    # computer-use tools must stay available, mirroring the main agent where
+    # they are applied after the persona whitelist narrowing and never pass
+    # through it.
+    plugin_tool = FunctionTool(
+        name="plugin_tool",
+        description="plugin tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.llm_tools.func_list",
+        [plugin_tool],
+    )
+
+    toolset = FunctionToolExecutor._build_handoff_toolset(
+        _whitelist_run_context("sandbox"), tools=["plugin_tool"]
+    )
+
+    assert toolset is not None
+    assert toolset.get_tool("plugin_tool") is not None
+    assert toolset.get_tool("astrbot_execute_ipython") is not None
+    assert toolset.get_tool("astrbot_execute_shell") is not None
+
+
+def test_build_handoff_toolset_whitelist_warns_and_skips_unknown_names(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.llm_tools.func_list", []
+    )
+
+    with caplog.at_level("WARNING"):
+        toolset = FunctionToolExecutor._build_handoff_toolset(
+            _whitelist_run_context("none"), tools=["missing_tool"]
+        )
+
+    assert toolset is None
+    assert any("missing_tool" in rec.message for rec in caplog.records)
+    assert any("empty toolset" in rec.message for rec in caplog.records)
+
+
+def test_build_handoff_toolset_whitelist_warns_on_inactive_tool(monkeypatch, caplog):
+    inactive_tool = FunctionTool(
+        name="off_tool",
+        description="disabled plugin tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    inactive_tool.active = False
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_runtime.tool_executor.llm_tools.func_list",
+        [inactive_tool],
+    )
+
+    with caplog.at_level("WARNING"):
+        toolset = FunctionToolExecutor._build_handoff_toolset(
+            _whitelist_run_context("local"), tools=["off_tool", "astrbot_grep_tool"]
+        )
+
+    # The inactive plugin tool is skipped with a warning, while an explicit
+    # runtime tool name still resolves.
+    assert toolset is not None
+    assert toolset.get_tool("off_tool") is None
+    assert toolset.get_tool("astrbot_grep_tool") is not None
+    assert any("off_tool" in rec.message for rec in caplog.records)
+
+
+def test_build_handoff_toolset_empty_whitelist_keeps_runtime_tools(caplog):
+    # An empty whitelist narrows the plugin tools to nothing but keeps the
+    # runtime computer-use tools, same as an empty persona whitelist on the
+    # main agent.
+    with caplog.at_level("WARNING"):
+        toolset = FunctionToolExecutor._build_handoff_toolset(
+            _whitelist_run_context("sandbox"), tools=[]
+        )
+
+    assert toolset is not None
+    assert toolset.get_tool("astrbot_execute_shell") is not None
+    assert toolset.get_tool("astrbot_execute_ipython") is not None
+    assert not any("empty toolset" in rec.message for rec in caplog.records)
+
+
+def test_build_handoff_toolset_empty_whitelist_without_runtime_warns(caplog):
+    with caplog.at_level("WARNING"):
+        toolset = FunctionToolExecutor._build_handoff_toolset(
+            _whitelist_run_context("none"), tools=[]
+        )
+
+    assert toolset is None
+    assert any("empty toolset" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("booter_state", "expect_browser"),
+    [
+        pytest.param("not_booted", True, id="capabilities_unknown_before_first_boot"),
+        pytest.param("browser", True, id="profile_supports_browser"),
+        pytest.param("shell_only", False, id="profile_without_browser"),
+    ],
+)
+def test_build_handoff_toolset_seeds_browser_tools_like_main_agent(
+    monkeypatch, booter_state, expect_browser
+):
+    from astrbot.core.astr_agent_runtime.computer.computer_client import session_booter
+
+    umo = _DummyEvent().unified_msg_origin
+    if booter_state == "not_booted":
+        monkeypatch.delitem(session_booter, umo, raising=False)
+    elif booter_state == "browser":
+        monkeypatch.setitem(
+            session_booter, umo, SimpleNamespace(capabilities=["browser", "shell"])
+        )
+    else:
+        monkeypatch.setitem(
+            session_booter, umo, SimpleNamespace(capabilities=["shell", "python"])
+        )
+
+    toolset = FunctionToolExecutor._build_handoff_toolset(
+        _whitelist_run_context("sandbox", {"sandbox": {"booter": "shipyard_neo"}}),
+        tools=[],
+    )
+
+    assert toolset is not None
+    assert toolset.get_tool("astrbot_execute_shell") is not None
+    assert (toolset.get_tool("astrbot_execute_browser") is not None) == expect_browser
+    assert (
+        toolset.get_tool("astrbot_execute_browser_batch") is not None
+    ) == expect_browser
+    assert (toolset.get_tool("astrbot_run_browser_skill") is not None) == expect_browser
+
+
 @pytest.mark.asyncio
 async def test_collect_handoff_image_urls_normalizes_filters_and_appends_event_image(
     monkeypatch: pytest.MonkeyPatch,
@@ -346,6 +491,13 @@ async def test_collect_handoff_image_urls_filters_supported_schemes_and_extensio
         run_context, image_refs
     )
     assert set(result) == expected_supported_refs
+
+    if os.name != "nt":
+        from astrbot.core.utils.media_utils import file_uri_to_path
+
+        assert file_uri_to_path("file://fileserver/share/image.webp") == str(
+            Path("//fileserver/share/image.webp")
+        )
 
 
 @pytest.mark.asyncio
