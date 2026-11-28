@@ -3,11 +3,13 @@
 使用 BM25 算法进行基于关键词的文档检索
 """
 
+import asyncio
 import json
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from astrbot import logger
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     load_stopwords,
@@ -31,6 +33,47 @@ class SparseResult:
     rank: int | None = None
 
 
+def _score_bm25_chunks(
+    query: str,
+    chunks: list[dict],
+    hit_stopwords: set[str],
+    top_k_sparse: int,
+) -> list[SparseResult]:
+    """Tokenize documents and rank them with BM25 outside the event loop.
+
+    Args:
+        query: Raw user search query.
+        chunks: Extracted document chunk dictionaries across fallback KBs.
+        hit_stopwords: Stopword set used during tokenization.
+        top_k_sparse: Maximum number of top-ranked sparse results to return.
+
+    Returns:
+        Ranked sparse retrieval results up to ``top_k_sparse``.
+    """
+    from rank_bm25 import BM25Okapi
+
+    tokenized_corpus = [tokenize_text(chunk["text"], hit_stopwords) for chunk in chunks]
+    bm25 = BM25Okapi(tokenized_corpus)
+    tokenized_query = tokenize_text(query, hit_stopwords)
+    scores = bm25.get_scores(tokenized_query)
+
+    results = [
+        SparseResult(
+            chunk_id=chunk["chunk_id"],
+            chunk_index=chunk["chunk_index"],
+            doc_id=chunk["doc_id"],
+            kb_id=chunk["kb_id"],
+            content=chunk["text"],
+            score=float(score),
+        )
+        for chunk, score in zip(chunks, scores)
+    ]
+    results.sort(key=lambda x: x.score, reverse=True)
+    for rank, result in enumerate(results, start=1):
+        result.rank = rank
+    return results[:top_k_sparse]
+
+
 class SparseRetriever:
     """BM25 稀疏检索器
 
@@ -47,7 +90,6 @@ class SparseRetriever:
 
         """
         self.kb_db = kb_db
-        self._index_cache = {}  # 缓存 BM25 索引
 
         self.hit_stopwords = load_stopwords(
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
@@ -73,15 +115,32 @@ class SparseRetriever:
         fts_results = []
         fallback_kb_ids = []
         query_tokens = tokenize_text(query, self.hit_stopwords)
+        targets: list[tuple[str, FaissVecDB]] = []
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
-            if not vec_db:
+            if vec_db:
+                targets.append((kb_id, vec_db))
+
+        search_results = await asyncio.gather(
+            *(
+                vec_db.document_storage.search_sparse(
+                    query_tokens=query_tokens,
+                    limit=kb_options.get(kb_id, {}).get("top_k_sparse", 50),
+                )
+                for kb_id, vec_db in targets
+            ),
+            return_exceptions=True,
+        )
+
+        for (kb_id, _vec_db), result in zip(targets, search_results):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                logger.error(
+                    f"Sparse FTS retrieval failed for KB {kb_id}: {type(result).__name__}: {result}",
+                    exc_info=(type(result), result, result.__traceback__),
+                )
                 continue
-            top_k_sparse = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
-            result = await vec_db.document_storage.search_sparse(
-                query_tokens=query_tokens,
-                limit=top_k_sparse,
-            )
             if result is None:
                 fallback_kb_ids.append(kb_id)
                 continue
@@ -119,64 +178,59 @@ class SparseRetriever:
         kb_ids: list[str],
         kb_options: dict,
     ) -> list[SparseResult]:
+        targets: list[tuple[str, FaissVecDB]] = []
         top_k_sparse = 0
-        chunks = []
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
                 continue
-            result = await vec_db.document_storage.get_documents(
-                metadata_filters={},
-                limit=None,
-                offset=None,
-            )
-            chunk_mds = [json.loads(doc["metadata"]) for doc in result]
-            result = [
-                {
-                    "chunk_id": doc["doc_id"],
-                    "chunk_index": chunk_md["chunk_index"],
-                    "doc_id": chunk_md["kb_doc_id"],
-                    "kb_id": kb_id,
-                    "text": doc["text"],
-                }
-                for doc, chunk_md in zip(result, chunk_mds)
-            ]
-            chunks.extend(result)
+            targets.append((kb_id, vec_db))
             top_k_sparse += kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+
+        if not targets:
+            return []
+
+        docs_per_kb = await asyncio.gather(
+            *(
+                vec_db.document_storage.get_documents(
+                    metadata_filters={},
+                    limit=None,
+                    offset=None,
+                )
+                for _, vec_db in targets
+            ),
+            return_exceptions=True,
+        )
+
+        chunks: list[dict] = []
+        for (kb_id, _), result in zip(targets, docs_per_kb):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
+                logger.error(
+                    f"Sparse BM25 document load failed for KB {kb_id}: {type(result).__name__}: {result}",
+                    exc_info=(type(result), result, result.__traceback__),
+                )
+                continue
+            for doc in result:
+                chunk_md = json.loads(doc["metadata"])
+                chunks.append(
+                    {
+                        "chunk_id": doc["doc_id"],
+                        "chunk_index": chunk_md["chunk_index"],
+                        "doc_id": chunk_md["kb_doc_id"],
+                        "kb_id": kb_id,
+                        "text": doc["text"],
+                    }
+                )
 
         if not chunks:
             return []
 
-        # 2. 准备文档和索引
-        corpus = [chunk["text"] for chunk in chunks]
-        tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
-
-        # 3. 构建 BM25 索引
-        from rank_bm25 import BM25Okapi
-
-        bm25 = BM25Okapi(tokenized_corpus)
-
-        # 4. 执行检索
-        tokenized_query = tokenize_text(query, self.hit_stopwords)
-        scores = bm25.get_scores(tokenized_query)
-
-        # 5. 排序并返回 Top-K
-        results = []
-        for idx, score in enumerate(scores):
-            chunk = chunks[idx]
-            results.append(
-                SparseResult(
-                    chunk_id=chunk["chunk_id"],
-                    chunk_index=chunk["chunk_index"],
-                    doc_id=chunk["doc_id"],
-                    kb_id=chunk["kb_id"],
-                    content=chunk["text"],
-                    score=float(score),
-                ),
-            )
-
-        results.sort(key=lambda x: x.score, reverse=True)
-        for rank, result in enumerate(results, start=1):
-            result.rank = rank
-        # return results[: len(results) // len(kb_ids)]
-        return results[:top_k_sparse]
+        return await asyncio.to_thread(
+            _score_bm25_chunks,
+            query,
+            chunks,
+            self.hit_stopwords,
+            top_k_sparse,
+        )
