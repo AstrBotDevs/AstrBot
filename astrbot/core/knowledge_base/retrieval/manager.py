@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -107,20 +108,32 @@ class RetrievalManager:
 
         kb_ids = new_kb_ids
 
-        # 1 & 2. 稠密检索与稀疏检索并发执行
+        # 1 & 2. Run dense and sparse retrieval concurrently.
         time_start = time.monotonic()
-        dense_results, sparse_results = await asyncio.gather(
+        dense_task = asyncio.create_task(
             self._dense_retrieve(
                 query=query,
                 kb_ids=kb_ids,
                 kb_options=kb_options,
-            ),
+            )
+        )
+        sparse_task = asyncio.create_task(
             self.sparse_retriever.retrieve(
                 query=query,
                 kb_ids=kb_ids,
                 kb_options=kb_options,
-            ),
+            )
         )
+        try:
+            dense_results, sparse_results = await asyncio.gather(
+                dense_task, sparse_task
+            )
+        except BaseException:
+            for task in (dense_task, sparse_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(dense_task, sparse_task, return_exceptions=True)
+            raise
         time_end = time.monotonic()
         logger.debug(
             f"Hybrid retrieval across {len(kb_ids)} bases took "
@@ -248,7 +261,7 @@ class RetrievalManager:
             if key is not None and key in provider_errors:
                 err = provider_errors[key]
                 logger.error(
-                    f"知识库 {kb_id} 稠密检索失败: {type(err).__name__}: {err}",
+                    f"Dense retrieval failed for KB {kb_id}: {type(err).__name__}: {err}",
                     exc_info=(type(err), err, err.__traceback__),
                 )
                 continue
@@ -265,7 +278,18 @@ class RetrievalManager:
                 "metadata_filters": {"kb_id": kb_id},
             }
             if kb_id in kb_provider_key:
-                kwargs["query_embedding"] = provider_embeddings[kb_provider_key[kb_id]]
+                try:
+                    params = inspect.signature(vec_db.retrieve).parameters
+                    accepts_embedding = "query_embedding" in params or any(
+                        param.kind == inspect.Parameter.VAR_KEYWORD
+                        for param in params.values()
+                    )
+                except (TypeError, ValueError):
+                    accepts_embedding = True
+                if accepts_embedding:
+                    kwargs["query_embedding"] = provider_embeddings[
+                        kb_provider_key[kb_id]
+                    ]
             return await vec_db.retrieve(**kwargs)
 
         all_results: list[Result] = []
@@ -278,7 +302,7 @@ class RetrievalManager:
                 if not isinstance(outcome, Exception):
                     raise outcome
                 logger.error(
-                    f"知识库 {kb_id} 稠密检索失败: {type(outcome).__name__}: {outcome}",
+                    f"Dense retrieval failed for KB {kb_id}: {type(outcome).__name__}: {outcome}",
                     exc_info=(type(outcome), outcome, outcome.__traceback__),
                 )
                 continue
