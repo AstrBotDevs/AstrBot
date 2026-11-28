@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 
 from astrbot.core import logger
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -162,6 +163,8 @@ async def apply_persona(
                     if plugin_tools is not None
                     else tmgr.get_func(tool_name)
                 )
+                if isinstance(tool, MCPTool):
+                    tool = tmgr.get_full_tool_set().get_tool(tool.name)
                 if tool and tool.active:
                     persona_toolset.add_tool(tool)
     if not req.func_tool:

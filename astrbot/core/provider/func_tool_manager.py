@@ -162,7 +162,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
     try:
         async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
+            if (cfg.get("transport") or cfg.get("type")) == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
                     "method": "initialize",
@@ -604,6 +604,13 @@ class FunctionToolManager:
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
+            namespace = MCPTool.server_namespace(name)
+            for other in self._mcp_server_runtime.keys() | self._mcp_starting:
+                if MCPTool.server_namespace(other) == namespace:
+                    raise MCPInitError(
+                        f"MCP servers {name!r} and {other!r} share tool namespace "
+                        f"{namespace!r}. Rename one server."
+                    )
             self._mcp_starting.add(name)
 
         if shutdown_event is None:
@@ -634,6 +641,27 @@ class FunctionToolManager:
                     )
                     for tool in mcp_client.tools
                 ]
+                inactive_names = (
+                    await sp.global_get("inactivated_llm_tools", [])
+                    if registered_tools
+                    else []
+                )
+                for tool in registered_tools:
+                    if tool.name in inactive_names:
+                        tool.active = False
+                existing = [
+                    tool
+                    for tool in self.func_list
+                    if not (isinstance(tool, MCPTool) and tool.mcp_server_name == name)
+                ]
+                used_names = {tool.name for tool in existing}
+                for tool in registered_tools:
+                    if tool.name in used_names:
+                        raise MCPInitError(
+                            f"MCP server {name!r} has a duplicate tool name {tool.name!r}."
+                        )
+                    used_names.add(tool.name)
+                self.func_list = [*existing, *registered_tools]
             except asyncio.CancelledError:
                 # cleanup on cancellation
                 try:
@@ -649,13 +677,6 @@ class FunctionToolManager:
                     pass
                 connect_done.set()
                 return
-
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
-            self.func_list.extend(registered_tools)
 
             logger.info(
                 f"Connected to MCP server {name}, "
@@ -814,14 +835,14 @@ class FunctionToolManager:
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
-        if "url" in config:
+        if "url" in config and (config.get("transport") or config.get("type")):
             success, error_msg = await _quick_test_mcp_connection(config)
             if not success:
                 raise Exception(error_msg)
 
         mcp_client = MCPClient()
         try:
-            logger.debug(f"testing MCP server connection with config: {config}")
+            logger.debug("Testing MCP server connection.")
             await mcp_client.connect_to_server(config, "test")
             tools_res = await mcp_client.list_tools_and_save()
             tool_names = [tool.name for tool in tools_res.tools]

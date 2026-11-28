@@ -11,10 +11,14 @@ export function useToolActions(
   toast: (message: string, color?: string) => void
 ) {
   const toolSearch = ref('');
-  const pluginTools = computed(() => tools.value.filter(tool => tool.origin === 'plugin'));
+  const deletingSavedTools = ref(new Set<string>());
+  const managedTools = computed(() => tools.value.filter(tool =>
+    tool.origin === 'plugin' || tool.origin === 'mcp' || tool.registered === false
+    || tool.inactive_configured || tool.permission_configured
+  ));
 
   const filteredTools = computed(() => {
-    let result = pluginTools.value;
+    let result = managedTools.value;
 
     // Filter by search query
     const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
@@ -30,7 +34,7 @@ export function useToolActions(
   });
 
   const toolSummary = computed<ToolSummary>(() => {
-    const all = pluginTools.value;
+    const all = managedTools.value.filter(tool => tool.registered !== false);
     return {
       total: all.length,
       active: all.filter(t => t.active).length,
@@ -51,6 +55,7 @@ export function useToolActions(
     try {
       const res = await toolApi.setEnabled(tool.name, tool.active);
       if (res.data.status === 'ok') {
+        tool.inactive_configured = !tool.active;
         toast(res.data.message || successMessage);
       } else {
         tool.active = previous;
@@ -95,11 +100,35 @@ export function useToolActions(
     }
   };
 
+  const deleteSavedToolSettings = async (
+    tool: ToolItem,
+    successMessage: string,
+    errorMessage: string,
+  ) => {
+    if (tool.registered !== false || deletingSavedTools.value.has(tool.name)) return;
+    deletingSavedTools.value.add(tool.name);
+    try {
+      const res = await toolApi.deleteSavedSettings(tool.name);
+      if (res.data.status === 'ok') {
+        tools.value = tools.value.filter(item => item.name !== tool.name || item.registered !== false);
+        toast(successMessage, 'success');
+      } else {
+        toast(res.data.message || errorMessage, 'error');
+      }
+    } catch (error: any) {
+      toast(error?.response?.data?.message || error.message || errorMessage, 'error');
+    } finally {
+      deletingSavedTools.value.delete(tool.name);
+    }
+  };
+
   return {
     toolSearch,
     filteredTools,
     toolSummary,
     toggleTool,
     updateToolPermission,
+    deletingSavedTools,
+    deleteSavedToolSettings,
   };
 }

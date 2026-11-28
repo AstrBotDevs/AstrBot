@@ -49,6 +49,7 @@
   },
   "functionTools": {
     "title": "Function Tools",
+    "confirmDeleteSavedSettings": "Delete the saved global permission and disabled state for {name}?",
     "buttons": {
       "view": "View Tools"
     },
@@ -67,10 +68,13 @@
       "permissionAdmin": "Admin",
       "permissionMember": "All Users",
       "permissionEveryone": "All Users",
+      "unregistered": "Unregistered",
+      "savedInactive": "Saved as disabled",
+      "deleteSavedSettings": "Delete saved settings for {name}",
       "actions": "Actions"
     },
     "summary": {
-      "total": "Total",
+      "total": "Registered",
       "active": "Active",
       "inactive": "Inactive"
     }
@@ -95,25 +99,50 @@
       "title": "Add MCP Server",
       "editTitle": "Edit MCP Server",
       "fields": {
+        "transport": "Transport",
+        "command": "Command",
+        "args": "Arguments",
+        "argument": "Argument {index}",
+        "env": "Environment Variables",
+        "cwd": "Working Directory",
+        "url": "Server URL",
+        "authentication": "Authentication",
+        "authNone": "None",
+        "bearerToken": "Bearer Token",
+        "advanced": "Advanced Settings",
+        "headers": "Additional HTTP Headers",
+        "timeout": "Connection Timeout (seconds)",
+        "readTimeout": "SSE Read Timeout (seconds)",
+        "commandRequired": "Command is required",
+        "urlRequired": "URL is required",
+        "tokenRequired": "Bearer token is required",
         "name": "Server Name",
         "nameRequired": "Name is required",
         "enable": "Connect after saving",
         "config": "Server Configuration"
       },
       "errors": {
+        "keyValue": "Enter one key=value pair per line.",
+        "url": "Enter a valid HTTP or HTTPS URL.",
+        "timeout": "Enter a timeout greater than zero.",
         "configEmpty": "Configuration cannot be empty",
         "jsonFormat": "JSON format error: {error}",
         "jsonParse": "JSON parse error: {error}"
       },
       "buttons": {
+        "addArgument": "Add Argument",
+        "removeArgument": "Remove Argument",
+        "importJson": "Import JSON",
         "cancel": "Cancel",
         "save": "Save",
         "testConnection": "Test Connection",
         "sync": "Sync"
       },
       "tips": {
+        "nameLockedAfterSave": "You can't change the server name here after saving.",
+        "keyValue": "Enter one key=value pair per line.",
         "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
-        "transportRecommendation": "Prefer Streamable HTTP or SSE mode. Stdio mode starts a local process on the AstrBot host and should only be used for trusted MCP servers."
+        "connectionRisk": "Connecting to external MCP servers may pose security risks. Only connect to MCP servers you trust."
       }
     },
     "serverDetail": {
@@ -184,6 +213,8 @@
     "toggleToolError": "Failed to toggle tool status: {error}",
     "updateToolPermissionSuccess": "Permission for {name} updated",
     "updateToolPermissionFailed": "Failed to update tool permission",
+    "deleteSavedToolSettingsSuccess": "Saved tool settings deleted",
+    "deleteSavedToolSettingsError": "Failed to delete saved tool settings",
     "testError": "Test connection failed: {error}"
   }
 }

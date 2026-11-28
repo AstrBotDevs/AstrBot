@@ -2590,6 +2590,10 @@ export type ListCommandConflictsError = unknown;
 export type ListToolsData = {
     query?: {
         enabled?: boolean;
+        /**
+         * Include saved permissions and disabled-tool entries for unregistered tool names.
+         */
+        include_saved?: boolean;
         origin?: 'plugin' | 'mcp';
     };
 };
@@ -2597,6 +2601,16 @@ export type ListToolsData = {
 export type ListToolsResponse = (SuccessEnvelope);
 
 export type ListToolsError = unknown;
+
+export type DeleteSavedToolSettingsData = {
+    query: {
+        tool_name: string;
+    };
+};
+
+export type DeleteSavedToolSettingsResponse = (SuccessEnvelope);
+
+export type DeleteSavedToolSettingsError = unknown;
 
 export type SetToolEnabledData = {
     body: EnabledPatch;

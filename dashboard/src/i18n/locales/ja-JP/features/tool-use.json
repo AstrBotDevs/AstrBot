@@ -49,6 +49,7 @@
   },
   "functionTools": {
     "title": "関数ツール",
+    "confirmDeleteSavedSettings": "{name} の保存済みのグローバル権限と無効化設定を削除しますか？",
     "buttons": {
       "view": "ツールを表示"
     },
@@ -67,10 +68,13 @@
       "permissionAdmin": "管理者",
       "permissionMember": "すべてのユーザー",
       "permissionEveryone": "すべてのユーザー",
+      "unregistered": "未登録",
+      "savedInactive": "無効として保存済み",
+      "deleteSavedSettings": "{name} の保存済み設定を削除",
       "actions": "操作"
     },
     "summary": {
-      "total": "合計",
+      "total": "登録済み",
       "active": "有効",
       "inactive": "無効"
     }
@@ -95,25 +99,50 @@
       "title": "MCP サーバーを追加",
       "editTitle": "MCP サーバーを編集",
       "fields": {
+        "transport": "トランスポート",
+        "command": "コマンド",
+        "args": "引数",
+        "argument": "引数 {index}",
+        "env": "環境変数",
+        "cwd": "作業ディレクトリ",
+        "url": "サーバー URL",
+        "authentication": "認証",
+        "authNone": "なし",
+        "bearerToken": "Bearer トークン",
+        "advanced": "詳細設定",
+        "headers": "追加の HTTP ヘッダー",
+        "timeout": "接続タイムアウト（秒）",
+        "readTimeout": "SSE 読み取りタイムアウト（秒）",
+        "commandRequired": "コマンドを入力してください",
+        "urlRequired": "URL を入力してください",
+        "tokenRequired": "Bearer トークンを入力してください",
         "name": "サーバー名",
         "nameRequired": "名前は必須です",
         "enable": "保存後にサーバーへ接続",
         "config": "サーバー設定"
       },
       "errors": {
+        "keyValue": "1 行に 1 つの key=value を入力してください。",
+        "url": "有効な HTTP または HTTPS の URL を入力してください。",
+        "timeout": "0 より大きいタイムアウトを入力してください。",
         "configEmpty": "設定を空にはできません",
         "jsonFormat": "JSON 形式エラー：{error}",
         "jsonParse": "JSON 解析エラー：{error}"
       },
       "buttons": {
+        "addArgument": "引数を追加",
+        "removeArgument": "引数を削除",
+        "importJson": "JSON をインポート",
         "cancel": "キャンセル",
         "save": "保存",
         "testConnection": "接続をテスト",
         "sync": "同期"
       },
       "tips": {
+        "nameLockedAfterSave": "保存後はここでサーバー名を変更できません。",
+        "keyValue": "1 行に 1 つの key=value を入力してください。",
         "timeoutConfig": "ツール呼び出しのタイムアウトは設定ページで個別に指定してください",
-        "transportRecommendation": "Streamable HTTP または SSE モードの使用を推奨します。stdio モードは AstrBot ホスト上でローカルプロセスを起動するため、信頼できる MCP サーバーにのみ使用してください。"
+        "connectionRisk": "外部の MCP サーバーへの接続にはセキュリティリスクが伴う場合があります。信頼できる MCP サーバーにのみ接続してください。"
       }
     },
     "serverDetail": {
@@ -184,6 +213,8 @@
     "toggleToolError": "ツールの状態を切り替えられませんでした：{error}",
     "updateToolPermissionSuccess": "ツール {name} の権限を更新しました",
     "updateToolPermissionFailed": "ツール権限の更新に失敗しました",
+    "deleteSavedToolSettingsSuccess": "保存済みのツール設定を削除しました",
+    "deleteSavedToolSettingsError": "保存済みのツール設定を削除できませんでした",
     "testError": "接続テストに失敗しました：{error}"
   }
 }

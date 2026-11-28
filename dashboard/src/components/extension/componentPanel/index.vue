@@ -14,6 +14,7 @@
  */
 import { onMounted, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
@@ -38,6 +39,7 @@ const props = withDefaults(defineProps<{ active?: boolean }>(), {
 
 const { tm } = useModuleI18n('features/command');
 const { tm: tmTool } = useModuleI18n('features/tooluse');
+const confirmDialog = useConfirmDialog();
 
 const viewMode = ref<'commands' | 'tools'>('commands');
 
@@ -88,6 +90,8 @@ const {
   toolSummary,
   toggleTool,
   updateToolPermission,
+  deletingSavedTools,
+  deleteSavedToolSettings,
 } = useToolActions(tools, toast);
 
 // 处理切换指令状态
@@ -105,6 +109,12 @@ const handleToggleTool = async (tool: ToolItem) => {
 
 const handleUpdateToolPermission = async (tool: ToolItem, permission: 'admin' | 'member') => {
   await updateToolPermission(tool, permission, tmTool('messages.updateToolPermissionSuccess', { name: tool.name }), tmTool('messages.updateToolPermissionFailed'));
+};
+
+const handleDeleteSavedToolSettings = async (tool: ToolItem) => {
+  if (await askForConfirmation(tmTool('functionTools.confirmDeleteSavedSettings', { name: tool.name }), confirmDialog)) {
+    await deleteSavedToolSettings(tool, tmTool('messages.deleteSavedToolSettingsSuccess'), tmTool('messages.deleteSavedToolSettingsError'));
+  }
 };
 
 // 处理确认重命名
@@ -274,8 +284,10 @@ watch(viewMode, async (mode) => {
             <ToolTable
               :items="filteredTools"
               :loading="toolsLoading"
+              :deleting-saved-tools="deletingSavedTools"
               @toggle-tool="handleToggleTool"
               @update-permission="handleUpdateToolPermission"
+              @delete-saved-settings="handleDeleteSavedToolSettings"
             />
           </div>
         </v-card-text>

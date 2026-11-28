@@ -108,7 +108,9 @@ export interface ToolItem {
   };
   origin?: string;
   origin_name?: string;
-  permission?: 'admin' | 'member';
+  registered?: boolean;
+  inactive_configured?: boolean;
+  permission?: 'admin' | 'member' | null;
   /** True when permission was explicitly configured rather than a fallback default. */
   permission_configured?: boolean;
 }

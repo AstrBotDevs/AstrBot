@@ -901,6 +901,32 @@ async def test_mcp_shutdown_cleanup_runs_in_lifecycle_task(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_mcp_namespace_collision_and_inactive_state(monkeypatch):
+    manager = FunctionToolManager()
+
+    async def fake_list_tools(self):
+        self.tools = [SimpleNamespace(name="search", description="", inputSchema={})]
+
+    monkeypatch.setattr(ftm.MCPClient, "connect_to_server", AsyncMock())
+    monkeypatch.setattr(ftm.MCPClient, "list_tools_and_save", fake_list_tools)
+    monkeypatch.setattr(ftm.MCPClient, "cleanup", AsyncMock())
+    server = "知识库"
+    namespace = ftm.MCPTool.server_namespace(server)
+    monkeypatch.setattr(
+        ftm.sp, "global_get", AsyncMock(return_value=[f"mcp__{namespace}__search"])
+    )
+    config = {"command": "python"}
+    await manager.enable_mcp_server(server, config, timeout=5)
+    try:
+        tool = manager.get_func(f"mcp__{namespace}__search")
+        assert tool is not None and not tool.active
+        with pytest.raises(ftm.MCPInitError, match="share tool namespace"):
+            await manager.enable_mcp_server(namespace, config, timeout=5)
+    finally:
+        await manager.disable_mcp_server(server, timeout=5)
+
+
+@pytest.mark.asyncio
 async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
     """A cancellation arriving mid-cleanup must not abort the cleanup."""
     manager = FunctionToolManager()

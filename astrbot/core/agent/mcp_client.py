@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import importlib.metadata as importlib_metadata
 import logging
 import os
@@ -612,16 +613,36 @@ class MCPClient:
                     self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
-            success, error_msg = await _quick_test_mcp_connection(cfg)
+            configured_transport = cfg.get("transport") or cfg.get("type")
+            transport_type = configured_transport or "streamable_http"
+            success, error_msg = await _quick_test_mcp_connection(
+                {**cfg, "transport": transport_type}
+            )
+            # An endpoint that rejects Streamable HTTP's POST may serve legacy
+            # SSE via GET instead. Authentication and network errors propagate.
+            if (
+                not configured_transport
+                and not success
+                and error_msg.startswith(
+                    (
+                        "HTTP 400:",
+                        "HTTP 404:",
+                        "HTTP 405:",
+                        "HTTP 406:",
+                        "HTTP 415:",
+                        "HTTP 422:",
+                        "HTTP 501:",
+                    )
+                )
+            ):
+                transport_type = "sse"
+                success, sse_error = await _quick_test_mcp_connection(
+                    {**cfg, "transport": transport_type}
+                )
+                if not success:
+                    error_msg = f"Streamable HTTP: {error_msg}. SSE: {sse_error}"
             if not success:
                 raise Exception(error_msg)
-
-            if "transport" in cfg:
-                transport_type = cfg["transport"]
-            elif "type" in cfg:
-                transport_type = cfg["type"]
-            else:
-                raise Exception("MCP connection config missing transport or type field")
 
             if transport_type != "streamable_http":
                 # SSE transport method
@@ -896,16 +917,47 @@ class MCPClient:
 class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
+    @staticmethod
+    def server_namespace(server_name: str) -> str:
+        """Build the server segment of an MCP function name.
+
+        Args:
+            server_name: Original key in the MCP server configuration.
+
+        Returns:
+            A readable ASCII segment or a stable six-letter hash.
+        """
+        if (
+            re.fullmatch(r"[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*", server_name)
+            and len(server_name) <= 40
+        ):
+            return server_name
+        digest = hashlib.sha256(server_name.encode()).digest()
+        value = int.from_bytes(digest[:8], "big")
+        letters = []
+        for _ in range(6):
+            value, letter = divmod(value, 26)
+            letters.append(chr(ord("a") + letter))
+        return "".join(letters)
+
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self,
+        mcp_tool: mcp.Tool,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        **kwargs,
     ) -> None:
-        # LLM providers restrict tool names to [a-zA-Z0-9_-], but MCP servers
-        # may expose names containing e.g. '.'. Expose a sanitized name to the
-        # LLM while keeping the original in self.mcp_tool.name for the actual
-        # MCP call in call().
-        llm_tool_name = re.sub(r"[^A-Za-z0-9_-]+", "_", mcp_tool.name)
+        prefix = f"mcp__{self.server_namespace(mcp_server_name)}__"
+        limit = 64 - len(prefix)
+        tool_name = re.sub(r"[^A-Za-z0-9_-]+", "_", mcp_tool.name)
+        # Preserve the original MCP name for dispatch. Hash lossy aliases so
+        # their spelling doesn't depend on which other tools are connected.
+        if not tool_name or tool_name != mcp_tool.name or len(tool_name) > limit:
+            suffix = hashlib.sha256(mcp_tool.name.encode()).hexdigest()[:12]
+            stem = tool_name.strip("_") or "tool"
+            tool_name = f"{stem[: limit - len(suffix) - 1]}_{suffix}"
         super().__init__(
-            name=llm_tool_name,
+            name=f"{prefix}{tool_name}",
             description=mcp_tool.description or "",
             parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )

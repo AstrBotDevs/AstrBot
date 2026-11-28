@@ -55,7 +55,7 @@ export function useComponentData() {
   const fetchTools = async (errorMessage: string) => {
     toolsLoading.value = true;
     try {
-      const res = await toolApi.list();
+      const res = await toolApi.list({ include_saved: true });
       if (res.data.status === 'ok') {
         tools.value = res.data.data || [];
       } else {

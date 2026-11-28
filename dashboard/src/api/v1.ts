@@ -165,6 +165,7 @@ export interface ProviderListParams {
 export interface ToolListParams {
   origin?: 'plugin' | 'mcp';
   enabled?: boolean;
+  include_saved?: boolean;
 }
 
 export interface SkillListParams extends Record<string, unknown> {
@@ -1145,6 +1146,11 @@ export const toolApi = {
   list(params?: ToolListParams) {
     return typed<any[]>(openApiV1.listTools({ query: generatedQuery(params) }));
   },
+  deleteSavedSettings(toolName: string) {
+    return typed<OpenConfig>(
+      openApiV1.deleteSavedToolSettings({ query: { tool_name: toolName } }),
+    );
+  },
   setEnabled(toolId: string, enabled: boolean) {
     return typed<OpenConfig>(
       openApiV1.setToolEnabled({
@@ -1170,7 +1176,7 @@ export const mcpApi = {
   create(config: McpServerConfig) {
     return typed<OpenConfig>(openApiV1.createMcpServer({ body: config }));
   },
-  update(serverName: string, config: McpServerConfig) {
+  update(serverName: string, config: DynamicConfig) {
     return typed<OpenConfig>(
       openApiV1.updateMcpServerByName({
         body: { server_name: serverName, config },

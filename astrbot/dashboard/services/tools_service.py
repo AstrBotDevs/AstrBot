@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import traceback
 from typing import Any
 
@@ -35,6 +36,7 @@ def extract_mcp_server_config(mcp_servers_value: object) -> dict:
 class ToolsService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.tool_mgr = core_lifecycle.provider_manager.llm_tools
+        self._tool_settings_lock = asyncio.Lock()
 
     def rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -116,6 +118,15 @@ class ToolsService:
             config = self.tool_mgr.load_mcp_config()
             if name in config["mcpServers"]:
                 raise ToolsServiceError(f"Server {name} already exists")
+            namespace = MCPTool.server_namespace(name)
+            for other, other_config in config["mcpServers"].items():
+                if not isinstance(other_config, dict):
+                    continue
+                if MCPTool.server_namespace(other) == namespace:
+                    raise ToolsServiceError(
+                        f"Server {other!r} already uses tool namespace {namespace!r}. "
+                        "Choose another server name."
+                    )
 
             try:
                 await self.tool_mgr.test_mcp_server_connection(server_config)
@@ -149,8 +160,20 @@ class ToolsService:
                 raise ToolsServiceError(f"Server {old_name} does not exist")
 
             is_rename = name != old_name
-            if name in config["mcpServers"] and is_rename:
-                raise ToolsServiceError(f"Server {name} already exists")
+            if is_rename:
+                if name in config["mcpServers"]:
+                    raise ToolsServiceError(f"Server {name} already exists")
+                namespace = MCPTool.server_namespace(name)
+                for other, other_config in config["mcpServers"].items():
+                    if (
+                        other != old_name
+                        and isinstance(other_config, dict)
+                        and MCPTool.server_namespace(other) == namespace
+                    ):
+                        raise ToolsServiceError(
+                            f"Server {other!r} already uses tool namespace {namespace!r}. "
+                            "Choose another server name."
+                        )
 
             old_config = config["mcpServers"][old_name]
             old_active = (
@@ -167,9 +190,7 @@ class ToolsService:
 
             if is_rename:
                 config["mcpServers"].pop(old_name)
-                config["mcpServers"][name] = server_config
-            else:
-                config["mcpServers"][name] = server_config
+            config["mcpServers"][name] = server_config
 
             if self.tool_mgr.save_mcp_config(config):
                 await self._sync_updated_server_runtime(
@@ -245,16 +266,89 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to test MCP connection: {exc!s}") from exc
 
-    async def get_tool_list(self) -> list[dict]:
+    async def get_tool_list(self, *, include_saved: bool = False) -> list[dict]:
         try:
             tools = list(self.tool_mgr.func_list)
-            if not tools:
+            if not tools and not include_saved:
                 return []
             perms_store = await sp.global_get("tool_permissions", {})
-            return [self._serialize_tool(tool, perms_store) for tool in tools]
+            defaults = (
+                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+            )
+            if not isinstance(defaults, dict):
+                defaults = {}
+            result = [self._serialize_tool(tool, defaults) for tool in tools]
+            if not include_saved:
+                return result
+
+            stored_inactive = await sp.global_get("inactivated_llm_tools", [])
+            inactive_names = (
+                {name for name in stored_inactive if isinstance(name, str) and name}
+                if isinstance(stored_inactive, list)
+                else set()
+            )
+            for entry in result:
+                entry["inactive_configured"] = entry["name"] in inactive_names
+            registered_names = {entry["name"] for entry in result}
+            saved_names = {name for name in defaults if isinstance(name, str) and name}
+            for name in sorted((inactive_names | saved_names) - registered_names):
+                result.append(
+                    {
+                        "name": name,
+                        "description": "",
+                        "active": False,
+                        "registered": False,
+                        "inactive_configured": name in inactive_names,
+                        "permission": defaults.get(name),
+                        "permission_configured": name in defaults,
+                    }
+                )
+            return result
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
+
+    async def delete_unregistered_tool_settings(self, tool_name: str) -> str:
+        """Clear the saved global settings for one unregistered tool.
+
+        Args:
+            tool_name: Exact name used in the global tool settings.
+
+        Returns:
+            A success message for the response body.
+
+        Raises:
+            ToolsServiceError: If the tool is registered or its settings cannot be saved.
+        """
+        try:
+            async with self._tool_settings_lock:
+                permissions = await sp.global_get("tool_permissions", None)
+                inactive = await sp.global_get("inactivated_llm_tools", None)
+                if any(tool.name == tool_name for tool in self.tool_mgr.func_list):
+                    raise ToolsServiceError(f"Tool '{tool_name}' is registered")
+
+                defaults = (
+                    permissions.get("_default")
+                    if isinstance(permissions, dict)
+                    else None
+                )
+                # Persist both containers so a retry can finish a partial write.
+                if isinstance(defaults, dict):
+                    defaults.pop(tool_name, None)
+                    await sp.global_put("tool_permissions", permissions)
+                if isinstance(inactive, list):
+                    await sp.global_put(
+                        "inactivated_llm_tools",
+                        [name for name in inactive if name != tool_name],
+                    )
+            return f"Saved settings for tool '{tool_name}' deleted"
+        except ToolsServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise ToolsServiceError(
+                f"Failed to delete saved tool settings: {exc!s}"
+            ) from exc
 
     async def update_tool_permission(self, data: Any) -> str:
         """Set a tool permission level.
@@ -281,15 +375,16 @@ class ToolsService:
             if not any(t.name == tool_name for t in self.tool_mgr.func_list):
                 raise ToolsServiceError(f"Tool '{tool_name}' not found")
 
-            perms_store = await sp.global_get("tool_permissions", {})
-            if not isinstance(perms_store, dict):
-                perms_store = {}
-            defaults = perms_store.get("_default", {})
-            if not isinstance(defaults, dict):
-                defaults = {}
-            defaults[tool_name] = permission
-            perms_store["_default"] = defaults
-            await sp.global_put("tool_permissions", perms_store)
+            async with self._tool_settings_lock:
+                perms_store = await sp.global_get("tool_permissions", {})
+                if not isinstance(perms_store, dict):
+                    perms_store = {}
+                defaults = perms_store.get("_default", {})
+                if not isinstance(defaults, dict):
+                    defaults = {}
+                defaults[tool_name] = permission
+                perms_store["_default"] = defaults
+                await sp.global_put("tool_permissions", perms_store)
 
             return f"Tool '{tool_name}' permission set to {permission}"
         except ToolsServiceError:
@@ -319,18 +414,19 @@ class ToolsService:
             if not tool_name or action is None:
                 raise ToolsServiceError("Missing required parameters: name or activate")
 
-            if action:
-                try:
-                    ok = await self.tool_mgr.activate_llm_tool_async(
-                        tool_name,
-                        star_map=star_map,
-                    )
-                except ValueError as exc:
-                    raise ToolsServiceError(
-                        f"Failed to activate tool: {exc!s}"
-                    ) from exc
-            else:
-                ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
+            async with self._tool_settings_lock:
+                if action:
+                    try:
+                        ok = await self.tool_mgr.activate_llm_tool_async(
+                            tool_name,
+                            star_map=star_map,
+                        )
+                    except ValueError as exc:
+                        raise ToolsServiceError(
+                            f"Failed to activate tool: {exc!s}"
+                        ) from exc
+                else:
+                    ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
 
             if ok:
                 return "Operation successful."
@@ -505,7 +601,7 @@ class ToolsService:
     def _serialize_tool(
         self,
         tool,
-        perms_store: object,
+        defaults: dict,
     ) -> dict:
         if isinstance(tool, MCPTool):
             origin = "mcp"
@@ -521,11 +617,6 @@ class ToolsService:
             origin_name = "unknown"
             origin_display_name = origin_name
 
-        defaults = (
-            perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
-        )
-        if not isinstance(defaults, dict):
-            defaults = {}
         return {
             "name": tool.name,
             "description": tool.description,

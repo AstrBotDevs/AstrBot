@@ -48,6 +48,7 @@
         }
     },
     "functionTools": {
+        "confirmDeleteSavedSettings": "Удалить сохранённое глобальное разрешение и состояние отключения для {name}?",
         "title": "Функции (Tools)",
         "buttons": {
             "view": "Показать инструменты"
@@ -67,10 +68,13 @@
             "permissionAdmin": "Админ",
             "permissionMember": "Все",
             "permissionEveryone": "Все",
+            "unregistered": "Не зарегистрирован",
+            "savedInactive": "Сохранён как отключённый",
+            "deleteSavedSettings": "Удалить сохранённые настройки {name}",
             "actions": "Действия"
         },
         "summary": {
-            "total": "Всего",
+            "total": "Зарегистрировано",
             "active": "Активно",
             "inactive": "Неактивно"
         }
@@ -95,25 +99,50 @@
             "title": "Добавление MCP-сервера",
             "editTitle": "Редактирование MCP-сервера",
             "fields": {
+                "transport": "Транспорт",
+                "command": "Команда",
+                "args": "Аргументы",
+                "argument": "Аргумент {index}",
+                "env": "Переменные окружения",
+                "cwd": "Рабочий каталог",
+                "url": "URL сервера",
+                "authentication": "Аутентификация",
+                "authNone": "Нет",
+                "bearerToken": "Bearer-токен",
+                "advanced": "Расширенные настройки",
+                "headers": "Дополнительные заголовки HTTP",
+                "timeout": "Тайм-аут соединения (секунды)",
+                "readTimeout": "Тайм-аут чтения SSE (секунды)",
+                "commandRequired": "Введите команду",
+                "urlRequired": "Введите URL",
+                "tokenRequired": "Введите Bearer-токен",
                 "name": "Название сервера",
                 "nameRequired": "Название обязательно",
                 "enable": "Подключить после сохранения",
                 "config": "Конфигурация сервера"
             },
             "errors": {
+                "keyValue": "Введите одну пару key=value на строку.",
+                "url": "Введите действительный URL HTTP или HTTPS.",
+                "timeout": "Тайм-аут должен быть больше нуля.",
                 "configEmpty": "Конфигурация не может быть пустой",
                 "jsonFormat": "Ошибка формата JSON: {error}",
                 "jsonParse": "Ошибка разбора JSON: {error}"
             },
             "buttons": {
+                "addArgument": "Добавить аргумент",
+                "removeArgument": "Удалить аргумент",
+                "importJson": "Импортировать JSON",
                 "cancel": "Отмена",
                 "save": "Сохранить",
                 "testConnection": "Тест связи",
                 "sync": "Синхронизировать"
             },
             "tips": {
+                "nameLockedAfterSave": "После сохранения изменить название сервера здесь нельзя.",
+                "keyValue": "Введите одну пару key=value на строку.",
                 "timeoutConfig": "Тайм-аут вызова инструментов настраивается отдельно на странице конфигурации",
-                "transportRecommendation": "Рекомендуется сначала использовать режим Streamable HTTP или SSE. Режим stdio запускает локальный процесс на хосте AstrBot и подходит только для доверенных MCP-серверов."
+                "connectionRisk": "Подключение к внешним MCP-серверам может создавать риски для безопасности. Подключайтесь только к тем MCP-серверам, которым доверяете."
             }
         },
         "serverDetail": {
@@ -148,6 +177,8 @@
         "toggleToolError": "Не удалось изменить статус: {error}",
         "updateToolPermissionSuccess": "Доступ к {name} обновлён",
         "updateToolPermissionFailed": "Не удалось обновить доступ к инструменту",
+        "deleteSavedToolSettingsSuccess": "Сохранённые настройки инструмента удалены",
+        "deleteSavedToolSettingsError": "Не удалось удалить сохранённые настройки инструмента",
         "testError": "Ошибка теста связи: {error}"
     },
     "syncProvider": {
