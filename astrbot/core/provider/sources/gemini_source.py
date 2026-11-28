@@ -712,6 +712,8 @@ class ProviderGoogleGenAI(Provider):
         `prompt_token_count` includes tokens served from cache, so subtract
         `cached_content_token_count` to avoid double-counting cached input
         (matching the OpenAI provider's TokenUsage accounting).
+        `candidates_token_count` excludes thinking tokens, which Gemini bills
+        as output, so add `thoughts_token_count` to the output.
         """
         prompt_tokens = usage_metadata.prompt_token_count or 0
         cached = usage_metadata.cached_content_token_count or 0
