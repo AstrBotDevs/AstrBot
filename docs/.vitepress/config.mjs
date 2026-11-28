@@ -164,6 +164,7 @@ export default defineConfig({
             items: [
               { text: "WebUI", link: "/webui" },
               { text: "AstrBot CLI", link: "/cli" },
+              { text: "人格设定", link: "/persona" },
               { text: "内置指令", link: "/command" },
               {
                 text: "插件",
@@ -468,6 +469,7 @@ export default defineConfig({
             items: [
               { text: "WebUI", link: "/webui" },
               { text: "AstrBot CLI", link: "/cli" },
+              { text: "Persona Management", link: "/persona" },
               { text: "Built-in Commands", link: "/command" },
               {
                 text: "Plugins",
