@@ -12,8 +12,8 @@ class VersionComparator:
 
         Returns 1 if v1 > v2, -1 if v1 < v2, 0 if v1 == v2.
         """
-        v1 = v1.lower().replace("v", "")
-        v2 = v2.lower().replace("v", "")
+        v1 = v1[1:] if v1.startswith(("v", "V")) else v1
+        v2 = v2[1:] if v2.startswith(("v", "V")) else v2
 
         def split_version(version):
             match = re.match(
