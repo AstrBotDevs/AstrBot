@@ -5,6 +5,7 @@ from astrbot.api import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_runtime.context import AstrAgentContext
+from astrbot.core.auxiliary_model_errors import notify_auxiliary_model_failure
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.star.context import Context
 
@@ -36,8 +37,19 @@ async def retrieve_knowledge_base(
     query: str,
     umo: str,
     context: Context,
+    errors: list[str] | None = None,
 ) -> str | None:
-    """Retrieve knowledge base context for the given query."""
+    """Retrieve knowledge base context for the given query.
+
+    Args:
+        query: Text to search for.
+        umo: Session whose configured knowledge bases are searched.
+        context: Plugin context providing the knowledge-base manager.
+        errors: If given, collects failures that retrieval skipped.
+
+    Returns:
+        The formatted knowledge, or None when nothing was found.
+    """
     kb_mgr = context.kb_manager
     config = context.get_config(umo=umo)
 
@@ -59,6 +71,7 @@ async def retrieve_knowledge_base(
         kb_names=kb_names,
         top_k_fusion=top_k_fusion,
         top_m_final=top_k,
+        errors=errors,
     )
     if not kb_context:
         return None
@@ -99,11 +112,21 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
         query = kwargs.get("query", "")
         if not query:
             return "error: Query parameter is empty."
-        result = await retrieve_knowledge_base(
-            query=query,
-            umo=context.context.event.unified_msg_origin,
-            context=context.context.context,
-        )
+        errors: list[str] = []
+        try:
+            result = await retrieve_knowledge_base(
+                query=query,
+                umo=context.context.event.unified_msg_origin,
+                context=context.context.context,
+                errors=errors,
+            )
+        finally:
+            # Retrieval raises when no knowledge base is usable; the failures
+            # collected before that are still shown.
+            if errors:
+                await notify_auxiliary_model_failure(
+                    context.context.event, "Knowledge base", "; ".join(errors)
+                )
         if not result:
             return "No relevant knowledge found."
         return result
