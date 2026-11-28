@@ -66,11 +66,8 @@ function matches(field, name) {
 function defaultItems(field) {
   const winners = new Map();
   for (const item of catalog.value[field]) {
-    const current = winners.get(item.legacyName);
-    if (
-      !current ||
-      (item.active !== false && (current.active === false || field === "tools"))
-    ) {
+    if (item.active === false) continue;
+    if (field === "tools" || !winners.has(item.legacyName)) {
       winners.set(item.legacyName, item);
     }
   }
