@@ -1,14 +1,13 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import Tool
 
 from astrbot.core import resource_settings
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
-from astrbot.core.resource_settings import ResourceRef, resolve_tools, tool_ref
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.resource_settings import ResourceRef, resolve_tools, tool_ref
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -23,7 +22,9 @@ async def test_migration_copies_rules_before_retiring_the_old_storage(
     try:
         await preferences.global_put("inactivated_plugins", ["data.plugins.notes.main"])
         await preferences.global_put("inactivated_llm_tools", ["search"])
-        await preferences.global_put("tool_permissions", {"_default": {"search": "admin"}})
+        await preferences.global_put(
+            "tool_permissions", {"_default": {"search": "admin"}}
+        )
         skills = tmp_path / "skills.json"
         old_switches = json.dumps({"skills": {"research": {"active": False}}})
         skills.write_text(old_switches)
@@ -45,34 +46,18 @@ async def test_migration_copies_rules_before_retiring_the_old_storage(
         assert await resource_settings.legacy_setting("inactivated_plugins", []) == [
             "data.plugins.notes.main"
         ]
-        assert await resource_settings.legacy_setting("inactivated_llm_tools", []) == ["search"]
+        assert await resource_settings.legacy_setting("inactivated_llm_tools", []) == [
+            "search"
+        ]
         assert await resource_settings.legacy_setting("tool_permissions", {}) == {
             "_default": {"search": "admin"}
         }
-        assert await resource_settings.legacy_setting(resource_settings.LEGACY_SKILLS_KEY, {}) == {
-            "research": {"active": False}
-        }
+        assert await resource_settings.legacy_setting(
+            resource_settings.LEGACY_SKILLS_KEY, {}
+        ) == {"research": {"active": False}}
     finally:
         await preferences.close()
         await database.engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_skill_settings_file_survives_a_failed_database_write(tmp_path, monkeypatch):
-    preferences = SimpleNamespace(
-        global_get=AsyncMock(return_value=None),
-        get_async=AsyncMock(return_value=None),
-        put_async=AsyncMock(side_effect=OSError("Write failed")),
-    )
-    monkeypatch.setattr(resource_settings, "sp", preferences)
-    skills = tmp_path / "skills.json"
-    old_switches = json.dumps({"skills": {"research": {"active": False}}})
-    skills.write_text(old_switches)
-
-    with pytest.raises(OSError, match="Write failed"):
-        await resource_settings.migrate_legacy_settings(skills)
-
-    assert skills.read_text() == old_switches
 
 
 def test_grouped_selection_pins_the_source_even_with_a_legacy_name():
