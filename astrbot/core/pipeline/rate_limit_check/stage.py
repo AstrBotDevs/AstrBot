@@ -20,7 +20,7 @@ class RateLimitStage(Stage):
     _MIN_SWEEP_INTERVAL = 1.0
 
     def __init__(self) -> None:
-        # 存储每个会话的请求时间队列（使用 monotonic 秒数，避免系统时钟跳变影响）
+        # Store per-session request timestamps using monotonic seconds to avoid clock jumps.
         self.event_timestamps: defaultdict[str, deque[float]] = defaultdict(deque)
         # 为每个会话设置一个锁，避免并发冲突
         self.locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -118,7 +118,12 @@ class RateLimitStage(Stage):
                 self._lock_waiters[umo] = remaining
 
     def _sweep_expired_sessions(self, now: float, window_seconds: float) -> None:
-        """Evict expired timestamps and idle session locks."""
+        """Evict expired timestamps and idle session locks.
+
+        Args:
+            now: Current monotonic timestamp in seconds.
+            window_seconds: Active rate-limit window length in seconds.
+        """
         self._last_sweep = now
         for umo in list(self.event_timestamps):
             timestamps = self.event_timestamps[umo]
