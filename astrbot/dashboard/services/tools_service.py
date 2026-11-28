@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import traceback
 from typing import Any
 
@@ -35,6 +36,7 @@ def extract_mcp_server_config(mcp_servers_value: object) -> dict:
 class ToolsService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.tool_mgr = core_lifecycle.provider_manager.llm_tools
+        self._tool_settings_lock = asyncio.Lock()
 
     def rollback_mcp_server(self, name: str) -> bool:
         try:
@@ -306,6 +308,48 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
 
+    async def delete_unregistered_tool_settings(self, tool_name: str) -> str:
+        """Clear the saved global settings for one unregistered tool.
+
+        Args:
+            tool_name: Exact name used in the global tool settings.
+
+        Returns:
+            A success message for the response body.
+
+        Raises:
+            ToolsServiceError: If the tool is registered or its settings cannot be saved.
+        """
+        try:
+            async with self._tool_settings_lock:
+                permissions = await sp.global_get("tool_permissions", None)
+                inactive = await sp.global_get("inactivated_llm_tools", None)
+                if any(tool.name == tool_name for tool in self.tool_mgr.func_list):
+                    raise ToolsServiceError(f"Tool '{tool_name}' is registered")
+
+                defaults = (
+                    permissions.get("_default")
+                    if isinstance(permissions, dict)
+                    else None
+                )
+                # Persist both containers so a retry can finish a partial write.
+                if isinstance(defaults, dict):
+                    defaults.pop(tool_name, None)
+                    await sp.global_put("tool_permissions", permissions)
+                if isinstance(inactive, list):
+                    await sp.global_put(
+                        "inactivated_llm_tools",
+                        [name for name in inactive if name != tool_name],
+                    )
+            return f"Saved settings for tool '{tool_name}' deleted"
+        except ToolsServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise ToolsServiceError(
+                f"Failed to delete saved tool settings: {exc!s}"
+            ) from exc
+
     async def update_tool_permission(self, data: Any) -> str:
         """Set a tool permission level.
 
@@ -331,15 +375,16 @@ class ToolsService:
             if not any(t.name == tool_name for t in self.tool_mgr.func_list):
                 raise ToolsServiceError(f"Tool '{tool_name}' not found")
 
-            perms_store = await sp.global_get("tool_permissions", {})
-            if not isinstance(perms_store, dict):
-                perms_store = {}
-            defaults = perms_store.get("_default", {})
-            if not isinstance(defaults, dict):
-                defaults = {}
-            defaults[tool_name] = permission
-            perms_store["_default"] = defaults
-            await sp.global_put("tool_permissions", perms_store)
+            async with self._tool_settings_lock:
+                perms_store = await sp.global_get("tool_permissions", {})
+                if not isinstance(perms_store, dict):
+                    perms_store = {}
+                defaults = perms_store.get("_default", {})
+                if not isinstance(defaults, dict):
+                    defaults = {}
+                defaults[tool_name] = permission
+                perms_store["_default"] = defaults
+                await sp.global_put("tool_permissions", perms_store)
 
             return f"Tool '{tool_name}' permission set to {permission}"
         except ToolsServiceError:
@@ -369,18 +414,19 @@ class ToolsService:
             if not tool_name or action is None:
                 raise ToolsServiceError("Missing required parameters: name or activate")
 
-            if action:
-                try:
-                    ok = await self.tool_mgr.activate_llm_tool_async(
-                        tool_name,
-                        star_map=star_map,
-                    )
-                except ValueError as exc:
-                    raise ToolsServiceError(
-                        f"Failed to activate tool: {exc!s}"
-                    ) from exc
-            else:
-                ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
+            async with self._tool_settings_lock:
+                if action:
+                    try:
+                        ok = await self.tool_mgr.activate_llm_tool_async(
+                            tool_name,
+                            star_map=star_map,
+                        )
+                    except ValueError as exc:
+                        raise ToolsServiceError(
+                            f"Failed to activate tool: {exc!s}"
+                        ) from exc
+                else:
+                    ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
 
             if ok:
                 return "Operation successful."

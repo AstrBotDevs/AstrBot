@@ -3111,6 +3111,23 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/tools/saved:
+    delete:
+      tags: [Tools]
+      summary: Delete saved global settings for an unregistered tool
+      operationId: deleteSavedToolSettings
+      x-astrbot-scope: tool
+      parameters:
+        - name: tool_name
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/tools/{tool_id}/enabled:
     patch:
       tags: [Tools]

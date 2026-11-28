@@ -444,10 +444,10 @@ async function saveSelectionDialog() {
             :color="removedUnlistedTools.includes(name) ? 'primary' : 'error'"
             :disabled="Boolean(saving)"
             :ripple="false"
-            :aria-label="`${removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : t('core.common.delete')} ${name}`"
+            :aria-label="`${removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : tm('personaQuickPreview.removeSavedTool')} ${name}`"
             @click="toggleUnlistedToolRemoval(name)"
           >
-            {{ removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : t('core.common.delete') }}
+            {{ removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : tm('personaQuickPreview.removeSavedTool') }}
           </v-btn>
         </li>
       </ul>

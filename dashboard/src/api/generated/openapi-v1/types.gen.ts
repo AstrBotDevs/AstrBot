@@ -2602,6 +2602,16 @@ export type ListToolsResponse = (SuccessEnvelope);
 
 export type ListToolsError = unknown;
 
+export type DeleteSavedToolSettingsData = {
+    query: {
+        tool_name: string;
+    };
+};
+
+export type DeleteSavedToolSettingsResponse = (SuccessEnvelope);
+
+export type DeleteSavedToolSettingsError = unknown;
+
 export type SetToolEnabledData = {
     body: EnabledPatch;
     path: {

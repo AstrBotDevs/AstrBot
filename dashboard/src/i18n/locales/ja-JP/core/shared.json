@@ -105,6 +105,7 @@
     "selectAllTools": "すべてのツールを選択",
     "toolCount": "{selected}/{total} 件のツールを選択中",
     "unlistedSavedTools": "選択済みで現在利用できないツール",
+    "removeSavedTool": "選択から外す",
     "undoToolRemoval": "取り消す",
     "skillDialogTitle": "{name} のスキルを設定",
     "skillDialogHint": "このペルソナが使用できるスキルを選択してください。",

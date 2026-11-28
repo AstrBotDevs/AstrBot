@@ -11,6 +11,7 @@ export function useToolActions(
   toast: (message: string, color?: string) => void
 ) {
   const toolSearch = ref('');
+  const deletingSavedTools = ref(new Set<string>());
   const managedTools = computed(() => tools.value.filter(tool =>
     tool.origin === 'plugin' || tool.origin === 'mcp' || tool.registered === false
     || tool.inactive_configured || tool.permission_configured
@@ -99,11 +100,35 @@ export function useToolActions(
     }
   };
 
+  const deleteSavedToolSettings = async (
+    tool: ToolItem,
+    successMessage: string,
+    errorMessage: string,
+  ) => {
+    if (tool.registered !== false || deletingSavedTools.value.has(tool.name)) return;
+    deletingSavedTools.value.add(tool.name);
+    try {
+      const res = await toolApi.deleteSavedSettings(tool.name);
+      if (res.data.status === 'ok') {
+        tools.value = tools.value.filter(item => item.name !== tool.name || item.registered !== false);
+        toast(successMessage, 'success');
+      } else {
+        toast(res.data.message || errorMessage, 'error');
+      }
+    } catch (error: any) {
+      toast(error?.response?.data?.message || error.message || errorMessage, 'error');
+    } finally {
+      deletingSavedTools.value.delete(tool.name);
+    }
+  };
+
   return {
     toolSearch,
     filteredTools,
     toolSummary,
     toggleTool,
     updateToolPermission,
+    deletingSavedTools,
+    deleteSavedToolSettings,
   };
 }

@@ -1146,6 +1146,11 @@ export const toolApi = {
   list(params?: ToolListParams) {
     return typed<any[]>(openApiV1.listTools({ query: generatedQuery(params) }));
   },
+  deleteSavedSettings(toolName: string) {
+    return typed<OpenConfig>(
+      openApiV1.deleteSavedToolSettings({ query: { tool_name: toolName } }),
+    );
+  },
   setEnabled(toolId: string, enabled: boolean) {
     return typed<OpenConfig>(
       openApiV1.setToolEnabled({

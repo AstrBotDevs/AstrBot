@@ -49,6 +49,7 @@
   },
   "functionTools": {
     "title": "関数ツール",
+    "confirmDeleteSavedSettings": "{name} の保存済みのグローバル権限と無効化設定を削除しますか？",
     "buttons": {
       "view": "ツールを表示"
     },
@@ -69,6 +70,7 @@
       "permissionEveryone": "すべてのユーザー",
       "unregistered": "未登録",
       "savedInactive": "無効として保存済み",
+      "deleteSavedSettings": "{name} の保存済み設定を削除",
       "actions": "操作"
     },
     "summary": {
@@ -211,6 +213,8 @@
     "toggleToolError": "ツールの状態を切り替えられませんでした：{error}",
     "updateToolPermissionSuccess": "ツール {name} の権限を更新しました",
     "updateToolPermissionFailed": "ツール権限の更新に失敗しました",
+    "deleteSavedToolSettingsSuccess": "保存済みのツール設定を削除しました",
+    "deleteSavedToolSettingsError": "保存済みのツール設定を削除できませんでした",
     "testError": "接続テストに失敗しました：{error}"
   }
 }

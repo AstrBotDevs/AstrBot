@@ -105,6 +105,7 @@
     "selectAllTools": "Select all tools",
     "toolCount": "{selected}/{total} tools selected",
     "unlistedSavedTools": "Selected tools currently unavailable",
+    "removeSavedTool": "Remove",
     "undoToolRemoval": "Undo",
     "skillDialogTitle": "Configure skills for {name}",
     "skillDialogHint": "Choose which skills this persona can use.",

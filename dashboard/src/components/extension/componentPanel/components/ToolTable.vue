@@ -8,11 +8,13 @@ const { tm: tmTool } = useModuleI18n('features/tooluse');
 const props = defineProps<{
   items: ToolItem[];
   loading?: boolean;
+  deletingSavedTools: ReadonlySet<string>;
 }>();
 
 const emit = defineEmits<{
   (e: 'toggle-tool', tool: ToolItem): void;
   (e: 'update-permission', tool: ToolItem, permission: 'admin' | 'member'): void;
+  (e: 'delete-saved-settings', tool: ToolItem): void;
 }>();
 
 const toolHeaders = computed(() => [
@@ -126,6 +128,10 @@ const getPermissionLabel = (permission?: string | null): string => {
         <v-btn v-if="item.registered !== false" :icon="isExpanded(internalItem) ? '$collapse' : '$expand'"
           size="small" variant="text" :aria-label="tmTool('functionTools.parameters')"
           :aria-expanded="isExpanded(internalItem)" @click.stop="toggleExpand(internalItem)" />
+        <v-btn v-else icon="mdi-delete-outline" size="small" color="error" variant="text" :ripple="false"
+          :title="tmTool('functionTools.table.deleteSavedSettings', { name: item.name })"
+          :aria-label="tmTool('functionTools.table.deleteSavedSettings', { name: item.name })"
+          :loading="deletingSavedTools.has(item.name)" @click.stop="emit('delete-saved-settings', item)" />
       </template>
 
       <template #no-data>

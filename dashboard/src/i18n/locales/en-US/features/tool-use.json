@@ -49,6 +49,7 @@
   },
   "functionTools": {
     "title": "Function Tools",
+    "confirmDeleteSavedSettings": "Delete the saved global permission and disabled state for {name}?",
     "buttons": {
       "view": "View Tools"
     },
@@ -69,6 +70,7 @@
       "permissionEveryone": "All Users",
       "unregistered": "Unregistered",
       "savedInactive": "Saved as disabled",
+      "deleteSavedSettings": "Delete saved settings for {name}",
       "actions": "Actions"
     },
     "summary": {
@@ -211,6 +213,8 @@
     "toggleToolError": "Failed to toggle tool status: {error}",
     "updateToolPermissionSuccess": "Permission for {name} updated",
     "updateToolPermissionFailed": "Failed to update tool permission",
+    "deleteSavedToolSettingsSuccess": "Saved tool settings deleted",
+    "deleteSavedToolSettingsError": "Failed to delete saved tool settings",
     "testError": "Test connection failed: {error}"
   }
 }

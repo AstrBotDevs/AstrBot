@@ -48,6 +48,7 @@
         }
     },
     "functionTools": {
+        "confirmDeleteSavedSettings": "Удалить сохранённое глобальное разрешение и состояние отключения для {name}?",
         "title": "Функции (Tools)",
         "buttons": {
             "view": "Показать инструменты"
@@ -69,6 +70,7 @@
             "permissionEveryone": "Все",
             "unregistered": "Не зарегистрирован",
             "savedInactive": "Сохранён как отключённый",
+            "deleteSavedSettings": "Удалить сохранённые настройки {name}",
             "actions": "Действия"
         },
         "summary": {
@@ -175,6 +177,8 @@
         "toggleToolError": "Не удалось изменить статус: {error}",
         "updateToolPermissionSuccess": "Доступ к {name} обновлён",
         "updateToolPermissionFailed": "Не удалось обновить доступ к инструменту",
+        "deleteSavedToolSettingsSuccess": "Сохранённые настройки инструмента удалены",
+        "deleteSavedToolSettingsError": "Не удалось удалить сохранённые настройки инструмента",
         "testError": "Ошибка теста связи: {error}"
     },
     "syncProvider": {
