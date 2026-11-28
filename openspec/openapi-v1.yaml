@@ -6888,7 +6888,7 @@ components:
         source_id:
           type: [string, "null"]
         items:
-          type: array
+          type: [array, "null"]
           items:
             type: string
 

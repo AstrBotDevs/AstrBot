@@ -111,6 +111,7 @@
         "configureSkills": "Настроить навыки",
         "toolDialogTitle": "Настройка инструментов: {name}",
         "toolDialogHint": "Выберите функции, доступные этому персонажу.",
+        "allSourceItems": "Все доступные элементы",
         "selectAllTools": "Выбрать все инструменты",
         "toolCount": "Выбрано инструментов: {selected}/{total}",
         "unlistedSavedTools": "Выбранные инструменты, которые сейчас недоступны",

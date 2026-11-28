@@ -111,6 +111,7 @@
     "configureSkills": "配置技能",
     "toolDialogTitle": "配置 {name} 的工具",
     "toolDialogHint": "选择该人格可以使用的函数工具。",
+    "allSourceItems": "全部可用项",
     "selectAllTools": "选择全部工具",
     "toolCount": "已选 {selected}/{total} 个工具",
     "unlistedSavedTools": "已选但当前不可用的工具",

@@ -111,6 +111,7 @@
     "configureSkills": "Configure skills",
     "toolDialogTitle": "Configure tools for {name}",
     "toolDialogHint": "Choose which function tools this persona can use.",
+    "allSourceItems": "All available items",
     "selectAllTools": "Select all tools",
     "toolCount": "{selected}/{total} tools selected",
     "unlistedSavedTools": "Selected tools currently unavailable",

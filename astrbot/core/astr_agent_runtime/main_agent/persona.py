@@ -230,7 +230,7 @@ async def apply_skills(
         explicit_names = set()
         if allowed_skills is not None:
             selected = {}
-            for ref in selected_members(allowed_skills, "skill"):
+            for ref in selected_members(allowed_skills, "skill", by_ref):
                 if isinstance(ref, str):
                     if ref in by_name and ref not in explicit_names:
                         selected.setdefault(ref, by_name[ref])

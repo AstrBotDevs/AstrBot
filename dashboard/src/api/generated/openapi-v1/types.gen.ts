@@ -712,7 +712,7 @@ export type SourceSelectionGroup = {
     kind: 'tool' | 'skill';
     source: 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
     source_id?: (string) | null;
-    items: Array<(string)>;
+    items: Array<(string)> | null;
 };
 
 export type kind = 'tool' | 'skill';

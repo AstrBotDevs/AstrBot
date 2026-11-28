@@ -111,6 +111,7 @@
     "configureSkills": "スキルを設定",
     "toolDialogTitle": "{name} のツールを設定",
     "toolDialogHint": "このペルソナが使用できる関数ツールを選択してください。",
+    "allSourceItems": "利用可能なすべての項目",
     "selectAllTools": "すべてのツールを選択",
     "toolCount": "{selected}/{total} 件のツールを選択中",
     "unlistedSavedTools": "選択済みで現在利用できないツール",

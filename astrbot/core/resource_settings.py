@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -15,12 +16,12 @@ from astrbot.core import sp
 
 
 class SourceSelectionGroup(BaseModel):
-    """Persisted selection of individual members from a single source."""
+    """Persisted selection of individual or all available members of a source."""
 
     kind: Literal["tool", "skill"]
     source: Literal["plugin", "mcp", "local", "sandbox", "astrbot"]
     source_id: str | None = None
-    items: list[str]
+    items: list[str] | None
 
     @model_validator(mode="after")
     def validate_source(self) -> SourceSelectionGroup:
@@ -32,7 +33,7 @@ class SourceSelectionGroup(BaseModel):
             raise ValueError("Invalid source for this selection kind")
         if (self.source in {"plugin", "mcp"}) != bool(self.source_id):
             raise ValueError("Plugin and MCP selections require a source ID")
-        if any(not name for name in self.items):
+        if any(not name for name in self.items or []):
             raise ValueError("Selection member names cannot be empty")
         return self
 
@@ -89,8 +90,23 @@ def tool_ref(tool) -> ResourceRef:
     return ResourceRef("tool", "astrbot", None, tool.name)
 
 
-def selected_members(selection: PersonaSelection, kind: Literal["tool", "skill"]):
-    """Yield legacy names or exact refs in the order saved by the persona."""
+def selected_members(
+    selection: PersonaSelection,
+    kind: Literal["tool", "skill"],
+    available: Iterable[ResourceRef],
+) -> Iterable[str | ResourceRef]:
+    """Expand selected sources after individual selections.
+
+    Args:
+        selection: The saved tool or skill selection.
+        kind: The member type for this selection.
+        available: Runtime-authorized resource references for expanding sources.
+
+    Yields:
+        Legacy names and resource references in selection order, followed by
+        available members of all-selected sources.
+    """
+    selected_sources = set()
     for entry in selection or []:
         if isinstance(entry, str):
             yield entry
@@ -99,9 +115,17 @@ def selected_members(selection: PersonaSelection, kind: Literal["tool", "skill"]
                 group = SourceSelectionGroup.model_validate(entry)
             except ValueError:
                 continue
-            if group.kind == kind:
+            if group.kind != kind:
+                continue
+            if group.items is None:
+                selected_sources.add((group.source, group.source_id))
+            else:
                 for name in group.items:
                     yield ResourceRef(kind, group.source, group.source_id, name)
+    if selected_sources:
+        for ref in available:
+            if ref.kind == kind and (ref.source, ref.source_id) in selected_sources:
+                yield ref
 
 
 def resolve_tools(selection: PersonaSelection, tools) -> list:
@@ -118,7 +142,7 @@ def resolve_tools(selection: PersonaSelection, tools) -> list:
     if selection is None:
         return [tool for tool in by_name.values() if tool.active]
     selected = {}
-    refs = list(selected_members(selection, "tool"))
+    refs = list(selected_members(selection, "tool", by_ref))
     # Prioritize explicit choices over legacy same-name entries.
     for ref in [item for item in refs if not isinstance(item, str)] + [
         item for item in refs if isinstance(item, str)

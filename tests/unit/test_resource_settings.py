@@ -7,7 +7,12 @@ from mcp.types import Tool
 from astrbot.core import resource_settings
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.resource_settings import ResourceRef, resolve_tools, tool_ref
+from astrbot.core.resource_settings import (
+    ResourceRef,
+    resolve_tools,
+    selected_members,
+    tool_ref,
+)
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -104,3 +109,39 @@ def test_mcp_selection_and_settings_key_use_the_server_and_raw_tool_names():
         },
     ]
     assert resolve_tools(selection, [tool]) == [tool]
+
+
+def test_source_wide_tool_selection_follows_available_members():
+    def registered(name, source_id, *, active=True):
+        return SimpleNamespace(
+            name=name,
+            active=active,
+            resource_ref=ResourceRef("tool", "mcp", source_id, name),
+        )
+
+    first = registered("first", "github")
+    added = registered("added", "github")
+    disabled = registered("disabled", "github", active=False)
+    other = registered("other", "other-server")
+    group = {"kind": "tool", "source": "mcp", "source_id": "github", "items": None}
+
+    assert resolve_tools([group], [first, disabled, other]) == [first]
+    assert resolve_tools([group], [first, added, disabled, other]) == [first, added]
+    assert resolve_tools([{**group, "items": []}], [first, added]) == []
+
+
+def test_source_wide_skill_selection_only_expands_its_source():
+    first = ResourceRef("skill", "plugin", "author/notes", "read")
+    added = ResourceRef("skill", "plugin", "author/notes", "summarize")
+    other = ResourceRef("skill", "local", None, "research")
+    group = {
+        "kind": "skill",
+        "source": "plugin",
+        "source_id": "author/notes",
+        "items": None,
+    }
+
+    assert list(selected_members([group], "skill", [first, added, other])) == [
+        first,
+        added,
+    ]

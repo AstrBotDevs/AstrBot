@@ -86,7 +86,10 @@ function selected(field, item, value = props[field]) {
   return (value || []).some((entry) =>
     typeof entry === "string"
       ? entry === item.legacyName && matches(field, entry).length === 1
-      : sameSource(entry, item) && entry.items.includes(item.name),
+      : sameSource(entry, item) &&
+        (entry.items === null
+          ? item.active !== false
+          : entry.items.includes(item.name)),
   );
 }
 
@@ -97,28 +100,53 @@ function addItem(value, item) {
   );
   if (index === -1) {
     value.push({ kind, source, source_id: source_id ?? null, items: [name] });
-  } else if (!value[index].items.includes(name)) {
+  } else if (
+    value[index].items !== null &&
+    !value[index].items.includes(name)
+  ) {
     value[index] = { ...value[index], items: [...value[index].items, name] };
   }
 }
 
-function removeItem(value, item) {
+function removeItem(field, value, item) {
   return value.flatMap((entry) => {
     if (typeof entry === "string" || !sameSource(entry, item)) return [entry];
-    const items = entry.items.filter((name) => name !== item.name);
+    const names =
+      entry.items ??
+      catalog.value[field]
+        .filter(
+          (candidate) =>
+            sameSource(entry, candidate) && candidate.active !== false,
+        )
+        .map((candidate) => candidate.name);
+    const items = names.filter((name) => name !== item.name);
     return items.length ? [{ ...entry, items }] : [];
   });
 }
 
-function editItems(field, targets, isSelected) {
+function editItems(field, targets, isSelected, allFromSource = false) {
   let value = [...(props[field] || [])];
   if (props[field] === null)
     defaultItems(field).forEach((item) => addItem(value, item));
+  if (allFromSource && targets.length) {
+    const target = targets[0];
+    const { kind, source, source_id } = target;
+    value = value.filter((entry) =>
+      typeof entry === "string"
+        ? !targets.some(
+            (item) =>
+              item.legacyName === entry && matches(field, entry).length === 1,
+          )
+        : !sameSource(entry, target),
+    );
+    value.push({ kind, source, source_id: source_id ?? null, items: null });
+    return value;
+  }
   for (const item of targets) {
     if (isSelected(item)) {
       if (!selected(field, item, value)) addItem(value, item);
     } else {
-      value = removeItem(value, item);
+      value = removeItem(field, value, item);
       if (matches(field, item.legacyName).length === 1) {
         value = value.filter((entry) => entry !== item.legacyName);
       }
@@ -209,12 +237,12 @@ const groups = computed(() =>
   ),
 );
 
-function toggle(field, candidates) {
+function toggle(field, candidates, sourceGroup = false) {
   if (!candidates.length) return;
   const turnOn = !candidates.every((item) => selected(field, item));
   return applySelection(
     field,
-    editItems(field, candidates, () => turnOn),
+    editItems(field, candidates, () => turnOn, sourceGroup && turnOn),
   );
 }
 
@@ -231,27 +259,57 @@ function toggleAll(field) {
 }
 
 function toggleAllInDialog() {
-  const { eligible } = selectionDialog.value.group;
-  const keys = selectionDialog.value.keys;
-  if (eligible.every((item) => keys.includes(item.key))) {
-    selectionDialog.value.keys = keys.filter(
+  const dialog = selectionDialog.value;
+  const { eligible } = dialog.group;
+  const { keys } = dialog;
+  dialog.allFromSource = !eligible.every((item) => keys.includes(item.key));
+  dialog.changed = true;
+  if (!dialog.allFromSource) {
+    dialog.keys = keys.filter(
       (key) => !eligible.some((item) => item.key === key),
     );
   } else {
-    selectionDialog.value.keys = [
-      ...new Set([...keys, ...eligible.map((item) => item.key)]),
-    ];
+    dialog.keys = [...new Set([...keys, ...eligible.map((item) => item.key)])];
   }
+}
+
+function toggleDialogItem(item, enabled) {
+  const dialog = selectionDialog.value;
+  dialog.allFromSource = false;
+  dialog.changed = true;
+  dialog.keys = enabled
+    ? [...dialog.keys, item.key]
+    : dialog.keys.filter((key) => key !== item.key);
 }
 
 function openSelection(field, group) {
   selectionDialog.value = {
     field,
     group,
+    changed: false,
+    allFromSource: false,
     keys: group.items
       .filter((item) => selected(field, item))
       .map((item) => item.key),
   };
+}
+
+async function saveSelectionDialog() {
+  const { field, group, keys, changed, allFromSource } = selectionDialog.value;
+  if (
+    !changed ||
+    (await applySelection(
+      field,
+      editItems(
+        field,
+        group.eligible,
+        (item) => keys.includes(item.key),
+        allFromSource,
+      ),
+    ))
+  ) {
+    selectionDialog.value = null;
+  }
 }
 
 const legacy = computed(() =>
@@ -291,6 +349,25 @@ const unavailable = computed(() =>
             name: entry,
             label: entry,
             id: JSON.stringify([field, entry]),
+          },
+        ];
+      }
+      if (entry.items === null) {
+        const members = catalog.value[field].filter((item) =>
+          sameSource(entry, item),
+        );
+        if (members.some((item) => item.active !== false)) return [];
+        return [
+          {
+            field,
+            group: entry,
+            label: [
+              members[0]?.label ||
+                entry.source_id ||
+                sourceLabels.value[entry.source],
+              tm("personaQuickPreview.allSourceItems"),
+            ].join(" / "),
+            id: JSON.stringify([field, entry.source, entry.source_id, null]),
           },
         ];
       }
@@ -339,10 +416,19 @@ async function toggleUnavailable(row) {
   const wasRemoved = removed.value.some((item) => item.id === row.id);
   let value = [...(props[row.field] || [])];
   if (wasRemoved) {
-    if (row.item) addItem(value, row.item);
+    if (row.group) {
+      value = value.filter(
+        (entry) => typeof entry === "string" || !sameSource(entry, row.group),
+      );
+      value.push(row.group);
+    } else if (row.item) addItem(value, row.item);
     else if (!value.includes(row.name)) value.push(row.name);
+  } else if (row.group) {
+    value = value.filter(
+      (entry) => typeof entry === "string" || !sameSource(entry, row.group),
+    );
   } else if (row.item) {
-    value = removeItem(value, row.item);
+    value = removeItem(row.field, value, row.item);
   } else {
     value = value.filter((entry) => entry !== row.name);
   }
@@ -442,7 +528,7 @@ const upgradeReady = computed(
         :readonly="readonly"
         :saving="Boolean(saving)"
         :loading="field === 'tools' ? loadingTools : loadingSkills"
-        @toggle="toggle(field, $event.eligible)"
+        @toggle="toggle(field, $event.eligible, !$event.individual)"
         @toggle-all="toggleAll(field)"
         @configure="openSelection(field, $event)"
       />
@@ -552,13 +638,7 @@ const upgradeReady = computed(
                   :model-value="selectionDialog.keys.includes(item.key)"
                   :disabled="item.active === false || Boolean(saving)"
                   :aria-label="item.name"
-                  @update:model-value="
-                    $event
-                      ? selectionDialog.keys.push(item.key)
-                      : (selectionDialog.keys = selectionDialog.keys.filter(
-                          (key) => key !== item.key,
-                        ))
-                  "
+                  @update:model-value="toggleDialogItem(item, $event)"
                 />
               </template>
               <v-list-item-title>{{ item.name }}</v-list-item-title>
@@ -576,21 +656,7 @@ const upgradeReady = computed(
             color="primary"
             variant="tonal"
             :loading="Boolean(saving)"
-            @click="
-              async () => {
-                if (
-                  await applySelection(
-                    selectionDialog.field,
-                    editItems(
-                      selectionDialog.field,
-                      selectionDialog.group.eligible,
-                      (item) => selectionDialog.keys.includes(item.key),
-                    ),
-                  )
-                )
-                  selectionDialog = null;
-              }
-            "
+            @click="saveSelectionDialog"
           >
             {{ t("core.common.save") }}
           </v-btn>
@@ -686,7 +752,10 @@ const upgradeReady = computed(
                 }}
               </div>
               <div class="text-body-2 text-medium-emphasis">
-                {{ group.items.join(", ") }}
+                {{
+                  group.items?.join(", ") ??
+                  tm("personaQuickPreview.allSourceItems")
+                }}
               </div>
             </div>
           </template>
