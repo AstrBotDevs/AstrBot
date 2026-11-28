@@ -21,6 +21,12 @@ DB_PATH = Path(FILES_PATH) / "kb.db"
 CHUNKER = RecursiveCharacterChunker()
 
 
+def _restore_kb_state(kb: KnowledgeBase, previous_state: dict) -> None:
+    """Restore mutable KnowledgeBase attributes after a failed update."""
+    for field_name, value in previous_state.items():
+        setattr(kb, field_name, value)
+
+
 class KnowledgeBaseManager:
     kb_db: KBSQLiteDatabase
     retrieval_manager: RetrievalManager
@@ -117,6 +123,7 @@ class KnowledgeBaseManager:
             top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
             top_m_final=top_m_final if top_m_final is not None else 5,
         )
+        kb_helper: KBHelper | None = None
         try:
             async with self.kb_db.get_db() as session:
                 session.add(kb)
@@ -133,10 +140,17 @@ class KnowledgeBaseManager:
                 await session.commit()
                 self.kb_insts[kb.kb_id] = kb_helper
                 return kb_helper
-        except IntegrityError as e:
-            logger.exception("创建知识库失败：唯一约束冲突")
-            raise ValueError(f"知识库名称 '{kb_name}' 已存在") from e
-        except Exception:
+        except BaseException as exc:
+            if kb_helper is not None and kb.kb_id not in self.kb_insts:
+                try:
+                    await kb_helper.delete_vec_db()
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        f"创建知识库失败后清理向量库目录失败 ({kb.kb_id}): {cleanup_exc}"
+                    )
+            if isinstance(exc, IntegrityError):
+                logger.exception("创建知识库失败：唯一约束冲突")
+                raise ValueError(f"知识库名称 '{kb_name}' 已存在") from exc
             logger.exception("创建知识库失败")
             raise
 
@@ -251,27 +265,37 @@ class KnowledgeBaseManager:
             await new_helper.initialize()
         except Exception as e:
             # Roll back in-memory settings and keep current helper available.
-            kb.kb_name = previous_state["kb_name"]
-            kb.description = previous_state["description"]
-            kb.emoji = previous_state["emoji"]
-            kb.embedding_provider_id = previous_state["embedding_provider_id"]
-            kb.rerank_provider_id = previous_state["rerank_provider_id"]
-            kb.chunk_size = previous_state["chunk_size"]
-            kb.chunk_overlap = previous_state["chunk_overlap"]
-            kb.top_k_dense = previous_state["top_k_dense"]
-            kb.top_k_sparse = previous_state["top_k_sparse"]
-            kb.top_m_final = previous_state["top_m_final"]
+            _restore_kb_state(kb, previous_state)
             kb_helper.init_error = previous_init_error
+            try:
+                await new_helper.terminate()
+            except Exception as cleanup_exc:
+                logger.warning(
+                    f"清理初始化失败的知识库实例出错 ({kb.kb_id}): {cleanup_exc}"
+                )
             logger.error(
                 f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
                 exc_info=True,
             )
             return kb_helper
 
-        async with self.kb_db.get_db() as session:
-            session.add(kb)
-            await session.commit()
-            await session.refresh(kb)
+        try:
+            async with self.kb_db.get_db() as session:
+                session.add(kb)
+                await session.commit()
+                await session.refresh(kb)
+        except BaseException as exc:
+            _restore_kb_state(kb, previous_state)
+            kb_helper.init_error = previous_init_error
+            try:
+                await new_helper.terminate()
+            except Exception as cleanup_exc:
+                logger.warning(
+                    f"清理提交失败的知识库实例出错 ({kb.kb_id}): {cleanup_exc}"
+                )
+            if isinstance(exc, IntegrityError):
+                raise ValueError(f"知识库名称 '{kb_name}' 已存在") from exc
+            raise
 
         old_helper = kb_helper
         self.kb_insts[kb_id] = new_helper

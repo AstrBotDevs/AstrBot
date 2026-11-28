@@ -143,9 +143,19 @@ class KBHelper:
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
         self.kb_files_dir = Path(self.kb_dir) / "files" / self.kb.kb_id
+        self._vec_db_lock: asyncio.Lock | None = None
+        self._vec_db_provider_pair: tuple[object, object] | None = None
 
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_vec_db_lock(self) -> asyncio.Lock:
+        """Lazily create a per-helper lock (tolerates ``__new__`` construction)."""
+        lock = getattr(self, "_vec_db_lock", None)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._vec_db_lock = lock
+        return lock
 
     async def initialize(self) -> None:
         await self._ensure_vec_db()
@@ -176,31 +186,58 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> "FaissVecDB":
-        if not self.kb.embedding_provider_id:
-            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+        """Initialize or reuse the vector store matching current providers."""
+        async with self._get_vec_db_lock():
+            if not self.kb.embedding_provider_id:
+                raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
-        ep = await self.get_ep()
-        rp: RerankProvider | None = None
-        try:
-            rp = await self.get_rp()
-        except Exception as e:
-            logger.warning(
-                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+            ep = await self.get_ep()
+            rp: RerankProvider | None = None
+            try:
+                rp = await self.get_rp()
+            except Exception as e:
+                logger.warning(
+                    f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+                )
+
+            existing = getattr(self, "vec_db", None)
+            if existing is not None and getattr(self, "init_error", None) is None:
+                provider_pair = getattr(self, "_vec_db_provider_pair", None)
+                if provider_pair == (ep, rp) or (
+                    getattr(existing, "embedding_provider", None) is ep
+                    and getattr(existing, "rerank_provider", None) is rp
+                ):
+                    self._vec_db_provider_pair = (ep, rp)
+                    return existing  # type: ignore[return-value]
+
+            from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+
+            vec_db = FaissVecDB(
+                doc_store_path=str(self.kb_dir / "doc.db"),
+                index_store_path=str(self.kb_dir / "index.faiss"),
+                embedding_provider=ep,
+                rerank_provider=rp,
             )
+            try:
+                await vec_db.initialize()
+            except Exception:
+                try:
+                    await vec_db.close()
+                except Exception:
+                    pass
+                raise
 
-        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
-
-        vec_db = FaissVecDB(
-            doc_store_path=str(self.kb_dir / "doc.db"),
-            index_store_path=str(self.kb_dir / "index.faiss"),
-            embedding_provider=ep,
-            rerank_provider=rp,
-        )
-        await vec_db.initialize()
-        self.vec_db = vec_db
-        # Clear stale init_error once initialization succeeds.
-        self.init_error = None
-        return vec_db
+            old_vec_db = getattr(self, "vec_db", None)
+            self.vec_db = vec_db
+            self._vec_db_provider_pair = (ep, rp)
+            # Clear stale init_error once initialization succeeds.
+            self.init_error = None
+            if old_vec_db is not None and old_vec_db is not vec_db:
+                try:
+                    await old_vec_db.close()
+                except Exception as exc:
+                    logger.warning(f"关闭旧向量库实例失败 ({self.kb.kb_id}): {exc}")
+            return vec_db
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
@@ -211,8 +248,11 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if hasattr(self, "vec_db") and self.vec_db:
-            await self.vec_db.close()
+        vec_db = getattr(self, "vec_db", None)
+        if vec_db:
+            await vec_db.close()
+            self.vec_db = None  # type: ignore[assignment]
+        self._vec_db_provider_pair = None
 
     async def upload_document(
         self,
@@ -446,7 +486,7 @@ class KBHelper:
                 # file_path=str(file_path),
                 file_path="",
                 chunk_count=len(chunks_text),
-                media_count=0,
+                media_count=len(saved_media),
             )
             try:
                 async with self.kb_db.get_db() as session:
