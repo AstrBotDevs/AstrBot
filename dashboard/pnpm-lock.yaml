@@ -12,9 +12,6 @@ importers:
 
   .:
     dependencies:
-      '@guolao/vue-monaco-editor':
-        specifier: ^1.5.4
-        version: 1.6.0(monaco-editor@0.52.2)(vue@3.3.4)
       '@hey-api/client-axios':
         specifier: 0.2.12
         version: 0.2.12(axios@1.13.5)
@@ -62,13 +59,10 @@ importers:
         version: 1.1.7
       markstream-vue:
         specifier: 2.0.26
-        version: 2.0.26(katex@0.16.28)(mermaid@11.12.2)(stream-diffs@0.0.2(@shikijs/themes@3.23.0)(vue@3.3.4))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4)
+        version: 2.0.26(katex@0.16.28)(mermaid@11.12.2)(stream-diffs@0.0.6(@shikijs/themes@3.23.0)(vue@3.3.4))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4)
       mermaid:
         specifier: ^11.12.2
         version: 11.12.2
-      monaco-editor:
-        specifier: ^0.52.2
-        version: 0.52.2
       pinia:
         specifier: 2.1.6
         version: 2.1.6(typescript@5.1.6)(vue@3.3.4)
@@ -82,8 +76,8 @@ importers:
         specifier: ^3.23.0
         version: 3.23.0
       stream-diffs:
-        specifier: 0.0.2
-        version: 0.0.2(@shikijs/themes@3.23.0)(vue@3.3.4)
+        specifier: 0.0.6
+        version: 0.0.6(@shikijs/themes@3.23.0)(vue@3.3.4)
       vee-validate:
         specifier: 4.11.3
         version: 4.11.3(vue@3.3.4)
@@ -419,16 +413,6 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@guolao/vue-monaco-editor@1.6.0':
-    resolution: {integrity: sha512-w2IiJ6eJGGeuIgCK6EKZOAfhHTTUB5aZwslzwGbZ5e89Hb4avx6++GkLTW8p84Sng/arFMjLPPxSBI56cFudyQ==}
-    peerDependencies:
-      '@vue/composition-api': ^1.7.2
-      monaco-editor: '>=0.43.0'
-      vue: ^2.6.14 || >=3.0.0
-    peerDependenciesMeta:
-      '@vue/composition-api':
-        optional: true
-
   '@hey-api/client-axios@0.2.12':
     resolution: {integrity: sha512-lBehVhbnhvm41cFguZuy1FO+4x8NO3Qy/ooL0Jw4bdqTu21n7DmZMPsXEF0gL7/gNdTt4QkJGwaojy+8ExtE8w==}
     deprecated: Starting with v0.73.0, this package is bundled directly inside @hey-api/openapi-ts.
@@ -512,9 +496,6 @@ packages:
   '@mermaid-js/parser@0.6.3':
     resolution: {integrity: sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA==}
 
-  '@monaco-editor/loader@1.7.0':
-    resolution: {integrity: sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA==}
-
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
     engines: {node: '>= 8'}
@@ -527,8 +508,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@pierre/diffs@1.6.4':
-    resolution: {integrity: sha512-RsKoruCOp50qaDM3a7BQan5K77xMkGWT1NF01fiYP1PfT3v4CvIjwytNk5WjZG0BesBkMOP2UbrBIDigB1k0ug==}
+  '@pierre/diffs@1.7.2':
+    resolution: {integrity: sha512-zMYTBWK4srIYKoKMTSwCVWxbgpJT8UXJ2v5ONTXBbzDSDYpOCpgqfoyQexDWo6FH9RDicZvkeZwIbiTrBBSJ2Q==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -538,11 +519,14 @@ packages:
       react-dom:
         optional: true
 
-  '@pierre/highlights@0.4.0':
-    resolution: {integrity: sha512-2a38H7ep3KweGi1fGQpJk+Krod2OMpDIXagKPlqBd1Y9P460T7zQmc66Wm2JAH1SpIG93wCyyhZVrkc5dnAJVQ==}
+  '@pierre/highlights@0.6.0':
+    resolution: {integrity: sha512-5RhenEkZxlcsw2hrDaYlGyT6ERfQgHSvZxRg/ByZ11SVkoWuAwDMozL7HxUfUnOVyShD5WKMxqiakg8S/8Fi7A==}
 
-  '@pierre/theme@2.0.0':
-    resolution: {integrity: sha512-yNDd9GYLQl1mEUJR8AneJ5e4ohLIHQd/wZLWr4fagt78vS2RwwZNW530vVgHqXFAyFVcFlRmGUD5ramXH46OXw==}
+  '@pierre/patches@0.0.1':
+    resolution: {integrity: sha512-NycJQVQNuqmBdr7u1LsUcmkiIz1fRm9xhWZyRbm21oJYd0MVVCa45t9Lsuj5IKrTMBonxOuh4LMv+R3BpL4bmQ==}
+
+  '@pierre/theme@2.1.0':
+    resolution: {integrity: sha512-GIE3AD8eqUlZN2sFrMmp9gt+rNZsT+EhrdwB0KmLcwkqunrp2jU2j14SeAb64Ol/srWo4rHyNaWf20+bPzFbvg==}
     engines: {vscode: ^1.0.0}
 
   '@pierre/theming@1.0.2':
@@ -1067,7 +1051,6 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
-    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@vitejs/plugin-vue@5.2.4':
     resolution: {integrity: sha512-7Yx/SXSOcQq5HiiV3orevHUFn+pmMB4cgbEkDYgnkUWb0WfeQ/wa2yFv6D5ICiCQOVpjA7vYDXrC7AGO8yjDHA==}
@@ -2288,9 +2271,6 @@ packages:
   mdast-util-to-hast@13.2.1:
     resolution: {integrity: sha512-cctsq2wp5vTsLIcaymblUriiTcZd0CwWtCbLvrOzYCDZoWyMNV8sZ7krj09FSnsiJi3WVsHLM4k6Dq/yaPyCXA==}
 
-  mdurl@2.0.0:
-    resolution: {integrity: sha512-Lf+9+2r+Tdp5wXDXC4PcIBjTDtq4UKjCPMQhKIuzpJNW0b96kVqSwW0bT7FhRSfmAiFYgP+SCRvdrDozfh0U5w==}
-
   mdurl@2.1.0:
     resolution: {integrity: sha512-1+HBaOx0zi/dQWht8rNv9MYf9qqpqL/kxI0hXImU6Y547zM6Sni8BQibt7ifgMcYtQg41ao3Ivd6cnSM86inpg==}
 
@@ -2360,9 +2340,6 @@ packages:
 
   mlly@1.8.0:
     resolution: {integrity: sha512-l8D9ODSRWLe2KHJSifWGwBqpTZXIXTeo8mlKjY+E2HAakaTeNpqAyBZ8GSqLzHgw4XmHmC8whvpjJNMbFZN7/g==}
-
-  monaco-editor@0.52.2:
-    resolution: {integrity: sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==}
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
@@ -2801,11 +2778,8 @@ packages:
   space-separated-tokens@2.0.2:
     resolution: {integrity: sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q==}
 
-  state-local@1.0.7:
-    resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
-
-  stream-diffs@0.0.2:
-    resolution: {integrity: sha512-mYH+kBCmrN2ebVPNkvQIFUSPemFxUPPPk+NT4H/wEzZ9NCt5Eaa8OE05f/1MA5HofZ64LYbTOliQTU6VghHeVA==}
+  stream-diffs@0.0.6:
+    resolution: {integrity: sha512-xPbefFgp7feiAt4QGjWr+DoHowkNEHWwgE6F02lNtHw5O7pNdJh4Fq3UU4bBeMkmD9OHoddrzhC+ApLKOZQXXw==}
     peerDependencies:
       vue: ^3.3.0
     peerDependenciesMeta:
@@ -3451,13 +3425,6 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@guolao/vue-monaco-editor@1.6.0(monaco-editor@0.52.2)(vue@3.3.4)':
-    dependencies:
-      '@monaco-editor/loader': 1.7.0
-      monaco-editor: 0.52.2
-      vue: 3.3.4
-      vue-demi: 0.14.10(vue@3.3.4)
-
   '@hey-api/client-axios@0.2.12(axios@1.13.5)':
     dependencies:
       axios: 1.13.5
@@ -3543,10 +3510,6 @@ snapshots:
     dependencies:
       langium: 3.3.1
 
-  '@monaco-editor/loader@1.7.0':
-    dependencies:
-      state-local: 1.0.7
-
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -3559,11 +3522,12 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@pierre/diffs@1.6.4(@shikijs/themes@3.23.0)':
+  '@pierre/diffs@1.7.2(@shikijs/themes@3.23.0)':
     dependencies:
-      '@pierre/highlights': 0.4.0
-      '@pierre/theme': 2.0.0
-      '@pierre/theming': 1.0.2(@pierre/theme@2.0.0)(@shikijs/themes@3.23.0)(shiki@3.23.0)
+      '@pierre/highlights': 0.6.0
+      '@pierre/patches': 0.0.1
+      '@pierre/theme': 2.1.0
+      '@pierre/theming': 1.0.2(@pierre/theme@2.1.0)(@shikijs/themes@3.23.0)(shiki@3.23.0)
       diff: 9.0.0
       hast-util-to-html: 9.0.5
       lru_map: 0.4.1
@@ -3571,13 +3535,15 @@ snapshots:
     transitivePeerDependencies:
       - '@shikijs/themes'
 
-  '@pierre/highlights@0.4.0': {}
+  '@pierre/highlights@0.6.0': {}
 
-  '@pierre/theme@2.0.0': {}
+  '@pierre/patches@0.0.1': {}
 
-  '@pierre/theming@1.0.2(@pierre/theme@2.0.0)(@shikijs/themes@3.23.0)(shiki@3.23.0)':
+  '@pierre/theme@2.1.0': {}
+
+  '@pierre/theming@1.0.2(@pierre/theme@2.1.0)(@shikijs/themes@3.23.0)(shiki@3.23.0)':
     optionalDependencies:
-      '@pierre/theme': 2.0.0
+      '@pierre/theme': 2.1.0
       '@shikijs/themes': 3.23.0
       shiki: 3.23.0
 
@@ -5404,7 +5370,7 @@ snapshots:
       argparse: 2.0.1
       entities: 4.5.0
       linkify-it: 5.0.1
-      mdurl: 2.0.0
+      mdurl: 2.1.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
 
@@ -5412,7 +5378,7 @@ snapshots:
 
   markstream-core@2.0.26: {}
 
-  markstream-vue@2.0.26(katex@0.16.28)(mermaid@11.12.2)(stream-diffs@0.0.2(@shikijs/themes@3.23.0)(vue@3.3.4))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4):
+  markstream-vue@2.0.26(katex@0.16.28)(mermaid@11.12.2)(stream-diffs@0.0.6(@shikijs/themes@3.23.0)(vue@3.3.4))(vue-i18n@11.2.8(vue@3.3.4))(vue@3.3.4):
     dependencies:
       '@chenglou/pretext': 1.0.0
       '@floating-ui/dom': 1.8.0
@@ -5422,7 +5388,7 @@ snapshots:
     optionalDependencies:
       katex: 0.16.28
       mermaid: 11.12.2
-      stream-diffs: 0.0.2(@shikijs/themes@3.23.0)(vue@3.3.4)
+      stream-diffs: 0.0.6(@shikijs/themes@3.23.0)(vue@3.3.4)
       vue-i18n: 11.2.8(vue@3.3.4)
 
   math-intrinsics@1.1.0: {}
@@ -5438,8 +5404,6 @@ snapshots:
       unist-util-position: 5.0.0
       unist-util-visit: 5.1.0
       vfile: 6.0.3
-
-  mdurl@2.0.0: {}
 
   mdurl@2.1.0: {}
 
@@ -5527,8 +5491,6 @@ snapshots:
       pathe: 2.0.3
       pkg-types: 1.3.1
       ufo: 1.6.3
-
-  monaco-editor@0.52.2: {}
 
   ms@2.1.3: {}
 
@@ -5982,11 +5944,9 @@ snapshots:
 
   space-separated-tokens@2.0.2: {}
 
-  state-local@1.0.7: {}
-
-  stream-diffs@0.0.2(@shikijs/themes@3.23.0)(vue@3.3.4):
+  stream-diffs@0.0.6(@shikijs/themes@3.23.0)(vue@3.3.4):
     dependencies:
-      '@pierre/diffs': 1.6.4(@shikijs/themes@3.23.0)
+      '@pierre/diffs': 1.7.2(@shikijs/themes@3.23.0)
     optionalDependencies:
       vue: 3.3.4
     transitivePeerDependencies:

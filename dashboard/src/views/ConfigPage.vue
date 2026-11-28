@@ -128,9 +128,7 @@
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor language="json" theme="vs-dark" style="height: calc(100vh - 64px);"
-          v-model:value="config_data_str">
-        </VueMonacoEditor>
+        <StreamDiffsEditor language="json" theme-type="dark" style="height: calc(100vh - 64px);" v-model="config_data_str" />
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -251,7 +249,7 @@ import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapp
 import SessionMappingsDialog from '@/components/config/SessionMappingsDialog.vue';
 import ConfigProfileMenu from '@/components/config/ConfigProfileMenu.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -267,7 +265,7 @@ export default {
     SessionMappingsDialog,
     AstrBotCoreConfigWrapper,
     ConfigProfileMenu,
-    VueMonacoEditor,
+    StreamDiffsEditor,
     StandaloneChat,
     UnsavedChangesConfirmDialog,
     DashboardTwoFactorDialog

@@ -1,4 +1,4 @@
-﻿{
+{
     "save": "Сохранить",
     "cancel": "Отмена",
     "close": "Закрыть",
@@ -87,7 +87,8 @@
     },
     "editor": {
         "fullscreen": "На весь экран",
-        "editingTitle": "Редактирование содержимого"
+        "editingTitle": "Редактирование содержимого",
+        "jsonError": "Ошибка формата JSON: {error}"
     },
     "templateList": {
         "addEntry": "Добавить запись",

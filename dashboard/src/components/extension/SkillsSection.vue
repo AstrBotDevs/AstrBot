@@ -890,12 +890,13 @@
                 {{ editorDialog.error }}
               </v-alert>
 
-              <div class="skill-editor__monaco">
-                <VueMonacoEditor
-                  v-model:value="editorDialog.content"
-                  :theme="editorTheme"
+              <div class="skill-editor__surface">
+                <StreamDiffsEditor
+                  v-model="editorDialog.content"
+                  :theme-type="editorTheme === 'vs-dark' ? 'dark' : 'light'"
                   :language="editorLanguage"
-                  :options="editorOptions"
+                  :readonly="!editorDialog.fileEditable || editorDialog.loadingFile"
+                  :font-size="13"
                   style="height: 100%; width: 100%"
                   @change="editorDialog.fileDirty = true"
                 />
@@ -959,7 +960,7 @@
 
 <script>
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { skillApi, systemConfigApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
@@ -976,7 +977,7 @@ export default {
   name: "SkillsSection",
   components: {
     OutlinedActionListItem,
-    VueMonacoEditor,
+    StreamDiffsEditor,
   },
   setup() {
     const { t } = useI18n();
@@ -1074,16 +1075,6 @@ export default {
     const editorTheme = computed(() =>
       customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light",
     );
-    const editorOptions = computed(() => ({
-      automaticLayout: true,
-      fontSize: 13,
-      lineNumbers: "on",
-      minimap: { enabled: false },
-      readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
-      scrollBeyondLastLine: false,
-      tabSize: 2,
-      wordWrap: "on",
-    }));
     const uploadStateCounts = computed(() =>
       uploadItems.value.reduce(
         (counts, item) => {
@@ -2166,7 +2157,6 @@ export default {
       editorDialog,
       editorLanguage,
       editorTheme,
-      editorOptions,
       formatFileSize,
       uploadStatusLabel,
       statusChipClass,
@@ -2357,8 +2347,12 @@ export default {
 }
 
 .skill-editor-dialog {
-  max-height: min(88vh, 980px);
+  height: min(88vh, 980px);
   overflow: hidden;
+}
+
+.v-dialog--fullscreen .skill-editor-dialog {
+  height: 100%;
 }
 
 .skill-editor-dialog__header {
@@ -2369,7 +2363,10 @@ export default {
 }
 
 .skill-editor-dialog__body {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding: 16px 22px;
 }
 
@@ -2380,9 +2377,11 @@ export default {
 
 .skill-editor {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
-  min-height: 560px;
+  min-height: 0;
 }
 
 .skill-editor__files {
@@ -2447,6 +2446,7 @@ export default {
 .skill-editor__content {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -2464,12 +2464,12 @@ export default {
   white-space: nowrap;
 }
 
-.skill-editor__monaco {
+.skill-editor__surface {
   border: 1px solid rgba(128, 128, 128, 0.28);
   border-radius: 10px;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   margin-top: 12px;
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }
@@ -2789,11 +2789,6 @@ export default {
 }
 
 @media (max-width: 860px) {
-  .skill-editor-dialog {
-    max-height: none;
-    overflow-y: auto;
-  }
-
   .skills-list {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2801,15 +2796,10 @@ export default {
   .skill-editor {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-    min-height: 0;
   }
 
   .skill-editor__files {
     max-height: 20vh;
-  }
-
-  .skill-editor__monaco {
-    min-height: 40vh;
   }
 
   .skill-list-item :deep(.outlined-action-list-item__actions) {

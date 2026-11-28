@@ -87,7 +87,8 @@
   },
   "editor": {
     "fullscreen": "Fullscreen Edit",
-    "editingTitle": "Editing Content"
+    "editingTitle": "Editing Content",
+    "jsonError": "Invalid JSON: {error}"
   },
   "templateList": {
     "addEntry": "Add Entry",

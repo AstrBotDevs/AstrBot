@@ -87,7 +87,8 @@
   },
   "editor": {
     "fullscreen": "全画面で編集",
-    "editingTitle": "内容を編集中"
+    "editingTitle": "内容を編集中",
+    "jsonError": "JSON 形式エラー：{error}"
   },
   "templateList": {
     "addEntry": "項目を追加",

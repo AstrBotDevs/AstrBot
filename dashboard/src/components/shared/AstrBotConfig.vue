@@ -1,5 +1,5 @@
 <script setup>
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { ref, computed, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import ConfigDefaultReset from './ConfigDefaultReset.vue'
@@ -463,13 +463,13 @@ function toggleSection() {
         </v-toolbar-items>
       </v-toolbar>
       <v-card-text class="pa-0">
-        <VueMonacoEditor
-          :theme="currentEditingTheme"
+        <StreamDiffsEditor
+          :theme-type="currentEditingTheme === 'vs-dark' ? 'dark' : 'light'"
           :language="currentEditingLanguage"
           style="height: calc(100vh - 64px);"
-          v-model:value="currentEditingKeyIterable[currentEditingKey]"
+          v-model="currentEditingKeyIterable[currentEditingKey]"
         >
-        </VueMonacoEditor>
+        </StreamDiffsEditor>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -659,25 +659,6 @@ function toggleSection() {
 .config-divider {
   border-color: rgba(0, 0, 0, 0.05);
   margin: 0px 16px;
-}
-
-.editor-container {
-  position: relative;
-  display: flex;
-  width: 100%;
-}
-
-.editor-fullscreen-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 10;
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-}
-
-.editor-fullscreen-btn:hover {
-  background-color: rgba(0, 0, 0, 0.5);
 }
 
 @media (max-width: 600px) {

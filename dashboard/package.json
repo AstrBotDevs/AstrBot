@@ -17,7 +17,6 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
-    "@guolao/vue-monaco-editor": "^1.5.4",
     "@hey-api/client-axios": "0.2.12",
     "@lucide/vue": "^1.23.0",
     "@tiptap/starter-kit": "2.1.7",
@@ -35,12 +34,11 @@
     "markdown-it-ts": "^1.1.7",
     "markstream-vue": "2.0.26",
     "mermaid": "^11.12.2",
-    "monaco-editor": "^0.52.2",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
     "qrcode": "^1.5.4",
     "shiki": "^3.23.0",
-    "stream-diffs": "0.0.2",
+    "stream-diffs": "0.0.6",
     "vee-validate": "4.11.3",
     "vite-plugin-vuetify": "2.1.3",
     "vue": "3.3.4",

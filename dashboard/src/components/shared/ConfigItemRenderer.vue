@@ -140,14 +140,14 @@
     ></v-select>
 
     <div v-else-if="itemMeta?.editor_mode" class="editor-container">
-      <VueMonacoEditor
-        :theme="itemMeta?.editor_theme || 'vs-light'"
+      <StreamDiffsEditor
+        class="editor-surface"
+        :theme-type="itemMeta?.editor_theme === 'vs-dark' ? 'dark' : 'light'"
         :language="itemMeta?.editor_language || 'json'"
-        style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);"
-        :value="modelValue"
-        @update:value="emitUpdate"
-      >
-      </VueMonacoEditor>
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+      />
+      <div v-if="editorJsonError" class="editor-json-error">{{ editorJsonError }}</div>
       <v-btn v-if="showFullscreenBtn" icon size="small" variant="text" color="primary" class="editor-fullscreen-btn"
         @click="$emit('open-fullscreen')"
         :title="t('core.common.editor.fullscreen')">
@@ -275,7 +275,7 @@
 </template>
 
 <script setup>
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import ListConfigItem from './ListConfigItem.vue'
 import SenderSelector from './SenderSelector.vue'
 import UmoSelector from './UmoSelector.vue'
@@ -336,6 +336,23 @@ const emit = defineEmits(['update:modelValue', 'get-embedding-dim', 'open-fullsc
 const { t } = useI18n()
 const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
+
+// The replacement surface has no JSON language service, so keep the invalid
+// JSON signal as a text hint under the inline editor.
+const editorJsonError = computed(() => {
+  if (!props.itemMeta?.editor_mode) return ''
+  if ((props.itemMeta?.editor_language || 'json') !== 'json') return ''
+  const value = typeof props.modelValue === 'string' ? props.modelValue.trim() : ''
+  if (!value) return ''
+  try {
+    JSON.parse(value)
+    return ''
+  } catch (error) {
+    return t('core.common.editor.jsonError', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+})
 
 async function emitUpdate(val) {
   val = validateNumericConfig(props.itemMeta?.type, val)
@@ -470,7 +487,18 @@ function getSelectItems(itemMeta) {
 .editor-container {
   position: relative;
   display: flex;
+  flex-direction: column;
   width: 100%;
+}
+
+.editor-surface {
+  height: 100px;
+}
+
+.editor-json-error {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-error));
 }
 
 .editor-fullscreen-btn {

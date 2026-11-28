@@ -263,16 +263,10 @@
                 </div>
 
                 <v-card-text>
-                    <!-- 编辑模式 - Monaco编辑器 -->
-                    <div v-if="isEditingHistory" class="monaco-editor-container">
-                        <VueMonacoEditor v-model:value="editedHistory" theme="vs-dark" language="json" :options="{
-                            automaticLayout: true,
-                            fontSize: 13,
-                            tabSize: 2,
-                            minimap: { enabled: false },
-                            scrollBeyondLastLine: false,
-                            wordWrap: 'on'
-                        }" @editorDidMount="onMonacoMounted" />
+                    <!-- 编辑模式 - 代码编辑器 -->
+                    <div v-if="isEditingHistory" class="history-editor-container">
+                        <StreamDiffsEditor ref="historyEditor" v-model="editedHistory" theme-type="dark"
+                            language="json" :font-size="13" @change="scheduleHistoryFormat" />
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
@@ -407,7 +401,7 @@
 import { isCancel } from 'axios';
 import { debounce } from 'lodash';
 import { markRaw } from 'vue';
-import { LazyMonacoEditor as VueMonacoEditor } from '@/components/shared/LazyMonacoEditor';
+import StreamDiffsEditor from '@/components/shared/StreamDiffsEditor.vue';
 import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
@@ -423,7 +417,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 export default {
     name: 'ConversationPage',
     components: {
-        VueMonacoEditor,
+        StreamDiffsEditor,
         MessageList,
         UmoDisplay
     },
@@ -499,7 +493,7 @@ export default {
             isEditingHistory: false,
             editedHistory: '',
             savingHistory: false,
-            monacoEditor: null,
+            historyFormatTimer: null,
             umoDisplayMode: 'parsed',
 
             commonStore: useCommonStore()
@@ -534,6 +528,7 @@ export default {
         this.debouncedApplyFilters?.cancel();
         this.listRequestId += 1;
         this.listAbortController?.abort();
+        if (this.historyFormatTimer) clearTimeout(this.historyFormatTimer);
     },
 
     computed: {
@@ -648,19 +643,21 @@ export default {
     },
 
     methods: {
-        // Monaco编辑器挂载后的回调
-        onMonacoMounted(editor) {
-            this.monacoEditor = editor;
-            // 添加JSON格式校验
-            editor.onDidChangeModelContent(() => {
+        // Replaces the previous editor's formatDocument action: pretty-print
+        // the history JSON once editing settles. Deferred out of the change
+        // callback because the surface rejects document mutations from inside it.
+        scheduleHistoryFormat() {
+            if (this.historyFormatTimer) clearTimeout(this.historyFormatTimer);
+            this.historyFormatTimer = setTimeout(() => {
+                this.historyFormatTimer = null;
+                let formatted;
                 try {
-                    JSON.parse(this.editedHistory);
-                    // 有效的JSON格式
-                    editor.getAction('editor.action.formatDocument').run();
+                    formatted = JSON.stringify(JSON.parse(this.editedHistory), null, 2);
                 } catch (e) {
-                    // 无效的JSON格式，不做处理，Monaco编辑器会自动提示
+                    return;
                 }
-            });
+                this.$refs.historyEditor?.replaceAll(formatted);
+            }, 400);
         },
 
         // 处理表格选项变更（页面大小等）
@@ -1290,7 +1287,7 @@ export default {
     flex-direction: column;
 }
 
-.monaco-editor-container {
+.history-editor-container {
     flex: 1;
     min-height: 0;
     border-radius: 8px;
@@ -1329,7 +1326,7 @@ export default {
     flex-direction: column;
 }
 
-/* 编辑模式：卡片固定高度，让 flex 链完整，Monaco 填满剩余空间 */
+/* 编辑模式：卡片固定高度，让 flex 链完整，编辑器填满剩余空间 */
 .v-dialog > .v-overlay__content > .conversation-detail-card--edit {
     flex: 0 0 90vh;
 }
