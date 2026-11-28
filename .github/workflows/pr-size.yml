@@ -1,0 +1,74 @@
+name: PR size label
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    if: github.event.action != 'edited' || github.event.changes.base
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Label by changed lines
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
+          head_sha=$(echo "$pr" | jq -r '.head.sha')
+          changed_files=$(echo "$pr" | jq -r '.changed_files')
+
+          stats=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/files" \
+            --jq '[(length), ([.[] | select(.filename | test("^(uv\\.lock|dashboard/pnpm-lock\\.yaml)$|^dashboard/src/api/generated/") | not) | .additions + .deletions] | add // 0)] | @tsv')
+          files_count=$(echo "$stats" | awk '{ s += $1 } END { print s + 0 }')
+          total=$(echo "$stats" | awk '{ s += $2 } END { print s + 0 }')
+
+          if [ "$files_count" -lt "$changed_files" ]; then
+            total=$(echo "$pr" | jq -r '.additions + .deletions')
+          fi
+
+          if   [ "$total" -lt 10 ];   then label=size:XS
+          elif [ "$total" -lt 30 ];   then label=size:S
+          elif [ "$total" -lt 100 ];  then label=size:M
+          elif [ "$total" -lt 500 ];  then label=size:L
+          elif [ "$total" -lt 1000 ]; then label=size:XL
+          else                             label=size:XXL
+          fi
+
+          echo "changed lines: $total -> $label"
+
+          if [ "$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '.head.sha')" != "$head_sha" ]; then
+            echo "PR head moved, skipping"
+            exit 0
+          fi
+
+          for _ in 1 2 3; do
+            labels=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+            stale=$(echo "$labels" | grep '^size:' | grep -Fxv "$label" || true)
+            if [ -z "$stale" ]; then
+              break
+            fi
+            for old in $stale; do
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR_NUMBER/labels/$old" || true
+            done
+          done
+
+          labels=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/labels" --jq '.[].name')
+          stale=$(echo "$labels" | grep '^size:' | grep -Fxv "$label" || true)
+          if [ -n "$stale" ]; then
+            echo "failed to remove stale size labels: $stale"
+            exit 1
+          fi
+
+          echo "$labels" | grep -Fxq "$label" || gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/labels" -f "labels[]=$label" > /dev/null
