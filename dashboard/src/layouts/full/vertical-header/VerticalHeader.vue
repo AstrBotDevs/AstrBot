@@ -425,6 +425,29 @@ function handleUpdateClick() {
   updateStatusDialog.value = true;
 }
 
+// ChatUI has no options menu here; its settings dialog asks for these dialogs.
+watch(
+  () =>
+    appHasNewVersion.value
+      ? "core.header.version.hasNewVersion"
+      : hasAvailableUpdate.value
+        ? "core.header.version.dashboardHasNewVersion"
+        : "",
+  (notice) => {
+    chatHeader.updateNotice = notice;
+  },
+  { immediate: true },
+);
+watch(
+  () => chatHeader.headerDialog,
+  (requested) => {
+    if (!requested) return;
+    chatHeader.headerDialog = "";
+    if (requested === "update") handleUpdateClick();
+    else dialog.value = true;
+  },
+);
+
 // 检测是否为预发布版本
 const isPreRelease = (version: string) => {
   const preReleaseKeywords = ["alpha", "beta", "rc", "pre", "preview", "dev"];
@@ -1173,7 +1196,14 @@ onMounted(async () => {
       </v-btn>
 
       <!-- 功能菜单 -->
-      <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
+      <!-- Desktop ChatUI offers these items in its settings dialog instead;
+           phones keep the menu because it also holds the mode switch. -->
+      <StyledMenu
+        v-if="!isChatPath || $vuetify.display.smAndDown"
+        v-model="mainMenuOpen"
+        offset="12"
+        location="bottom end"
+      >
         <template v-slot:activator="{ props: activatorProps }">
           <v-btn
             v-bind="activatorProps"
@@ -2203,7 +2233,9 @@ onMounted(async () => {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.workspace-files-trigger--active {
+/* Outranks `.top-header .header-actions .v-btn`, which clears every header
+   button's background, so an open panel's button stays highlighted. */
+.top-header .header-actions .v-btn.workspace-files-trigger--active {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
@@ -2576,6 +2608,19 @@ html {
   box-shadow: none !important;
 }
 
+/* Desktop ChatUI: a 1px line along the top bar's bottom, drawn inside so the
+   toolbar keeps its height; a docked right panel's left line meets it. On
+   phones the panels open full screen, so there is no line. Not in the macOS
+   desktop shell, where the top bar is the full-width window bar above the
+   sidebar and the line would run across the whole window. */
+@media (min-width: 960px) {
+  html:not([data-astrbot-desktop-platform='macos']) .top-header.chat-mode-header,
+  html:not([data-astrbot-desktop-platform='macos'])
+    .top-header.chat-mode-header.chat-mode-header--dark {
+    box-shadow: inset 0 -1px 0 rgba(var(--v-theme-on-surface), 0.1) !important;
+  }
+}
+
 html[data-astrbot-desktop-platform='macos'] .top-header,
 html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
 html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
@@ -2739,25 +2784,12 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 #chat-workbench-header:has(.workbench-launcher) {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  /* No left padding: the header actions' own gap spaces the button like the
+     project files button before it. */
+  padding: 0 8px 0 0;
   height: var(--astrbot-toolbar-height);
-}
-#chat-workbench-header:has(.workbench-header) {
-  width: calc(var(--astrbot-workbench-width) - var(--workbench-caption-width, 0px));
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-}
-.top-header:has(#chat-workbench-header .workbench-header) {
-  --astrbot-active-workbench-width: var(--astrbot-workbench-width);
 }
 .top-header:has(#chat-workbench-header:not(:empty)) .header-actions {
   margin-right: -18px;
-}
-.top-header:has(.header-caption-btns) {
-  --workbench-caption-width: 132px;
-}
-@media (min-width: 960px) and (max-width: 1400px) {
-  .top-header:has(#chat-workbench-header .workbench-header) .chat-toolbar-context-title {
-    display: none;
-  }
 }
 </style>

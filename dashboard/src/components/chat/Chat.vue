@@ -233,10 +233,18 @@
           :aria-label="t('core.common.settings')"
           @click="settingsOpen = true"
         >
-          <Settings
-            :size="20"
-            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-          />
+          <!-- The update dot the header's options menu used to carry. -->
+          <v-badge
+            :model-value="Boolean(chatHeader.updateNotice) && !chatboxMode"
+            color="primary"
+            dot
+            floating
+          >
+            <Settings
+              :size="20"
+              :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
+            />
+          </v-badge>
           <span v-if="!isSidebarCollapsed">{{
             t("core.common.settings")
           }}</span>
@@ -253,6 +261,7 @@
       v-model:stt-provider="selectedSttProvider"
       :stt-providers="sttProviders"
       @configure-stt="openProviderWorkspace('speech_to_text')"
+      :account-actions="!chatboxMode"
     />
 
     <main
@@ -348,16 +357,29 @@
         :class="{ 'is-empty': isEmptyChat }"
       >
         <Teleport to="#chat-workbench-header">
-          <button
-            v-if="!workbenchVisible"
-            type="button"
-            class="workbench-launcher"
+          <!-- Stays in the top bar while the workbench is open: highlighted
+               while open, click again to close. Same button, icon set and
+               highlight as the project files button. -->
+          <v-btn
+            class="chat-action-btn workspace-files-trigger workbench-launcher"
+            :class="{ 'workspace-files-trigger--active': workbenchVisible }"
+            variant="text"
+            size="small"
+            rounded="sm"
+            icon
             :title="tm('workbench.title')"
             :aria-label="tm('workbench.title')"
-            @click="workbench?.tabs.length ? (workbench.open = true) : openWorkbenchPage()"
+            :aria-pressed="workbenchVisible"
+            @click="
+              workbenchVisible && workbench
+                ? (workbench.open = false)
+                : workbench?.tabs.length
+                  ? (workbench.open = true)
+                  : openWorkbenchPage()
+            "
           >
-            <PanelRightOpen :size="18" />
-          </button>
+            <v-icon size="20">mdi-web</v-icon>
+          </v-btn>
         </Teleport>
         <v-progress-linear
           v-if="activeSessionPagination?.loading"
@@ -596,7 +618,6 @@
       v-if="workbench?.tabs.length"
       :open="workbenchVisible"
       :session-id="currSessionId"
-      header-target="#chat-workbench-header"
       :tabs="workbench.tabs"
       :active-id="workbench.activeId"
       :is-dark="isDark"
@@ -646,7 +667,6 @@ import {
   ChevronRight,
   Box,
   PanelLeft,
-  PanelRightOpen,
   Pencil,
   Settings,
   SquarePen,
@@ -2252,6 +2272,8 @@ async function stopCurrentSession() {
   --chat-section-label: rgba(var(--v-theme-on-surface), 0.48);
   --chat-content-width: 76%;
   --chat-content-max-width: 760px;
+  /* Containing block for right panels positioned inside the chat area. */
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -2849,19 +2871,11 @@ async function stopCurrentSession() {
   justify-content: center;
   gap: 28px;
 }
+/* The header's button rules (`.top-header .header-actions .v-btn` and
+   `.workspace-files-trigger--active`) style this teleported button like the
+   project files button; only keep it clickable inside the drag region. */
 .workbench-launcher {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--astrbot-radius-control);
-  color: rgb(var(--v-theme-on-surface));
-  cursor: pointer;
   -webkit-app-region: no-drag;
-}
-.workbench-launcher:hover {
-  background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .messages-panel {
@@ -3071,6 +3085,23 @@ kbd {
 :deep(.list-node) {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
+}
+
+/* A small solid right triangle tucked into the corner where the top line
+   meets an open right panel's left line: its right angle sits in the corner,
+   its legs run along both lines. It belongs to the chat column, so it follows
+   the panel's edge while the panel slides in or is resized, and it goes away
+   as soon as the panel starts closing. */
+@media (min-width: 960px) {
+  .chat-main.has-side-panel::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    border-top: 7px solid rgba(var(--v-theme-on-surface), 0.28);
+    border-left: 7px solid transparent;
+    pointer-events: none;
+  }
 }
 
 @media (min-width: 761px) {

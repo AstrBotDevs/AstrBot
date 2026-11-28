@@ -26,10 +26,6 @@
         @keydown.left.prevent="resizeByKeyboard(24)"
         @keydown.right.prevent="resizeByKeyboard(-24)"
       />
-      <Teleport
-        :to="headerTarget || 'body'"
-        :disabled="!headerTarget || expanded || smAndDown"
-      >
         <header v-if="open" class="workbench-header">
           <div
             class="workbench-tabs hidden-scrollbar"
@@ -112,11 +108,10 @@
               :title="tm('workbench.hide')"
               @click="emit('close')"
             >
-              <PanelRightClose :size="18" />
+              <X :size="18" />
             </button>
           </div>
         </header>
-      </Teleport>
       <div
         v-for="tab in tabs"
         v-show="String(tab.part.id) === activeId"
@@ -158,7 +153,6 @@ import {
   File,
   Maximize2,
   Minimize2,
-  PanelRightClose,
   Plus,
   X,
 } from "@lucide/vue";
@@ -184,7 +178,6 @@ const props = withDefaults(
     tabs: WorkbenchTab[];
     activeId: string;
     isDark: boolean;
-    headerTarget?: string;
     sessionId?: string;
     open?: boolean;
   }>(),
@@ -289,12 +282,17 @@ async function navigateTabs(event: KeyboardEvent, id: string) {
   background: var(--chat-page-bg, rgb(var(--v-theme-background)));
   color: rgb(var(--v-theme-on-surface));
 }
-.chat-workbench.expanded {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100dvh;
-  z-index: 2400;
+/* Expanded covers the chat area only, so the sidebar, the top bar and the
+   window buttons stay usable. The top and right edges stay where the panel
+   was, which keeps the expand and restore button in place. */
+@media (min-width: 960px) {
+  .chat-workbench.expanded {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    z-index: 10;
+  }
 }
 .workbench-header {
   display: flex;

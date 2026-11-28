@@ -8,6 +8,8 @@
     "light": "浅色",
     "dark": "深色",
     "system": "跟随系统",
+    "checkUpdate": "检查更新",
+    "account": "账户",
     "streaming": "流式输出",
     "streamingHint": "回复生成时逐步显示内容，仅影响 ChatUI。",
     "reasoning": "显示思考内容",

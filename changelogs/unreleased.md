@@ -1,5 +1,12 @@
 # Unreleased
 
+### ChatUI top bar and right panels / ChatUI 顶栏与右侧面板
+
+- ChatUI 左下角「设置 → 通用」新增「检查更新」和账户（修改账户、退出登录）两行，有更新时「设置」按钮显示圆点；桌面端去掉右上角「选项」菜单，手机端保留。旧入口 → 新入口：桌面端右上角 `⋮ 选项` → 左下角 `设置 → 通用`。
+- ChatUI **Settings → General** (bottom left) gains **Check for updates** and account rows (**Change account**, **Log out**), and **Settings** shows a dot when an update is available. Desktop drops the upper-right **Options** menu; phones keep it. Old → new: desktop upper-right `⋮ Options` → bottom-left `Settings → General`.
+- 工作台的标签栏、「＋」、展开和关闭按钮留在工作台面板里，不再移进顶栏，顶栏图标和对话标题不再随之变化；展开只占满聊天区域。工作台按钮改为地球图标，打开时高亮、再点一次关闭，收起按钮改为 ×。桌面端（≥960px，macOS 桌面应用除外）顶栏加一条底线，与面板左边线直角相接，拐角处有一个小三角。旧入口 → 新入口：顶栏中的工作台标签栏 → 工作台面板顶部；收起按钮 → 面板右上角的 ×。
+- The workbench tabs, **+**, expand and close buttons stay in the workbench panel instead of moving into the top bar, so the top bar icons and the conversation title no longer change; expanding fills only the chat area. The workbench button uses a globe icon, stays highlighted while open and closes it when selected again; the hide button becomes ×. On desktop (960 px and up, except the macOS desktop app) the top bar has a bottom line that meets the panel's left line at a square corner, marked by a small triangle. Old → new: workbench tabs in the top bar → top of the workbench panel; hide button → × at the panel's upper right.
+
 ### Chat usage statistics / 聊天用量统计
 
 - Chat Provider 按上游请求尝试记录用量。`insert_provider_stat()` 和旧轮次统计表 `provider_stats` 进入弃用期。历史轮次继续计入 Token 总量，备份仍可导入和导出。

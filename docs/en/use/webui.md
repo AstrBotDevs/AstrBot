@@ -23,6 +23,7 @@ These paths use the current default sidebar with a fixed menu order. Extension i
 | System Settings → Appearance → Customize Sidebar | Removed; the sidebar uses the default menu layout |
 | Custom Rules / Session Management | Config → Manage session mappings; old links redirect automatically |
 | Future Tasks / SubAgents | Future Tasks remains under Extensions; subagents are under Config → AI → Capabilities → Subagents |
+| ChatUI upper-right `⋮ Options` (Update AstrBot, Change account, Log out) | ChatUI bottom-left `Settings → General` (desktop; phones and other pages keep the upper-right menu) |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Execution Mode](./agent-runner.md) for the setup steps.
 
@@ -264,7 +265,7 @@ You can enable/disable and rename each command.
 
 When AstrBot starts, it automatically checks if the admin panel needs updating. If it does, the first log entry (in yellow) will prompt you.
 
-In the browser WebUI, open `⋮ → Update AstrBot` in the upper-right corner, expand `Advanced settings`, and click `Download and Update` under `Update Dashboard to Latest Version Only`. The page refreshes automatically after a successful update. In the desktop app, the update entry opens the desktop application updater.
+In the browser WebUI, open `⋮ → Update AstrBot` in the upper-right corner (in desktop ChatUI, `Settings → General → Check for updates` at the bottom left), expand `Advanced settings`, and click `Download and Update` under `Update Dashboard to Latest Version Only`. The page refreshes automatically after a successful update. In the desktop app, the update entry opens the desktop application updater.
 
 You can also use the `/dashboard_update` command to manually update the admin panel (admin command).
 
@@ -283,9 +284,9 @@ Modify the `password` in the `dashboard` configuration in the data/cmd_config.js
 
 ## ChatUI workbench
 
-The workbench button at the right of the ChatUI header opens a reading and visualization area. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
+The workbench button (globe icon) at the right of the ChatUI header opens a reading and visualization area; select it again to close. Click **+** in its tab bar to open **New workbench**, then choose a registered plugin view. A context-usage view can follow the active session; tools and plugin messages can also open file previews directly.
 
-Tabs sit in the main header. Drag the left divider to resize, expand for full-screen reading, or hide and reopen using the same header control. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
+On desktop the workbench opens on the right below the top bar, with its tabs, **+**, expand and close (×) buttons inside the panel; the top bar keeps the same icons whether it is open or not, and the workbench button stays highlighted while it is open. Drag the left divider to resize. Expand to fill the chat area; the left sidebar and the top bar stay usable. Old → new: workbench tabs in the top bar → the top of the workbench panel; the hide button → the × at the panel's upper right, or the workbench button again. All tabs, including resident plugin views and New workbench, belong to their chat session. Switching sessions restores its tabs, selected view, and open/hidden state. This is a new entry point and does not replace standalone plugin pages in the extensions sidebar.
 
 See [Workbench page](../dev/star/guides/plugin-views/workbench.md) for plugin development.
 
