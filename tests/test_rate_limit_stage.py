@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime as real_datetime
 from datetime import timedelta
 
 import pytest
@@ -66,22 +65,12 @@ async def test_different_platforms_do_not_share_rate_limit_state():
 @pytest.mark.asyncio
 async def test_stalled_concurrent_events_use_current_time_after_lock(monkeypatch):
     """Ensure queued events do not reuse timestamps captured before lock waits."""
-    virtual_seconds = 0.0
+    virtual_seconds = 100.0
     sleep_durations: list[float] = []
     real_sleep = asyncio.sleep
-    base_time = real_datetime(2026, 1, 1)
 
-    class FakeDateTime(real_datetime):
-        """Subclass of datetime with a deterministic now()."""
-
-        @classmethod
-        def now(cls) -> real_datetime:
-            """Return the current virtual wall-clock time.
-
-            Returns:
-                Current virtual time.
-            """
-            return base_time + timedelta(seconds=virtual_seconds)
+    def fake_monotonic() -> float:
+        return virtual_seconds
 
     async def fake_sleep(duration: float) -> None:
         """Advance virtual time after allowing concurrent tasks to queue.
@@ -95,7 +84,7 @@ async def test_stalled_concurrent_events_use_current_time_after_lock(monkeypatch
         await real_sleep(0)
         virtual_seconds = target_time
 
-    monkeypatch.setattr(rate_limit_stage, "datetime", FakeDateTime)
+    monkeypatch.setattr(rate_limit_stage.time, "monotonic", fake_monotonic)
     monkeypatch.setattr(rate_limit_stage.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(rate_limit_stage.logger, "info", lambda *args, **kwargs: None)
 
@@ -111,3 +100,67 @@ async def test_stalled_concurrent_events_use_current_time_after_lock(monkeypatch
     assert sleep_durations == pytest.approx([expected_stall, expected_stall])
     timestamps = list(limiter.event_timestamps[FakeEvent.unified_msg_origin])
     assert timestamps == sorted(timestamps)
+
+
+@pytest.mark.asyncio
+async def test_expired_idle_sessions_are_evicted_from_timestamps_and_locks(monkeypatch):
+    """Idle session entries and locks are swept once their timestamps expire."""
+    virtual_seconds = 10.0
+    monkeypatch.setattr(rate_limit_stage.time, "monotonic", lambda: virtual_seconds)
+
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.rate_limit_count = 2
+    limiter.rate_limit_time = timedelta(seconds=10)
+    limiter.rl_strategy = "discard"
+
+    idle_event = FakeEvent(unified_msg_origin="platform-a:FriendMessage:idle")
+    await limiter.process(idle_event)
+    assert idle_event.unified_msg_origin in limiter.event_timestamps
+    assert idle_event.unified_msg_origin in limiter.locks
+
+    # Advance past both window and sweep interval so next event sweeps idle UMO.
+    virtual_seconds = 100.0
+    active_event = FakeEvent(unified_msg_origin="platform-a:FriendMessage:active")
+    await limiter.process(active_event)
+
+    assert idle_event.unified_msg_origin not in limiter.event_timestamps
+    assert idle_event.unified_msg_origin not in limiter.locks
+    assert active_event.unified_msg_origin in limiter.event_timestamps
+    assert active_event.unified_msg_origin in limiter.locks
+
+
+@pytest.mark.asyncio
+async def test_unknown_strategy_discards_without_infinite_loop(monkeypatch):
+    """Unknown rate-limit strategies must fail closed by discarding cleanly."""
+    monkeypatch.setattr(rate_limit_stage.time, "monotonic", lambda: 50.0)
+
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.rate_limit_count = 1
+    limiter.rate_limit_time = timedelta(seconds=60)
+    limiter.rl_strategy = "unexpected_strategy"
+
+    first = FakeEvent()
+    second = FakeEvent()
+    await limiter.process(first)
+    await asyncio.wait_for(limiter.process(second), timeout=1.0)
+
+    assert not first.stopped
+    assert second.stopped
+
+
+@pytest.mark.asyncio
+async def test_non_positive_rate_limit_time_bypasses_limiting():
+    """Non-positive window durations disable limiting instead of looping."""
+    limiter = rate_limit_stage.RateLimitStage()
+    limiter.rate_limit_count = 1
+    limiter.rate_limit_time = timedelta(seconds=0)
+    limiter.rl_strategy = "stall"
+
+    events = [FakeEvent() for _ in range(3)]
+    await asyncio.wait_for(
+        asyncio.gather(*(limiter.process(ev) for ev in events)), timeout=1.0
+    )
+
+    assert all(not ev.stopped for ev in events)
+    assert limiter.event_timestamps == {}
+    assert limiter.locks == {}
