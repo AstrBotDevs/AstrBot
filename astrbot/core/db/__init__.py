@@ -469,8 +469,8 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
+        tools: list[str | dict] | None = None,
+        skills: list[str | dict] | None = None,
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
@@ -505,8 +505,8 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None | object = NOT_GIVEN,
-        skills: list[str] | None | object = NOT_GIVEN,
+        tools: list[str | dict] | None | object = NOT_GIVEN,
+        skills: list[str | dict] | None | object = NOT_GIVEN,
         custom_error_message: str | None | object = NOT_GIVEN,
     ) -> Persona | None:
         """Update a persona record.

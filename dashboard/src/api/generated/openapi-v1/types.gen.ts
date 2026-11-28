@@ -519,8 +519,8 @@ export type PersonaRequest = {
     system_prompt: string;
     begin_dialogs?: Array<(string)>;
     folder_id?: string;
-    tools?: Array<(string)>;
-    skills?: Array<(string)>;
+    tools?: Array<(string | SourceSelectionGroup)> | null;
+    skills?: Array<(string | SourceSelectionGroup)> | null;
     custom_error_message?: string;
     [key: string]: unknown | string;
 };
@@ -700,12 +700,24 @@ export type SkillPatchRequest = {
     enabled?: boolean;
     display_name?: string;
     description?: string;
+    resource_key?: string;
 };
 
 export type SkillUploadRequest = {
     file: (Blob | File);
     overwrite?: boolean;
 };
+
+export type SourceSelectionGroup = {
+    kind: 'tool' | 'skill';
+    source: 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
+    source_id?: (string) | null;
+    items: Array<(string)> | null;
+};
+
+export type kind = 'tool' | 'skill';
+
+export type source = 'plugin' | 'mcp' | 'local' | 'sandbox' | 'astrbot';
 
 export type StatsDailyUsage = {
     tokens: number;
@@ -760,6 +772,7 @@ export type T2iTemplateRequest = {
 
 export type ToolPermissionPatch = {
     permission: 'admin' | 'member';
+    resource_key?: string;
 };
 
 export type permission = 'admin' | 'member';
@@ -2604,6 +2617,7 @@ export type ListToolsError = unknown;
 
 export type DeleteSavedToolSettingsData = {
     query: {
+        resource_key?: string;
         tool_name: string;
     };
 };
@@ -2613,7 +2627,10 @@ export type DeleteSavedToolSettingsResponse = (SuccessEnvelope);
 export type DeleteSavedToolSettingsError = unknown;
 
 export type SetToolEnabledData = {
-    body: EnabledPatch;
+    body: {
+        enabled: boolean;
+        resource_key?: string;
+    };
     path: {
         tool_id: string;
     };
@@ -2783,6 +2800,7 @@ export type UpdateSkillByNameData = {
         skill_name: string;
         enabled?: boolean;
         active?: boolean;
+        resource_key?: string;
         [key: string]: unknown | string | boolean;
     };
 };

@@ -16,6 +16,7 @@ from astrbot.core.astr_agent_runtime.computer.computer_client import (
     sync_skills_to_active_sandboxes,
 )
 from astrbot.core.astr_agent_runtime.computer.neo_skill_sync import NeoSkillSyncManager
+from astrbot.core.resource_settings import update_setting
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -251,6 +252,7 @@ class SkillsService:
             active_only=False,
             runtime=runtime,
             show_sandbox_path=False,
+            include_same_names=True,
         )
         plugin_display_names = {}
         plugin_activation_by_root_name = {}
@@ -266,7 +268,10 @@ class SkillsService:
 
         serialized_skills = []
         for skill in skills:
-            skill_data = dict(skill.__dict__)
+            skill_data = {
+                **skill.__dict__,
+                "resource": skill.resource_ref.metadata(),
+            }
             if skill.source_type == "plugin":
                 plugin_active = plugin_activation_by_root_name.get(
                     skill.plugin_name,
@@ -621,17 +626,32 @@ class SkillsService:
             "size": len(encoded),
         }
 
-    def update_skill(self, data: object) -> dict:
+    async def update_skill(self, data: object) -> dict:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         name = payload.get("name")
         active = payload.get("active", True)
         if not isinstance(name, str) or not name.strip():
             raise SkillsServiceError("Missing skill name")
-        try:
-            SkillManager().set_skill_active(name, bool(active))
-        except ValueError as exc:
-            raise SkillsServiceError(str(exc)) from exc
+        manager = SkillManager()
+        resource_key = payload.get("resource_key")
+        candidates = [
+            skill
+            for skill in manager.list_skills(runtime="sandbox", include_same_names=True)
+            if skill.name == name
+        ]
+        if resource_key:
+            skill = next(
+                (item for item in candidates if item.resource_ref.key == resource_key),
+                None,
+            )
+        else:
+            skill = candidates[0] if candidates else None
+        if skill is None:
+            raise SkillsServiceError("Skill not found")
+        if skill.source_type == "sandbox_only":
+            raise SkillsServiceError("Sandbox preset skills are managed by the sandbox")
+        await update_setting(skill.resource_ref, enabled=bool(active))
         return {"name": name, "active": bool(active)}
 
     async def delete_skill(self, data: object) -> dict:

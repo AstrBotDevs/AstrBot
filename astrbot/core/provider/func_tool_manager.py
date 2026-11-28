@@ -18,6 +18,13 @@ from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.resource_settings import (
+    SETTINGS_SCOPE,
+    global_settings,
+    legacy_setting,
+    tool_ref,
+    update_setting,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
@@ -235,11 +242,14 @@ class _PermissionGuardedTool(FunctionTool):
         # Mirror mutable state from the underlying tool
         self.active = getattr(tool, "active", True)
         self.handler_module_path = getattr(tool, "handler_module_path", None)
+        self.resource_ref = tool_ref(tool)
 
     async def call(self, context: Any, **kwargs: Any) -> Any:
         import inspect as _inspect
 
-        error = await self._mgr._check_tool_permission(self.name, context)
+        error = await self._mgr._check_tool_permission(
+            self.name, context, self.resource_ref.key
+        )
         if error is not None:
             return error
 
@@ -409,6 +419,7 @@ class FunctionToolManager:
         self,
         tool_name: str,
         context: Any,
+        resource_key: str | None = None,
     ) -> str | None:
         """Return an error string if the caller lacks permission, or None.
 
@@ -417,11 +428,14 @@ class FunctionToolManager:
         no explicit entry exists the tool inherits the fallback
         ``_default_permission``."""
         try:
-            perms_raw = await sp.global_get("tool_permissions", {})
+            perms_raw = await legacy_setting("tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
         effective = defaults.get(tool_name)
+        if resource_key:
+            settings = await sp.get_async(SETTINGS_SCOPE, "global", resource_key, {})
+            effective = settings.get("permission", effective)
         if effective is None:
             effective = self._default_permission(tool_name)
 
@@ -454,6 +468,10 @@ class FunctionToolManager:
         for tool in self.func_list:
             tool_set.add_tool(_PermissionGuardedTool(tool, self))
         return tool_set
+
+    def get_registered_tools(self) -> list[FunctionTool]:
+        """Return permission-guarded tools before model names are deduplicated."""
+        return [_PermissionGuardedTool(tool, self) for tool in self.func_list]
 
     @staticmethod
     def _log_safe_mcp_debug_config(cfg: dict) -> None:
@@ -642,13 +660,15 @@ class FunctionToolManager:
                     for tool in mcp_client.tools
                 ]
                 inactive_names = (
-                    await sp.global_get("inactivated_llm_tools", [])
+                    await legacy_setting("inactivated_llm_tools", [])
                     if registered_tools
                     else []
                 )
+                settings = await global_settings() if registered_tools else {}
                 for tool in registered_tools:
-                    if tool.name in inactive_names:
-                        tool.active = False
+                    tool.active = settings.get(tool_ref(tool).key, {}).get(
+                        "enabled", tool.name not in inactive_names
+                    )
                 existing = [
                     tool
                     for tool in self.func_list
@@ -964,57 +984,27 @@ class FunctionToolManager:
         if func_tool is not None:
             func_tool.active = False
 
-            inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools",
-                [],
-                scope="global",
+            ref = tool_ref(func_tool)
+            settings = sp.get(ref.key, {}, scope=SETTINGS_SCOPE, scope_id="global")
+            sp.put(
+                ref.key,
+                {**settings, "enabled": False},
+                scope=SETTINGS_SCOPE,
                 scope_id="global",
             )
-            if name not in inactivated_llm_tools:
-                inactivated_llm_tools.append(name)
-                sp.put(
-                    "inactivated_llm_tools",
-                    inactivated_llm_tools,
-                    scope="global",
-                    scope_id="global",
-                )
 
             return True
         return False
 
-    async def deactivate_llm_tool_async(self, name: str) -> bool:
-        """Asynchronously deactivate a registered function-calling tool.
+    async def deactivate_llm_tool_async(self, name: str, *, tool=None) -> bool:
+        """Persist deactivation before changing the registered tool's state."""
+        tool = tool if tool is not None else self.get_func(name)
+        if tool is None:
+            return False
+        await update_setting(tool_ref(tool), enabled=False)
+        tool.active = False
+        return True
 
-        Args:
-            name: Tool name.
-
-        Returns:
-            True when the tool was deactivated, or False when it was not found.
-        """
-        func_tool = self.get_func(name)
-        if func_tool is not None:
-            func_tool.active = False
-
-            inactivated_llm_tools: list = await sp.get_async(
-                "global",
-                "global",
-                "inactivated_llm_tools",
-                [],
-            )
-            if name not in inactivated_llm_tools:
-                inactivated_llm_tools.append(name)
-                await sp.put_async(
-                    "global",
-                    "global",
-                    "inactivated_llm_tools",
-                    inactivated_llm_tools,
-                )
-
-            return True
-        return False
-
-    # 因为不想解决循环引用，所以这里直接传入 star_map 先了...
-    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(self, name: str, star_map: dict) -> bool:
         func_tool = self.get_func(name)
         if func_tool is not None:
@@ -1026,64 +1016,31 @@ class FunctionToolManager:
 
             func_tool.active = True
 
-            inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools",
-                [],
-                scope="global",
+            ref = tool_ref(func_tool)
+            settings = sp.get(ref.key, {}, scope=SETTINGS_SCOPE, scope_id="global")
+            sp.put(
+                ref.key,
+                {**settings, "enabled": True},
+                scope=SETTINGS_SCOPE,
                 scope_id="global",
             )
-            if name in inactivated_llm_tools:
-                inactivated_llm_tools.remove(name)
-                sp.put(
-                    "inactivated_llm_tools",
-                    inactivated_llm_tools,
-                    scope="global",
-                    scope_id="global",
-                )
 
             return True
         return False
 
-    async def activate_llm_tool_async(self, name: str, star_map: dict) -> bool:
-        """Asynchronously activate a registered function-calling tool.
-
-        Args:
-            name: Tool name.
-            star_map: Loaded plugins indexed by module path.
-
-        Returns:
-            True when the tool was activated, or False when it was not found.
-
-        Raises:
-            ValueError: If the plugin that owns the tool is disabled.
-        """
-        func_tool = self.get_func(name)
-        if func_tool is not None:
-            if func_tool.handler_module_path in star_map:
-                if not star_map[func_tool.handler_module_path].activated:
-                    raise ValueError(
-                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
-                    )
-
-            func_tool.active = True
-
-            inactivated_llm_tools: list = await sp.get_async(
-                "global",
-                "global",
-                "inactivated_llm_tools",
-                [],
-            )
-            if name in inactivated_llm_tools:
-                inactivated_llm_tools.remove(name)
-                await sp.put_async(
-                    "global",
-                    "global",
-                    "inactivated_llm_tools",
-                    inactivated_llm_tools,
-                )
-
-            return True
-        return False
+    async def activate_llm_tool_async(
+        self, name: str, star_map: dict, *, tool=None
+    ) -> bool:
+        """Enable a tool whose owning plugin is active."""
+        tool = tool if tool is not None else self.get_func(name)
+        if tool is None:
+            return False
+        owner = star_map.get(tool.handler_module_path)
+        if owner is not None and not owner.activated:
+            raise ValueError("Enable the owning plugin before enabling this tool.")
+        await update_setting(tool_ref(tool), enabled=True)
+        tool.active = True
+        return True
 
     @property
     def mcp_config_path(self):

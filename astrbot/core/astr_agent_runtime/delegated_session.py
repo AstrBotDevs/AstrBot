@@ -36,6 +36,7 @@ from astrbot.core.astr_agent_runtime.subagents.context import SubAgentContext
 from astrbot.core.astr_agent_runtime.tools.message_tools import SendMessageToUserTool
 from astrbot.core.db.po import Conversation
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.resource_settings import PersonaSelection, resolve_tools, tool_ref
 from astrbot.core.star.star import star_map
 
 if TYPE_CHECKING:
@@ -80,8 +81,8 @@ class NativeConversation:
     conversation_id: str
     provider_id: str
     instructions: str
-    tools: list[str] | None
-    skills: list[str] | None = None
+    tools: PersonaSelection
+    skills: PersonaSelection = None
     initial_dialogs: list[Message] = field(default_factory=list)
     messages: list[Message] = field(default_factory=list)
     runtime_config: dict = field(default_factory=dict)
@@ -183,12 +184,8 @@ class DelegatedAgentSession(NativeAgentSession):
                 dialogs = persona.get("_begin_dialogs_processed") or []
                 skills = persona.get("skills")
         provider_id = overrides["model"]["provider_id"]
-        if tools is not None:
-            tools = (
-                [str(name).strip() for name in tools if str(name).strip()]
-                if isinstance(tools, list)
-                else []
-            )
+        if tools is not None and not isinstance(tools, list):
+            tools = []
         provider_id = provider_id or await caller.context.get_current_chat_provider_id(
             caller.scope.umo
         )
@@ -306,11 +303,8 @@ class DelegatedAgentSession(NativeAgentSession):
         if plugin_tools is None:
             plugin_tools = manager.get_full_tool_set()
         parent_plugin_tools = caller.agent_context.plugin_tools
-        selected = (
-            caller.tools.tools
-            if conversation.tools is None
-            else [caller.tools.get_tool(name) for name in conversation.tools]
-        )
+        selected = resolve_tools(conversation.tools, caller.tools.tools)
+        registered_by_ref = {tool_ref(tool): tool for tool in plugin_tools}
         tools = ToolSet()
         for tool in selected:
             if (
@@ -322,7 +316,7 @@ class DelegatedAgentSession(NativeAgentSession):
             # Refresh plugin and MCP instances while keeping the runtime
             # instance the parent selected, including same-named variants.
             if parent_plugin_tools is None:
-                tool = plugin_tools.get_tool(tool.name) or tool
+                tool = registered_by_ref.get(tool_ref(tool)) or tool
             elif (
                 parent_plugin_tools.get_tool(tool.name) is tool
                 or tool.handler is not None
@@ -330,7 +324,7 @@ class DelegatedAgentSession(NativeAgentSession):
                 or isinstance(tool, MCPTool)
                 or manager.get_func(tool.name) is tool
             ):
-                tool = plugin_tools.get_tool(tool.name)
+                tool = registered_by_ref.get(tool_ref(tool))
             if tool is None or not tool.active:
                 continue
             metadata = (

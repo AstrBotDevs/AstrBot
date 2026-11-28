@@ -491,7 +491,7 @@ async def test_subagent_config_does_not_remove_main_tools(harness):
     ]
     tool_mgr = harness.context.get_llm_tool_manager.return_value
     tool_mgr.func_list = tools
-    tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
+    tool_mgr.get_registered_tools.side_effect = lambda: tools.copy()
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False
@@ -549,7 +549,7 @@ async def test_subagents_use_session_profile_without_global_override(
     ]
     tool_mgr = harness.context.get_llm_tool_manager.return_value
     tool_mgr.func_list = tools
-    tool_mgr.get_full_tool_set.side_effect = lambda: ToolSet(tools.copy())
+    tool_mgr.get_registered_tools.side_effect = lambda: tools.copy()
     harness.context.persona_manager.get_persona_v3_by_id.return_value = None
     harness.config["provider_settings"]["proactive_capability"]["add_cron_tools"] = (
         False

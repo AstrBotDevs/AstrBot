@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from astrbot.core.resource_settings import SourceSelectionGroup
 
 BotCleanupTarget = Literal[
     "custom_rules",
@@ -326,10 +328,12 @@ class KnowledgeBaseRetrieveRequest(OpenModel):
 
 class ToolEnabledRequest(BaseModel):
     enabled: bool
+    resource_key: str | None = None
 
 
 class ToolPermissionRequest(BaseModel):
     permission: Literal["admin", "member"]
+    resource_key: str | None = None
 
 
 class McpServerRequest(OpenModel):
@@ -365,11 +369,21 @@ class PersonaRequest(OpenModel):
     persona_id: str | None = None
     system_prompt: str | None = None
     begin_dialogs: list[Any] | None = None
-    tools: list[str] | None = None
-    skills: list[str] | None = None
+    tools: list[str | SourceSelectionGroup] | None = None
+    skills: list[str | SourceSelectionGroup] | None = None
     custom_error_message: str | None = None
     folder_id: str | None = None
     sort_order: int | None = None
+
+    @model_validator(mode="after")
+    def validate_selection_kinds(self) -> PersonaRequest:
+        for kind, entries in (("tool", self.tools), ("skill", self.skills)):
+            if any(
+                isinstance(entry, SourceSelectionGroup) and entry.kind != kind
+                for entry in entries or []
+            ):
+                raise ValueError(f"Expected {kind} selection group")
+        return self
 
 
 class PersonaByIdRequest(OpenModel):
@@ -400,6 +414,7 @@ class PersonaFolderRequest(OpenModel):
 
 
 class SkillUpdateRequest(OpenModel):
+    resource_key: str | None = None
     enabled: bool | None = None
     active: bool | None = None
 

@@ -33,6 +33,14 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.resource_settings import (
+    ResourceRef,
+    global_settings,
+    legacy_setting,
+    tool_ref,
+    update_setting,
+    write_legacy_setting,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
@@ -987,7 +995,7 @@ class PluginManager:
             name for name in inactivated_llm_tools if name not in plugin_tool_names
         ]
         if updated_tools != inactivated_llm_tools:
-            await sp.global_put("inactivated_llm_tools", updated_tools)
+            await write_legacy_setting("inactivated_llm_tools", updated_tools)
         await sp.global_put(PLUGIN_TOOL_STATE_MIGRATION_KEY, True)
         return updated_tools
 
@@ -1096,8 +1104,9 @@ class PluginManager:
                 - error_message (str|None): 错误信息，成功时为 None
 
         """
-        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
+        inactivated_plugins = await legacy_setting("inactivated_plugins", [])
+        inactivated_llm_tools = await legacy_setting("inactivated_llm_tools", [])
+        settings = await global_settings()
         alter_cmd = await sp.global_get("alter_cmd", {})
 
         plugin_modules = self._get_plugin_modules()
@@ -1230,6 +1239,9 @@ class PluginManager:
                     plugin_logger.info(metadata)
                     metadata.config = plugin_config
                     plugin_id = metadata.plugin_id
+                    plugin_disabled = not settings.get(
+                        ResourceRef("plugin", "plugin", None, plugin_id).key, {}
+                    ).get("enabled", path not in inactivated_plugins)
 
                     # inject class attributes before instantiation so __init__ can read them
                     if metadata.star_cls_type:
@@ -1238,7 +1250,7 @@ class PluginManager:
                         setattr(metadata.star_cls_type, "author", p_author)
                         setattr(metadata.star_cls_type, "plugin_id", plugin_id)
 
-                    if path not in inactivated_plugins:
+                    if not plugin_disabled:
                         # 只有没有禁用插件时才实例化插件类
                         with plugin_scope(plugin_id):
                             if plugin_config and metadata.star_cls_type:
@@ -1271,8 +1283,6 @@ class PluginManager:
                     assert metadata.module_path is not None, (
                         f"插件 {metadata.name} 的模块路径为空。"
                     )
-
-                    plugin_disabled = metadata.module_path in inactivated_plugins
 
                     # Restore decorator-registered callables before binding the current
                     # instance so repeated loads cannot stack stale plugin instances.
@@ -1374,8 +1384,15 @@ class PluginManager:
 
                     plugin_cls = getattr(module, classes[0])
                     obj = None
+                    metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
+                    if metadata is None:
+                        raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
+                    plugin_disabled = not settings.get(
+                        ResourceRef("plugin", "plugin", None, metadata.plugin_id).key,
+                        {},
+                    ).get("enabled", path not in inactivated_plugins)
 
-                    if path not in inactivated_plugins:
+                    if not plugin_disabled:
                         # 只有没有禁用插件时才实例化插件类
                         if plugin_config:
                             try:
@@ -1391,13 +1408,6 @@ class PluginManager:
                             obj = plugin_cls(
                                 context=self.context,
                             )  # 实例化插件类
-
-                    metadata = self._load_plugin_metadata(
-                        plugin_path=plugin_dir_path,
-                        plugin_obj=obj,
-                    )
-                    if not metadata:
-                        raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
 
                     plugin_logger = logging.LoggerAdapter(
                         logger, {"plugin_name": metadata.name or root_dir_name}
@@ -1426,7 +1436,7 @@ class PluginManager:
                     star_registry.append(metadata)
 
                 # 禁用/启用插件
-                metadata.activated = metadata.module_path not in inactivated_plugins
+                metadata.activated = not plugin_disabled
 
                 # Plugin logo path
                 if os.path.exists(logo_path):
@@ -1528,11 +1538,17 @@ class PluginManager:
                     inactivated_plugins,
                 )
             )
-            inactive_tool_names = set(inactivated_llm_tools)
-            for func_tool in llm_tools.func_list:
-                for concrete_tool in self._iter_concrete_llm_tools(func_tool):
-                    if concrete_tool.name in inactive_tool_names:
-                        concrete_tool.active = False
+        inactive_tool_names = set(inactivated_llm_tools)
+        for func_tool in llm_tools.func_list:
+            for concrete_tool in self._iter_concrete_llm_tools(func_tool):
+                owner = star_map.get(concrete_tool.handler_module_path)
+                scoped = settings.get(tool_ref(concrete_tool).key, {})
+                if owner is not None and not owner.activated:
+                    concrete_tool.active = False
+                elif "enabled" in scoped:
+                    concrete_tool.active = scoped["enabled"]
+                elif concrete_tool.name in inactive_tool_names:
+                    concrete_tool.active = False
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -1970,11 +1986,7 @@ class PluginManager:
         await self.reload(plugin_name)
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
-        """禁用一个插件。
-        调用插件的 terminate() 方法，
-        将插件的 module_path 加入到 data/shared_preferences.json 的 inactivated_plugins 列表中。
-        Disables the plugin's LLM tools only for the current runtime state.
-        """
+        """Disable a plugin and make its tools unavailable without changing their settings."""
         async with self._pm_lock:
             plugin = self.context.get_registered_star(plugin_name)
             if not plugin:
@@ -1983,15 +1995,12 @@ class PluginManager:
             # 调用插件的终止方法
             await self._terminate_plugin(plugin)
 
-            # 加入到 shared_preferences 中
-            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-            if plugin.module_path not in inactivated_plugins:
-                inactivated_plugins.append(plugin.module_path)
-
+            await update_setting(
+                ResourceRef("plugin", "plugin", None, plugin.plugin_id),
+                enabled=False,
+            )
             for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
                 func_tool.active = False
-
-            await sp.global_put("inactivated_plugins", inactivated_plugins)
 
             plugin.activated = False
 
@@ -2051,14 +2060,10 @@ class PluginManager:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在。")
-        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
-        if plugin.module_path in inactivated_plugins:
-            inactivated_plugins.remove(plugin.module_path)
-        await sp.global_put("inactivated_plugins", inactivated_plugins)
-
-        for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
-            func_tool.active = func_tool.name not in inactivated_llm_tools
+        await update_setting(
+            ResourceRef("plugin", "plugin", None, plugin.plugin_id),
+            enabled=True,
+        )
 
         success, error = await self.reload(plugin_name)
         if not success:

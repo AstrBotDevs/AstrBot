@@ -124,7 +124,7 @@ For environment variables, use the JSON `env` object directly. This is a format 
 After connecting, make sure the tools are available to the current conversation:
 
 1. Open **Personas** and edit the persona used by that conversation.
-2. Under **Persona Capabilities**, find the MCP server in the tools list. Select the entire server, or use its cog button to choose individual tools, then save the persona.
+2. Under **Persona Capabilities**, you can select all tools, select specific tools, or select no tools. To configure an MCP server individually, choose **Select specific tools**. Then select the server to include its current and future available tools, or open its cog menu to choose all, specific, or no tools from that server. Save the persona.
 3. Make sure the conversation uses that persona and describe the task naturally, for example, “Search for recent multimodal RAG papers and give me their titles and links.”
 
 The default persona uses all available capabilities. Create or edit a custom persona to restrict the selection. Selecting a globally disabled tool in a persona does not enable it again.
@@ -132,6 +132,10 @@ The default persona uses all available capabilities. Create or edit a custom per
 AstrBot registers tools as `mcp__<server>__<tool>`, for example `mcp__github__list_issues`. Chinese server names use a stable six-letter namespace derived from the server name. The persona capabilities panel shows selections missing from the current list under **Selected tools currently unavailable**. When editing a persona, click **Remove** to mark an entry for removal or **Undo** to restore it before saving. Select a tool by its full name to use it after a rename.
 
 ![Saved tool names in the persona capabilities panel](./images/mcp-saved-persona-en.png)
+
+You can still edit existing personas. In the persona capabilities editor, choose **Preview upgrade** to review the resulting selections by MCP server, plugin, or local source. Verify suggested matches, then choose a source or remove each ambiguous item. The upgrade removes legacy selections with no matching source. Apply the preview to your draft, then save the persona to persist it.
+
+Persona selections and global tool settings are matched by server name and original tool name. If you delete a server and add it again with the same name, matching tools inherit any saved selections and settings that were kept.
 
 Open **Extensions → Manage Handlers → Function Tools** to manage the enabled state and permissions of registered MCP tools. Saved disabled states and permissions with no matching tool appear as **Unregistered**. Click the trash icon on that row and confirm to clear its saved global permission and disabled state. Reapply the settings you need to the tool's full name after an upgrade.
 

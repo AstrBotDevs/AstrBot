@@ -4,547 +4,718 @@ import { useI18n, useModuleI18n } from "@/i18n/composables";
 import PersonaCapabilityList from "./PersonaCapabilityList.vue";
 
 const props = defineProps({
-  tools: {
-    type: [Array, null],
-    default: null,
-  },
-  removedUnlistedTools: {
-    type: [Array, null],
-    default: null,
-  },
-  skills: {
-    type: [Array, null],
-    default: null,
-  },
-  availableTools: {
-    type: Array,
-    default: () => [],
-  },
-  availableSkills: {
-    type: Array,
-    default: () => [],
-  },
-  readonly: {
-    type: Boolean,
-    default: false,
-  },
-  saving: {
-    type: String,
-    default: "",
-  },
-  error: {
-    type: String,
-    default: "",
-  },
-  loadingTools: {
-    type: Boolean,
-    default: false,
-  },
-  loadingSkills: {
-    type: Boolean,
-    default: false,
-  },
-  updateCapability: {
-    type: Function,
-    default: null,
-  },
+  tools: { type: Array, default: null },
+  skills: { type: Array, default: null },
+  availableTools: { type: Array, default: null },
+  availableSkills: { type: Array, default: null },
+  readonly: Boolean,
+  saving: { type: String, default: "" },
+  error: { type: String, default: "" },
+  loadingTools: Boolean,
+  loadingSkills: Boolean,
+  updateCapability: { type: Function, default: null },
 });
 
-const emit = defineEmits([
-  "update:tools",
-  "update:skills",
-  "update:removedUnlistedTools",
-]);
+const emit = defineEmits(["update:tools", "update:skills"]);
 const { t } = useI18n();
 const { tm } = useModuleI18n("core.shared");
-
-const selectionDialog = ref({
-  show: false,
-  field: "tools",
-  name: "",
-  titleKey: "personaQuickPreview.toolDialogTitle",
-  hintKey: "personaQuickPreview.toolDialogHint",
-  selectAllKey: "personaQuickPreview.selectAllTools",
-  inactiveKey: "personaQuickPreview.toolInactive",
-  items: [],
-  selectedNames: [],
-});
-
-const selectableTools = computed(() => props.availableTools);
-const selectableToolNames = computed(() =>
-  selectableTools.value
-    .filter((tool) => tool.active !== false)
-    .map((tool) => tool.name),
-);
-const selectableSkillNames = computed(() =>
-  props.availableSkills
-    .filter((skill) => skill.active !== false && skill.plugin_active !== false)
-    .map((skill) => skill.name),
-);
-
-function isCapabilitySelected(field, name) {
-  const configured = props[field];
-  return (
-    configured === null ||
-    (Array.isArray(configured) && configured.includes(name))
-  );
-}
-
-const toolGroups = computed(() => {
-  const groups = new Map();
-  for (const tool of selectableTools.value) {
-    if (tool.origin !== "mcp" && tool.origin !== "plugin") {
-      continue;
-    }
-    const sourceId =
-      tool.origin_name || tm("personaQuickPreview.unknownSource");
-    const sourceName = tool.origin_display_name || sourceId;
-    const key = `${tool.origin}:${sourceId}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        name: sourceName,
-        origin: tool.origin,
-        tools: [],
-      });
-    }
-    groups.get(key).tools.push(tool);
-  }
-
-  return [...groups.values()].map((group) => {
-    const activeTools = group.tools.filter((tool) => tool.active !== false);
-    const selectedCount = activeTools.filter((tool) =>
-      isCapabilitySelected("tools", tool.name),
-    ).length;
-    return {
-      ...group,
-      badge:
-        group.origin === "mcp" ? "MCP" : tm("personaQuickPreview.pluginSource"),
-      badgeTone: group.origin === "mcp" ? "mcp" : "plugin",
-      meta: tm("personaQuickPreview.toolCount", {
-        selected: selectedCount,
-        total: activeTools.length,
-      }),
-      selected: activeTools.length > 0 && selectedCount === activeTools.length,
-      indeterminate: selectedCount > 0 && selectedCount < activeTools.length,
-      disabled: activeTools.length === 0,
-      configurable: activeTools.length > 0,
-      toolNames: activeTools.map((tool) => tool.name),
-    };
-  });
-});
-
-const unlistedSavedTools = computed(() => {
-  if (!Array.isArray(props.tools)) return [];
-  const listedNames = new Set(toolGroups.value.flatMap((group) => group.toolNames));
-  return [...new Set(props.tools.filter((name) => !listedNames.has(name)))];
-});
-
-function toggleUnlistedToolRemoval(name) {
-  const removed = props.removedUnlistedTools;
-  emit(
-    "update:removedUnlistedTools",
-    removed.includes(name)
-      ? removed.filter((item) => item !== name)
-      : [...removed, name],
-  );
-}
-
-const skillItems = computed(() => {
-  const items = [];
-  const pluginGroups = new Map();
-
-  for (const skill of props.availableSkills) {
-    if (skill.active === false) {
-      continue;
-    }
-    if (skill.source_type === "plugin") {
-      const sourceId =
+const fields = ["tools", "skills"];
+const fieldLabels = {
+  tools: "personaQuickPreview.toolsLabel",
+  skills: "personaQuickPreview.skillsLabel",
+};
+const modeLabels = {
+  tools: {
+    all: "personaQuickPreview.selectAllTools",
+    partial: "personaQuickPreview.selectPartialTools",
+    none: "personaQuickPreview.selectNoTools",
+  },
+  skills: {
+    all: "personaQuickPreview.selectAllSkills",
+    partial: "personaQuickPreview.selectPartialSkills",
+    none: "personaQuickPreview.selectNoSkills",
+  },
+};
+const editingPartial = ref({ tools: false, skills: false });
+const selectionDialog = ref(null);
+const upgradeDialog = ref(false);
+const decisions = ref({});
+const removed = ref([]);
+const conflict = ref("");
+const removeChoice = "remove";
+const sourceLabels = computed(() => ({
+  mcp: "MCP",
+  plugin: tm("personaQuickPreview.pluginSource"),
+  local: tm("personaQuickPreview.localSource"),
+  sandbox: tm("personaQuickPreview.presetSource"),
+}));
+const catalog = computed(() => ({
+  tools: (props.availableTools ?? [])
+    .filter((tool) => ["plugin", "mcp"].includes(tool.origin) && tool.resource)
+    .map((tool) => ({
+      ...tool,
+      ...tool.resource,
+      legacyName: tool.name,
+      kind: "tool",
+      label: tool.origin_display_name || tool.origin_name,
+    })),
+  skills: (props.availableSkills ?? [])
+    .filter((skill) => skill.resource)
+    .map((skill) => ({
+      ...skill,
+      ...skill.resource,
+      legacyName: skill.name,
+      kind: "skill",
+      active: skill.active !== false && skill.plugin_active !== false,
+      label:
+        skill.plugin_display_name ||
         skill.plugin_name ||
-        skill.source_label ||
-        tm("personaQuickPreview.unknownSource");
-      const sourceName =
-        skill.plugin_display_name || skill.source_label || sourceId;
-      const key = `plugin:${sourceId}`;
-      if (!pluginGroups.has(key)) {
-        const group = {
-          key,
-          name: sourceName,
-          skills: [],
-        };
-        pluginGroups.set(key, group);
-        items.push(group);
-      }
-      pluginGroups.get(key).skills.push(skill);
-      continue;
-    }
+        sourceLabels.value[skill.resource.source],
+    })),
+}));
 
-    let badge = tm("personaQuickPreview.localSource");
-    let badgeTone = "local";
-    if (skill.source_type === "sandbox_only") {
-      badge = tm("personaQuickPreview.presetSource");
-      badgeTone = "preset";
-    } else if (skill.source_type === "both") {
-      badge = tm("personaQuickPreview.localAndSandboxSource");
-      badgeTone = "mixed";
+function sameSource(group, item) {
+  return (
+    group.kind === item.kind &&
+    group.source === item.source &&
+    (group.source_id ?? null) === (item.source_id ?? null)
+  );
+}
+
+function matches(field, name) {
+  return catalog.value[field].filter((item) => item.legacyName === name);
+}
+
+function defaultItems(field) {
+  const winners = new Map();
+  for (const item of catalog.value[field]) {
+    if (item.active === false) continue;
+    if (field === "tools" || !winners.has(item.legacyName)) {
+      winners.set(item.legacyName, item);
     }
-    items.push({
-      key: `skill:${skill.name}`,
-      name: skill.name,
-      description: skill.description || "",
-      meta: "",
-      badge,
-      badgeTone,
-      selected: isCapabilitySelected("skills", skill.name),
-      disabled: false,
-    });
   }
+  return [...winners.values()];
+}
 
-  return items.map((item) => {
-    if (!item.skills) {
-      return item;
-    }
-    const activeSkills = item.skills.filter(
-      (skill) => skill.plugin_active !== false,
-    );
-    const selectedCount = activeSkills.filter((skill) =>
-      isCapabilitySelected("skills", skill.name),
-    ).length;
-    return {
-      ...item,
-      badge: tm("personaQuickPreview.pluginSource"),
-      badgeTone: "plugin",
-      meta: tm("personaQuickPreview.skillCount", {
-        selected: selectedCount,
-        total: activeSkills.length,
-      }),
-      selected:
-        activeSkills.length > 0 && selectedCount === activeSkills.length,
-      indeterminate: selectedCount > 0 && selectedCount < activeSkills.length,
-      disabled: activeSkills.length === 0,
-      configurable: activeSkills.length > 0,
-      skillNames: activeSkills.map((skill) => skill.name),
-    };
+function selected(field, item, value = props[field]) {
+  if (value === null)
+    return defaultItems(field).some((candidate) => candidate.key === item.key);
+  return (value || []).some((entry) =>
+    typeof entry === "string"
+      ? entry === item.legacyName && matches(field, entry).length === 1
+      : sameSource(entry, item) &&
+        (entry.items === null
+          ? item.active !== false
+          : entry.items.includes(item.name)),
+  );
+}
+
+function addItem(value, item) {
+  const { kind, source, source_id, name } = item;
+  const index = value.findIndex(
+    (entry) => typeof entry !== "string" && sameSource(entry, item),
+  );
+  if (index === -1) {
+    value.push({ kind, source, source_id: source_id ?? null, items: [name] });
+  } else if (
+    value[index].items !== null &&
+    !value[index].items.includes(name)
+  ) {
+    value[index] = { ...value[index], items: [...value[index].items, name] };
+  }
+}
+
+function removeItem(field, value, item) {
+  return value.flatMap((entry) => {
+    if (typeof entry === "string" || !sameSource(entry, item)) return [entry];
+    const names =
+      entry.items ??
+      catalog.value[field]
+        .filter(
+          (candidate) =>
+            sameSource(entry, candidate) && candidate.active !== false,
+        )
+        .map((candidate) => candidate.name);
+    const items = names.filter((name) => name !== item.name);
+    return items.length ? [{ ...entry, items }] : [];
   });
-});
+}
 
-const dialogSelectableItems = computed(() =>
-  selectionDialog.value.items.filter((item) => item.active !== false),
-);
-const dialogSelectedCount = computed(
-  () =>
-    dialogSelectableItems.value.filter((item) =>
-      selectionDialog.value.selectedNames.includes(item.name),
-    ).length,
-);
-const dialogAllSelected = computed(
-  () =>
-    dialogSelectableItems.value.length > 0 &&
-    dialogSelectedCount.value === dialogSelectableItems.value.length,
-);
-const dialogPartiallySelected = computed(
-  () => dialogSelectedCount.value > 0 && !dialogAllSelected.value,
-);
+function editableSelection(field) {
+  const value = [...(props[field] || [])];
+  if (props[field] === null)
+    defaultItems(field).forEach((item) => addItem(value, item));
+  return value;
+}
 
-async function applyCapabilityUpdate(field, nextValue, previousValue) {
-  if (props.readonly || props.saving) {
-    return false;
+function selectionMode(field) {
+  const value = props[field];
+  if (value === null) return "all";
+  return value?.length ||
+    editingPartial.value[field] ||
+    removed.value.some((row) => row.field === field)
+    ? "partial"
+    : "none";
+}
+
+async function setSelectionMode(field, mode) {
+  if (props.readonly || props.saving || mode === selectionMode(field)) return;
+  if (mode === "partial") {
+    if (props[field] === null) {
+      if (!catalogReady.value[field]) return;
+      if (!(await applySelection(field, editableSelection(field)))) return;
+    }
+    editingPartial.value[field] = true;
+  } else if (await applySelection(field, mode === "all" ? null : [])) {
+    editingPartial.value[field] = false;
+    removed.value = removed.value.filter((row) => row.field !== field);
+  }
+}
+
+function replaceSource(field, group, items) {
+  const target = group.items[0];
+  const value = editableSelection(field).filter((entry) =>
+    typeof entry === "string"
+      ? !group.items.some(
+          (item) =>
+            item.legacyName === entry && matches(field, entry).length === 1,
+        )
+      : !sameSource(entry, target),
+  );
+  if (items === null || items.length > 0) {
+    const { kind, source, source_id } = target;
+    value.push({ kind, source, source_id: source_id ?? null, items });
+  }
+  return value;
+}
+
+async function applySelection(field, value) {
+  if (props.readonly || props.saving) return false;
+  conflict.value = "";
+  const tools =
+    field === "all" ? value.tools : field === "tools" ? value : props.tools;
+  const selectedNames = new Map();
+  for (const item of catalog.value.tools) {
+    if (tools !== null && selected("tools", item, tools)) {
+      if (
+        selectedNames.has(item.legacyName) &&
+        selectedNames.get(item.legacyName) !== item.key
+      ) {
+        conflict.value = item.legacyName;
+        return false;
+      }
+      selectedNames.set(item.legacyName, item.key);
+    }
   }
   if (props.updateCapability) {
-    return (
-      (await props.updateCapability(field, nextValue, previousValue)) !== false
-    );
+    const previous =
+      field === "all"
+        ? { tools: props.tools, skills: props.skills }
+        : props[field];
+    return (await props.updateCapability(field, value, previous)) !== false;
   }
-  emit(field === "tools" ? "update:tools" : "update:skills", nextValue);
+  if (field === "all") {
+    emit("update:tools", value.tools);
+    emit("update:skills", value.skills);
+  } else {
+    emit(field === "tools" ? "update:tools" : "update:skills", value);
+  }
   return true;
 }
 
-async function toggleCapabilities(field, names, toggleGroup = false) {
-  if (props.readonly || props.saving || names.length === 0) {
-    return;
+const groups = computed(() =>
+  Object.fromEntries(
+    fields.map((field) => {
+      const sources = new Map();
+      for (const item of catalog.value[field]) {
+        const individual = field === "skills" && item.source !== "plugin";
+        const key = individual
+          ? item.key
+          : JSON.stringify([item.source, item.source_id]);
+        if (!sources.has(key))
+          sources.set(key, {
+            key,
+            name: individual ? item.name : item.label,
+            items: [],
+            individual,
+          });
+        sources.get(key).items.push(item);
+      }
+      return [
+        field,
+        [...sources.values()].map((group) => {
+          const eligible = group.items.filter((item) => item.active !== false);
+          const count = eligible.filter((item) => selected(field, item)).length;
+          const item = group.items[0];
+          return {
+            ...group,
+            eligible,
+            selected: eligible.length > 0 && count === eligible.length,
+            indeterminate: count > 0 && count < eligible.length,
+            disabled: eligible.length === 0,
+            configurable: !group.individual && eligible.length > 0,
+            description: group.individual ? item.description : "",
+            badge: sourceLabels.value[item.source],
+            meta: group.individual
+              ? ""
+              : tm(
+                  `personaQuickPreview.${
+                    field === "tools" ? "toolCount" : "skillCount"
+                  }`,
+                  { selected: count, total: eligible.length },
+                ),
+          };
+        }),
+      ];
+    }),
+  ),
+);
+
+function toggleGroup(field, group) {
+  if (group.eligible.length === 0) return;
+  if (!group.individual) {
+    return applySelection(
+      field,
+      replaceSource(field, group, group.selected ? [] : null),
+    );
   }
 
-  const availableNames =
-    field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
-  const previousValue = props[field];
-  const selectedNames =
-    previousValue === null
-      ? [...availableNames]
-      : [...(Array.isArray(previousValue) ? previousValue : [])];
-  const allTargetsSelected = names.every((name) =>
-    selectedNames.includes(name),
-  );
-
-  if (toggleGroup && !allTargetsSelected) {
-    for (const name of names) {
-      if (!selectedNames.includes(name)) {
-        selectedNames.push(name);
-      }
+  const [item] = group.eligible;
+  let value = editableSelection(field);
+  if (group.selected) {
+    value = removeItem(field, value, item);
+    if (matches(field, item.legacyName).length === 1) {
+      value = value.filter((entry) => entry !== item.legacyName);
     }
   } else {
-    for (const name of names) {
-      const index = selectedNames.indexOf(name);
-      if (index === -1) {
-        selectedNames.push(name);
-      } else {
-        selectedNames.splice(index, 1);
-      }
-    }
+    addItem(value, item);
   }
-
-  const nextValue =
-    availableNames.length > 0 &&
-    (field !== "tools" || unlistedSavedTools.value.length === 0) &&
-    availableNames.every((name) => selectedNames.includes(name))
-      ? null
-      : selectedNames;
-  await applyCapabilityUpdate(field, nextValue, previousValue);
+  return applySelection(field, value);
 }
 
-function openSelectionDialog(field, group, items) {
-  if (props.readonly || props.saving || !items?.length) {
-    return;
-  }
-  const isToolDialog = field === "tools";
+function openSelection(field, group) {
+  const saved = (props[field] || []).find(
+    (entry) => typeof entry !== "string" && sameSource(entry, group.items[0]),
+  );
+  const keys = group.items
+    .filter((item) => selected(field, item))
+    .map((item) => item.key);
+  const mode =
+    saved?.items === null || (props[field] === null && group.selected)
+      ? "all"
+      : keys.length || saved?.items?.length
+      ? "partial"
+      : "none";
   selectionDialog.value = {
-    show: true,
     field,
-    name: group.name,
-    titleKey: isToolDialog
-      ? "personaQuickPreview.toolDialogTitle"
-      : "personaQuickPreview.skillDialogTitle",
-    hintKey: isToolDialog
-      ? "personaQuickPreview.toolDialogHint"
-      : "personaQuickPreview.skillDialogHint",
-    selectAllKey: isToolDialog
-      ? "personaQuickPreview.selectAllTools"
-      : "personaQuickPreview.selectAllSkills",
-    inactiveKey: isToolDialog
-      ? "personaQuickPreview.toolInactive"
-      : "personaQuickPreview.skillInactive",
-    items,
-    selectedNames: items
-      .filter((item) => isCapabilitySelected(field, item.name))
-      .map((item) => item.name),
+    group,
+    mode,
+    initialMode: mode,
+    keys,
+    changed: false,
+    unlistedItems:
+      saved?.items?.filter(
+        (name) => !group.items.some((item) => item.name === name),
+      ) ?? [],
   };
 }
 
-function closeSelectionDialog() {
-  if (!props.saving) {
-    selectionDialog.value.show = false;
-  }
-}
-
-function toggleDialogItem(itemName) {
-  const item = selectionDialog.value.items.find(
-    (candidate) => candidate.name === itemName,
-  );
-  if (!item || item.active === false || props.saving) {
-    return;
-  }
-  const selectedNames = [...selectionDialog.value.selectedNames];
-  const index = selectedNames.indexOf(itemName);
-  if (index === -1) {
-    selectedNames.push(itemName);
-  } else {
-    selectedNames.splice(index, 1);
-  }
-  selectionDialog.value.selectedNames = selectedNames;
-}
-
-function toggleAllDialogItems() {
-  if (props.saving || dialogSelectableItems.value.length === 0) {
-    return;
-  }
-  const selectableNames = dialogSelectableItems.value.map((item) => item.name);
-  if (dialogAllSelected.value) {
-    selectionDialog.value.selectedNames =
-      selectionDialog.value.selectedNames.filter(
-        (name) => !selectableNames.includes(name),
-      );
-  } else {
-    selectionDialog.value.selectedNames = [
-      ...new Set([...selectionDialog.value.selectedNames, ...selectableNames]),
-    ];
-  }
+function toggleDialogItem(item, enabled) {
+  const dialog = selectionDialog.value;
+  dialog.changed = true;
+  dialog.keys = enabled
+    ? [...dialog.keys, item.key]
+    : dialog.keys.filter((key) => key !== item.key);
 }
 
 async function saveSelectionDialog() {
-  if (props.readonly || props.saving) {
+  const { field, group, keys, mode, initialMode, changed, unlistedItems } =
+    selectionDialog.value;
+  if (mode === initialMode && !changed) {
+    selectionDialog.value = null;
     return;
   }
-  const field = selectionDialog.value.field;
-  const availableNames =
-    field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
-  const previousValue = props[field];
-  const selectedNames =
-    previousValue === null
-      ? [...availableNames]
-      : [...(Array.isArray(previousValue) ? previousValue : [])];
-  const dialogItemNames = selectionDialog.value.items.map((item) => item.name);
-  const nextSelectedNames = selectedNames.filter(
-    (name) => !dialogItemNames.includes(name),
-  );
-  nextSelectedNames.push(...selectionDialog.value.selectedNames);
-  const nextValue =
-    (field !== "tools" || unlistedSavedTools.value.length === 0) &&
-    availableNames.every((name) => nextSelectedNames.includes(name))
+
+  const items =
+    mode === "all"
       ? null
-      : [...new Set(nextSelectedNames)];
-  if (await applyCapabilityUpdate(field, nextValue, previousValue)) {
-    selectionDialog.value.show = false;
+      : mode === "none"
+      ? []
+      : [
+          ...new Set([
+            ...group.items
+              .filter((item) => keys.includes(item.key))
+              .map((item) => item.name),
+            ...unlistedItems,
+          ]),
+        ];
+  if (await applySelection(field, replaceSource(field, group, items))) {
+    selectionDialog.value = null;
   }
 }
+
+const legacy = computed(() =>
+  fields.flatMap((field) =>
+    [
+      ...new Set(
+        (props[field] || []).filter((entry) => typeof entry === "string"),
+      ),
+    ].map((name) => {
+      const candidates = matches(field, name);
+      return { field, name, id: JSON.stringify([field, name]), candidates };
+    }),
+  ),
+);
+
+const catalogReady = computed(() => ({
+  tools: props.availableTools !== null && !props.loadingTools,
+  skills: props.availableSkills !== null && !props.loadingSkills,
+}));
+const canPreviewUpgrade = computed(() =>
+  legacy.value.every(({ field }) => catalogReady.value[field]),
+);
+const matchedLegacy = computed(() =>
+  legacy.value.filter((row) => row.candidates.length > 0),
+);
+
+const unavailable = computed(() =>
+  fields.flatMap((field) =>
+    (props[field] || []).flatMap((entry) => {
+      if (typeof entry === "string") {
+        const candidates = matches(field, entry);
+        if (candidates.length === 1 && candidates[0].active !== false)
+          return [];
+        return [
+          {
+            field,
+            name: entry,
+            label: entry,
+            id: JSON.stringify([field, entry]),
+          },
+        ];
+      }
+      if (entry.items === null) {
+        const members = catalog.value[field].filter((item) =>
+          sameSource(entry, item),
+        );
+        if (members.some((item) => item.active !== false)) return [];
+        return [
+          {
+            field,
+            group: entry,
+            label: [
+              members[0]?.label ||
+                entry.source_id ||
+                sourceLabels.value[entry.source],
+              tm("personaQuickPreview.allSourceItems"),
+            ].join(" / "),
+            id: JSON.stringify([field, entry.source, entry.source_id, null]),
+          },
+        ];
+      }
+      return entry.items.flatMap((name) => {
+        if (
+          catalog.value[field].some(
+            (item) =>
+              sameSource(entry, item) &&
+              item.name === name &&
+              item.active !== false,
+          )
+        )
+          return [];
+        const item = { ...entry, name };
+        const source = catalog.value[field].find((item) =>
+          sameSource(entry, item),
+        );
+        return [
+          {
+            field,
+            item,
+            label: [
+              source?.label || entry.source_id || entry.source,
+              name,
+            ].join(" / "),
+            id: JSON.stringify([field, entry.source, entry.source_id, name]),
+          },
+        ];
+      });
+    }),
+  ),
+);
+
+const unavailableByField = computed(() =>
+  Object.fromEntries(
+    fields.map((field) => [
+      field,
+      [...unavailable.value, ...removed.value].filter(
+        (row) => row.field === field,
+      ),
+    ]),
+  ),
+);
+
+async function toggleUnavailable(row) {
+  const wasRemoved = removed.value.some((item) => item.id === row.id);
+  let value = [...(props[row.field] || [])];
+  if (wasRemoved) {
+    if (row.group) {
+      value = value.filter(
+        (entry) => typeof entry === "string" || !sameSource(entry, row.group),
+      );
+      value.push(row.group);
+    } else if (row.item) addItem(value, row.item);
+    else if (!value.includes(row.name)) value.push(row.name);
+  } else if (row.group) {
+    value = value.filter(
+      (entry) => typeof entry === "string" || !sameSource(entry, row.group),
+    );
+  } else if (row.item) {
+    value = removeItem(row.field, value, row.item);
+  } else {
+    value = value.filter((entry) => entry !== row.name);
+  }
+  if (await applySelection(row.field, value)) {
+    removed.value = wasRemoved
+      ? removed.value.filter((item) => item.id !== row.id)
+      : [...removed.value, row];
+  }
+}
+
+function openUpgrade() {
+  decisions.value = Object.fromEntries(
+    matchedLegacy.value.map(({ id, candidates }) => [
+      id,
+      candidates.length === 1 ? candidates[0].key : null,
+    ]),
+  );
+  upgradeDialog.value = true;
+}
+
+const upgraded = computed(() => {
+  const value = Object.fromEntries(
+    fields.map((field) => [
+      field,
+      props[field]?.filter((entry) => typeof entry !== "string") ?? null,
+    ]),
+  );
+  for (const { id, field, candidates } of matchedLegacy.value) {
+    const item = candidates.find((item) => item.key === decisions.value[id]);
+    if (item) addItem(value[field], item);
+  }
+  return value;
+});
+
+const upgradeReady = computed(
+  () =>
+    legacy.value.length > 0 &&
+    canPreviewUpgrade.value &&
+    matchedLegacy.value.every(
+      ({ id, candidates }) =>
+        decisions.value[id] === removeChoice ||
+        candidates.some((item) => item.key === decisions.value[id]),
+    ),
+);
 </script>
 
 <template>
   <div class="persona-capabilities-editor">
-    <PersonaCapabilityList
-      :title="tm('personaQuickPreview.toolsLabel')"
-      icon="mdi-tools"
-      :items="toolGroups"
-      :empty-text="tm('personaQuickPreview.noToolsAvailable')"
-      :inactive-text="tm('personaQuickPreview.toolInactive')"
-      :configure-text="tm('personaQuickPreview.configureTools')"
-      :readonly="readonly"
-      :saving="Boolean(saving)"
-      :loading="loadingTools"
-      @toggle="toggleCapabilities('tools', $event.toolNames, true)"
-      @toggle-all="
-        toggleCapabilities(
-          'tools',
-          toolGroups.flatMap((item) => item.toolNames),
-          true,
-        )
-      "
-      @configure="openSelectionDialog('tools', $event, $event.tools)"
-    />
+    <v-alert v-if="legacy.length" type="info" density="compact" variant="tonal">
+      {{ tm("personaQuickPreview.legacySelection") }}
+      <template v-if="!readonly" #append>
+        <v-btn
+          variant="text"
+          :disabled="Boolean(saving) || !canPreviewUpgrade"
+          @click="openUpgrade"
+        >
+          {{ tm("personaQuickPreview.previewUpgrade") }}
+        </v-btn>
+      </template>
+    </v-alert>
+    <v-alert v-if="conflict" type="warning" density="compact" variant="tonal">
+      {{ tm("personaQuickPreview.nameConflict", { name: conflict }) }}
+    </v-alert>
 
-    <v-sheet v-if="!loadingTools && unlistedSavedTools.length" border rounded="lg" class="pa-3">
-      <div class="text-subtitle-2 mb-1">{{ tm('personaQuickPreview.unlistedSavedTools') }}</div>
-      <ul class="pa-0 text-body-2">
-        <li
-          v-for="name in unlistedSavedTools"
-          :key="name"
+    <section v-for="field in fields" :key="field" class="persona-selection">
+      <h3 class="persona-selection__title">
+        <v-icon size="18">{{
+          field === "tools" ? "mdi-tools" : "mdi-lightning-bolt"
+        }}</v-icon>
+        {{ tm(fieldLabels[field]) }}
+      </h3>
+      <v-radio-group
+        :model-value="selectionMode(field)"
+        :aria-label="tm(fieldLabels[field])"
+        :disabled="readonly || Boolean(saving)"
+        class="persona-selection__modes"
+        density="compact"
+        hide-details
+        inline
+        @update:model-value="setSelectionMode(field, $event)"
+      >
+        <v-radio
+          v-for="(label, mode) in modeLabels[field]"
+          :key="mode"
+          :label="tm(label)"
+          :value="mode"
+          :disabled="
+            readonly ||
+            Boolean(saving) ||
+            (mode === 'partial' &&
+              props[field] === null &&
+              !catalogReady[field])
+          "
+        />
+      </v-radio-group>
+      <PersonaCapabilityList
+        v-if="selectionMode(field) === 'partial'"
+        :title="tm(fieldLabels[field])"
+        :items="groups[field]"
+        :empty-text="
+          tm(
+            field === 'tools'
+              ? 'personaQuickPreview.noToolsAvailable'
+              : 'personaQuickPreview.noSkills',
+          )
+        "
+        :inactive-text="
+          tm(
+            field === 'tools'
+              ? 'personaQuickPreview.toolInactive'
+              : 'personaQuickPreview.skillInactive',
+          )
+        "
+        :configure-text="
+          tm(
+            field === 'tools'
+              ? 'personaQuickPreview.configureTools'
+              : 'personaQuickPreview.configureSkills',
+          )
+        "
+        :readonly="readonly"
+        :saving="Boolean(saving)"
+        :loading="field === 'tools' ? loadingTools : loadingSkills"
+        @toggle="toggleGroup(field, $event)"
+        @configure="openSelection(field, $event)"
+      />
+      <v-sheet
+        v-if="
+          selectionMode(field) === 'partial' &&
+          !(field === 'tools' ? loadingTools : loadingSkills) &&
+          unavailableByField[field].length
+        "
+        border
+        rounded="lg"
+        class="pa-3"
+      >
+        <div class="text-subtitle-2 mb-1">
+          {{
+            tm(
+              field === "tools"
+                ? "personaQuickPreview.unlistedSavedTools"
+                : "personaQuickPreview.unlistedSavedSkills",
+            )
+          }}
+        </div>
+        <div
+          v-for="row in unavailableByField[field]"
+          :key="row.id"
           class="d-flex align-center justify-space-between ga-2"
         >
           <span
             class="text-break"
             :class="{
-              'text-decoration-line-through text-medium-emphasis': removedUnlistedTools?.includes(name),
+              'text-decoration-line-through': removed.some(
+                (item) => item.id === row.id,
+              ),
             }"
+            >{{ row.label }}</span
           >
-            {{ name }}
-          </span>
           <v-btn
-            v-if="removedUnlistedTools && !readonly"
+            v-if="!readonly"
             type="button"
             variant="text"
             size="small"
-            :color="removedUnlistedTools.includes(name) ? 'primary' : 'error'"
             :disabled="Boolean(saving)"
-            :ripple="false"
-            :aria-label="`${removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : tm('personaQuickPreview.removeSavedTool')} ${name}`"
-            @click="toggleUnlistedToolRemoval(name)"
+            @click="toggleUnavailable(row)"
           >
-            {{ removedUnlistedTools.includes(name) ? tm('personaQuickPreview.undoToolRemoval') : tm('personaQuickPreview.removeSavedTool') }}
+            {{
+              tm(
+                removed.some((item) => item.id === row.id)
+                  ? "personaQuickPreview.undoToolRemoval"
+                  : "personaQuickPreview.removeSavedTool",
+              )
+            }}
           </v-btn>
-        </li>
-      </ul>
-    </v-sheet>
-
-    <PersonaCapabilityList
-      :title="tm('personaQuickPreview.skillsLabel')"
-      icon="mdi-lightning-bolt"
-      :items="skillItems"
-      :empty-text="tm('personaQuickPreview.noSkills')"
-      :inactive-text="tm('personaQuickPreview.skillInactive')"
-      :configure-text="tm('personaQuickPreview.configureSkills')"
-      :readonly="readonly"
-      :saving="Boolean(saving)"
-      :loading="loadingSkills"
-      @toggle="
-        toggleCapabilities(
-          'skills',
-          $event.skillNames || [$event.name],
-          Boolean($event.skillNames),
-        )
-      "
-      @toggle-all="
-        toggleCapabilities(
-          'skills',
-          skillItems.flatMap((item) => item.skillNames || [item.name]),
-          true,
-        )
-      "
-      @configure="openSelectionDialog('skills', $event, $event.skills)"
-    />
+        </div>
+      </v-sheet>
+    </section>
 
     <v-dialog
-      v-model="selectionDialog.show"
+      :model-value="Boolean(selectionDialog)"
       max-width="640"
       scrollable
       :persistent="Boolean(saving)"
+      @update:model-value="!$event && (selectionDialog = null)"
     >
-      <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-          {{ tm(selectionDialog.titleKey, { name: selectionDialog.name }) }}
-        </v-card-title>
+      <v-card v-if="selectionDialog">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          selectionDialog.group.name
+        }}</v-card-title>
         <v-card-text class="pa-6">
-          <div class="capability-dialog__hint">
-            {{ tm(selectionDialog.hintKey) }}
-          </div>
-
+          <v-alert
+            v-if="conflict"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            {{ tm("personaQuickPreview.nameConflict", { name: conflict }) }}
+          </v-alert>
           <v-alert
             v-if="error"
             type="error"
             variant="tonal"
             density="compact"
             class="mb-3"
+            >{{ error }}</v-alert
           >
-            {{ tm("personaQuickPreview.saveFailed", { message: error }) }}
-          </v-alert>
-
-          <div class="capability-dialog__select-all">
-            <v-checkbox-btn
-              :model-value="dialogAllSelected"
-              :indeterminate="dialogPartiallySelected"
-              :disabled="dialogSelectableItems.length === 0"
-              :aria-label="tm(selectionDialog.selectAllKey)"
-              density="compact"
-              @click.stop="toggleAllDialogItems"
+          <v-radio-group
+            v-model="selectionDialog.mode"
+            :aria-label="selectionDialog.group.name"
+            :disabled="Boolean(saving)"
+            class="persona-selection__modes"
+            density="compact"
+            hide-details
+            inline
+          >
+            <v-radio
+              v-for="(label, mode) in modeLabels[selectionDialog.field]"
+              :key="mode"
+              :label="tm(label)"
+              :value="mode"
             />
-            <span>{{ tm(selectionDialog.selectAllKey) }}</span>
-          </div>
-
-          <v-list class="capability-dialog__list" density="compact">
+          </v-radio-group>
+          <v-list
+            v-if="selectionDialog.mode === 'partial'"
+            class="mt-3"
+            density="compact"
+          >
             <v-list-item
-              v-for="item in selectionDialog.items"
-              :key="item.name"
-              :disabled="item.active === false"
-              class="capability-dialog__item"
-              @click="toggleDialogItem(item.name)"
+              v-for="item in selectionDialog.group.items"
+              :key="item.key"
             >
               <template #prepend>
                 <v-checkbox-btn
-                  :model-value="
-                    selectionDialog.selectedNames.includes(item.name)
-                  "
-                  :disabled="item.active === false"
+                  :model-value="selectionDialog.keys.includes(item.key)"
+                  :disabled="item.active === false || Boolean(saving)"
                   :aria-label="item.name"
-                  density="compact"
-                  @click.stop="toggleDialogItem(item.name)"
+                  @update:model-value="toggleDialogItem(item, $event)"
                 />
               </template>
               <v-list-item-title>{{ item.name }}</v-list-item-title>
-              <v-list-item-subtitle v-if="item.description">
-                {{ item.description }}
-              </v-list-item-subtitle>
-              <template v-if="item.active === false" #append>
-                <v-chip size="x-small" variant="tonal" color="warning">
-                  {{ tm(selectionDialog.inactiveKey) }}
-                </v-chip>
-              </template>
+              <v-list-item-subtitle v-if="item.description">{{
+                item.description
+              }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-card-text>
@@ -552,17 +723,143 @@ async function saveSelectionDialog() {
           <v-btn
             variant="text"
             :disabled="Boolean(saving)"
-            @click="closeSelectionDialog"
+            @click="selectionDialog = null"
+            >{{ t("core.common.cancel") }}</v-btn
           >
-            {{ t("core.common.cancel") }}
-          </v-btn>
           <v-btn
             color="primary"
             variant="tonal"
-            :loading="saving === selectionDialog.field"
+            :loading="Boolean(saving)"
             @click="saveSelectionDialog"
           >
             {{ t("core.common.save") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog
+      v-model="upgradeDialog"
+      max-width="640"
+      scrollable
+      :persistent="Boolean(saving)"
+    >
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("personaQuickPreview.previewUpgrade")
+        }}</v-card-title>
+        <v-card-text class="pa-6">
+          <p class="mb-4">{{ tm("personaQuickPreview.upgradeHelp") }}</p>
+          <v-alert
+            v-if="conflict"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            {{ tm("personaQuickPreview.nameConflict", { name: conflict }) }}
+          </v-alert>
+          <v-alert
+            v-if="error"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            >{{ error }}</v-alert
+          >
+          <template v-for="field in fields" :key="field">
+            <h3 class="text-subtitle-1 mb-2">
+              {{
+                tm(
+                  field === "tools"
+                    ? "personaQuickPreview.toolsLabel"
+                    : "personaQuickPreview.skillsLabel",
+                )
+              }}
+            </h3>
+            <v-select
+              v-for="row in matchedLegacy.filter(
+                (entry) => entry.field === field,
+              )"
+              :key="row.id"
+              v-model="decisions[row.id]"
+              :label="row.name"
+              density="compact"
+              variant="outlined"
+              :items="[
+                ...row.candidates.map((item) => ({
+                  title: [item.source, item.label || item.source_id, item.name]
+                    .filter(Boolean)
+                    .join(' / '),
+                  value: item.key,
+                })),
+                {
+                  title: tm('personaQuickPreview.removeSavedTool'),
+                  value: removeChoice,
+                },
+              ]"
+              :hint="
+                tm(
+                  row.candidates.length === 1
+                    ? 'personaQuickPreview.currentMatch'
+                    : 'personaQuickPreview.chooseSource',
+                )
+              "
+              persistent-hint
+              class="mb-3"
+            />
+            <div
+              v-for="group in upgraded[field]"
+              :key="JSON.stringify([group.source, group.source_id])"
+              class="mb-3"
+            >
+              <div class="text-body-2 font-weight-medium">
+                {{
+                  [
+                    group.source,
+                    catalog[field].find((item) => sameSource(group, item))
+                      ?.label,
+                    group.source_id,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ")
+                }}
+              </div>
+              <div class="text-body-2 text-medium-emphasis">
+                {{
+                  group.items?.join(", ") ??
+                  tm("personaQuickPreview.allSourceItems")
+                }}
+              </div>
+            </div>
+          </template>
+        </v-card-text>
+        <v-card-actions class="justify-end px-6 pb-4">
+          <v-btn
+            variant="text"
+            :disabled="Boolean(saving)"
+            @click="upgradeDialog = false"
+            >{{ t("core.common.cancel") }}</v-btn
+          >
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :disabled="!upgradeReady"
+            :loading="Boolean(saving)"
+            @click="
+              async () => {
+                if (await applySelection('all', upgraded))
+                  upgradeDialog = false;
+              }
+            "
+          >
+            {{
+              tm(
+                updateCapability
+                  ? "personaQuickPreview.saveUpgrade"
+                  : "personaQuickPreview.applyUpgrade",
+              )
+            }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -577,29 +874,21 @@ async function saveSelectionDialog() {
   gap: 14px;
 }
 
-.capability-dialog__hint {
-  margin-bottom: 12px;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 0.84rem;
-  opacity: 0.65;
+.persona-selection {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
 }
 
-.capability-dialog__select-all {
+.persona-selection__title {
   display: flex;
   align-items: center;
-  min-height: 42px;
-  padding: 0 8px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  font-size: 0.86rem;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
-.capability-dialog__list {
-  max-height: min(560px, 60vh);
-  overflow-y: auto;
-}
-
-.capability-dialog__item {
-  min-height: 52px;
-  border-radius: 6px;
+.persona-selection__modes :deep(.v-selection-control-group--inline) {
+  gap: 2px 12px;
 }
 </style>

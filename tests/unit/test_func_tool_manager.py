@@ -25,7 +25,7 @@ async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
         return None
 
     manager.add_func("custom_tool", [], "Custom tool", handler)
-    get_async = AsyncMock(return_value=[])
+    get_async = AsyncMock(return_value={"permission": "admin"})
     put_async = AsyncMock()
     monkeypatch.setattr(ftm.sp, "get_async", get_async)
     monkeypatch.setattr(ftm.sp, "put_async", put_async)
@@ -33,22 +33,22 @@ async def test_async_tool_toggle_waits_for_preference_persistence(monkeypatch):
     assert await manager.deactivate_llm_tool_async("custom_tool") is True
     assert manager.get_func("custom_tool").active is False
     put_async.assert_awaited_once_with(
+        "global_resource_settings",
         "global",
-        "global",
-        "inactivated_llm_tools",
-        ["custom_tool"],
+        "astrbot/tools/custom_tool",
+        {"enabled": False, "permission": "admin"},
     )
 
-    get_async.return_value = ["custom_tool"]
+    get_async.return_value = {"enabled": False, "permission": "admin"}
     put_async.reset_mock()
 
     assert await manager.activate_llm_tool_async("custom_tool", {}) is True
     assert manager.get_func("custom_tool").active is True
     put_async.assert_awaited_once_with(
+        "global_resource_settings",
         "global",
-        "global",
-        "inactivated_llm_tools",
-        [],
+        "astrbot/tools/custom_tool",
+        {"enabled": True, "permission": "admin"},
     )
 
 

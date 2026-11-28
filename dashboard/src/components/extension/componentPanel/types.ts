@@ -109,6 +109,8 @@ export interface ToolItem {
   origin?: string;
   origin_name?: string;
   registered?: boolean;
+  resource_key?: string;
+  resource?: { key: string };
   inactive_configured?: boolean;
   permission?: 'admin' | 'member' | null;
   /** True when permission was explicitly configured rather than a fallback default. */

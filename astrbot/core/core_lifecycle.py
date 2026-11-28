@@ -39,6 +39,7 @@ from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.process_restart import restart_process
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.resource_settings import migrate_legacy_settings
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
@@ -199,6 +200,13 @@ class AstrBotCoreLifecycle:
         except Exception as e:
             logger.error(f"AstrBot migration failed: {e!s}")
             logger.error(traceback.format_exc())
+
+        try:
+            from astrbot.core.skills.skill_manager import SkillManager
+
+            await migrate_legacy_settings(Path(SkillManager().config_path))
+        except (OSError, ValueError):
+            logger.exception("Could not migrate legacy resource settings")
 
         # 初始化事件队列
         self.event_queue = Queue()

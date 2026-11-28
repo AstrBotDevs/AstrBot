@@ -124,7 +124,7 @@
           <div v-else class="skills-list">
             <OutlinedActionListItem
               v-for="skill in filteredSkills"
-              :key="skill.name"
+              :key="skill.resource?.key || skill.name"
               :title="skill.name"
               class="skill-list-item"
               :class="{
@@ -202,7 +202,7 @@
                       size="small"
                       class="list-action-icon-btn"
                       :disabled="
-                        itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                        itemLoading[skill.resource?.key || skill.name] || isReadOnlySourceSkill(skill)
                       "
                       @click.stop="downloadSkill(skill)"
                     />
@@ -221,7 +221,7 @@
                       size="small"
                       class="list-action-icon-btn"
                       :disabled="
-                        itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                        itemLoading[skill.resource?.key || skill.name] || isReadOnlySourceSkill(skill)
                       "
                       @click.stop="confirmDelete(skill)"
                     />
@@ -248,9 +248,9 @@
                           ? tm('skills.disable')
                           : tm('skills.enable')
                       "
-                      :loading="itemLoading[skill.name] || false"
+                      :loading="itemLoading[skill.resource?.key || skill.name] || false"
                       :disabled="
-                        itemLoading[skill.name] ||
+                        itemLoading[skill.resource?.key || skill.name] ||
                         isSandboxPresetSkill(skill) ||
                         isInactivePluginSkill(skill)
                       "
@@ -1600,9 +1600,9 @@ export default {
         return;
       }
       const nextActive = !skill.active;
-      itemLoading[skill.name] = true;
+      itemLoading[skill.resource?.key || skill.name] = true;
       try {
-        const res = await skillApi.setEnabled(skill.name, nextActive);
+        const res = await skillApi.setEnabled(skill.name, nextActive, skill.resource?.key);
         handleApiResponse(
           res,
           tm("skills.updateSuccess"),
@@ -1614,7 +1614,7 @@ export default {
       } catch (_err) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
-        itemLoading[skill.name] = false;
+        itemLoading[skill.resource?.key || skill.name] = false;
       }
     };
 
@@ -1661,7 +1661,7 @@ export default {
         showMessage(tm("skills.pluginReadonly"), "warning");
         return;
       }
-      itemLoading[skill.name] = true;
+      itemLoading[skill.resource?.key || skill.name] = true;
       try {
         const res = await skillApi.download(skill.name);
         const blob = new Blob([res.data], { type: "application/zip" });
@@ -1677,7 +1677,7 @@ export default {
       } catch (_err) {
         showMessage(tm("skills.downloadFailed"), "error");
       } finally {
-        itemLoading[skill.name] = false;
+        itemLoading[skill.resource?.key || skill.name] = false;
       }
     };
 

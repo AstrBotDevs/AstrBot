@@ -51,7 +51,7 @@ const getPermissionLabel = (permission?: string | null): string => {
     <v-data-table
       :headers="toolHeaders"
       :items="items"
-      item-value="name"
+      :item-value="(item) => item.resource?.key || item.resource_key || item.name"
       hover
       show-expand
       class="tool-table"

@@ -1660,7 +1660,7 @@ class TestEnsurePersonaAndSkills:
         )
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.func_list = [tool_a, tool_b]
-        tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
+        tmgr.get_registered_tools.return_value = [tool_a, tool_b]
         tmgr.get_func.side_effect = lambda name: {
             "tool_a": tool_a,
             "tool_b": tool_b,
@@ -3509,6 +3509,7 @@ async def test_feature_composition_preserves_tool_scope_and_instruction_order(
     ]
     registered[-1].handler_module_path = "plugins.disabled"
     tool_mgr = mock_context.get_llm_tool_manager.return_value
+    tool_mgr.get_registered_tools.return_value = registered
     tool_mgr.get_func.side_effect = lambda name: next(
         (tool for tool in registered if tool.name == name), None
     )

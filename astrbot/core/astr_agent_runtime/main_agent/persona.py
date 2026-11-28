@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 
 from astrbot.core import logger
-from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -13,6 +12,11 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.resource_settings import (
+    PersonaSelection,
+    resolve_tools,
+    selected_members,
+)
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
@@ -144,29 +148,12 @@ async def apply_persona(
 
     tmgr = plugin_context.get_llm_tool_manager()
 
-    # inject toolset in the persona
-    if (persona and persona.get("tools") is None) or not persona:
-        persona_toolset = (
-            ToolSet(tools=list(plugin_tools.tools))
-            if plugin_tools is not None
-            else tmgr.get_full_tool_set()
-        )
-        for tool in list(persona_toolset):
-            if not tool.active:
-                persona_toolset.remove_tool(tool.name)
-    else:
-        persona_toolset = ToolSet()
-        if persona["tools"]:
-            for tool_name in persona["tools"]:
-                tool = (
-                    plugin_tools.get_tool(tool_name)
-                    if plugin_tools is not None
-                    else tmgr.get_func(tool_name)
-                )
-                if isinstance(tool, MCPTool):
-                    tool = tmgr.get_full_tool_set().get_tool(tool.name)
-                if tool and tool.active:
-                    persona_toolset.add_tool(tool)
+    candidates = (
+        plugin_tools.tools if plugin_tools is not None else tmgr.get_registered_tools()
+    )
+    persona_toolset = ToolSet(
+        tools=resolve_tools(persona.get("tools") if persona else None, candidates)
+    )
     if not req.func_tool:
         req.func_tool = persona_toolset
     else:
@@ -197,7 +184,7 @@ async def apply_skills(
     plugin_context: Context,
     event: AstrMessageEvent,
     *,
-    allowed_skills: list[str] | None = None,
+    allowed_skills: PersonaSelection = None,
     plugin_skills: list[SkillInfo] | None = None,
 ) -> None:
     """Compose runtime skills and authorized plugin skills under persona selection.
@@ -215,7 +202,9 @@ async def apply_skills(
     skill_manager = None
     try:
         skill_manager = SkillManager()
-        skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+        skills = skill_manager.list_skills(
+            active_only=True, runtime=runtime, include_same_names=True
+        )
         if plugin_skills is not None:
             skills = sorted(
                 [skill for skill in skills if skill.source_type != "plugin"]
@@ -234,17 +223,29 @@ async def apply_skills(
         workspace_skills.extend(skill_manager.list_workspace_skills(workspace_root))
 
     if skills or workspace_skills:
+        by_ref = {skill.resource_ref: skill for skill in skills}
+        by_name = {}
+        for skill in skills:
+            by_name.setdefault(skill.name, skill)
+        explicit_names = set()
         if allowed_skills is not None:
-            if not allowed_skills:
-                skills = []
-            else:
-                allowed = set(allowed_skills)
-                skills = [skill for skill in skills if skill.name in allowed]
+            selected = {}
+            for ref in selected_members(allowed_skills, "skill", by_ref):
+                if isinstance(ref, str):
+                    if ref in by_name and ref not in explicit_names:
+                        selected.setdefault(ref, by_name[ref])
+                elif ref.name not in explicit_names:
+                    explicit_names.add(ref.name)
+                    if ref in by_ref:
+                        selected[ref.name] = by_ref[ref]
+                    else:
+                        selected.pop(ref.name, None)
+            by_name = selected
         if workspace_skills and allowed_skills != []:
-            skills_by_name = {skill.name: skill for skill in skills}
             for skill in workspace_skills:
-                skills_by_name[skill.name] = skill
-            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
+                if skill.name not in explicit_names:
+                    by_name[skill.name] = skill
+        skills = [by_name[name] for name in sorted(by_name)]
         if skills:
             req.system_prompt += (
                 f"\n<skills_instructions>\n{build_skills_prompt(skills)}\n"

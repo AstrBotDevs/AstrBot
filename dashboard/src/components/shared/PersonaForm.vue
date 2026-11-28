@@ -72,7 +72,6 @@
                 <PersonaCapabilitiesEditor
                   v-model:tools="personaForm.tools"
                   v-model:skills="personaForm.skills"
-                  v-model:removed-unlisted-tools="removedUnlistedTools"
                   :available-tools="availableTools"
                   :available-skills="availableSkills"
                   :loading-tools="loadingTools"
@@ -214,12 +213,11 @@ const { smAndDown } = useDisplay();
 const saving = ref(false);
 const formValid = ref(false);
 const expandedPanels = ref([]);
-const availableTools = ref([]);
-const availableSkills = ref([]);
+const availableTools = ref(null);
+const availableSkills = ref(null);
 const loadingTools = ref(false);
 const loadingSkills = ref(false);
 const existingPersonaIds = ref([]);
-const removedUnlistedTools = ref([]);
 const personaForm = reactive({
   persona_id: "",
   system_prompt: "",
@@ -254,7 +252,6 @@ const systemPromptRules = computed(() => [
 ]);
 
 function initializeForm(persona = null) {
-  removedUnlistedTools.value = [];
   Object.assign(personaForm, {
     persona_id: persona?.persona_id || "",
     system_prompt: persona?.system_prompt || "",
@@ -280,11 +277,11 @@ async function loadTools() {
     if (response.data?.status === "ok") {
       availableTools.value = response.data?.data || [];
     } else {
-      availableTools.value = [];
+      availableTools.value = null;
       emit("error", response.data?.message || "Failed to load tools");
     }
   } catch (error) {
-    availableTools.value = [];
+    availableTools.value = null;
     emit("error", error?.response?.data?.message || "Failed to load tools");
   } finally {
     loadingTools.value = false;
@@ -298,13 +295,13 @@ async function loadSkills() {
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
       const skills = Array.isArray(payload) ? payload : payload.skills || [];
-      availableSkills.value = skills.filter((skill) => skill.active !== false);
+      availableSkills.value = skills;
     } else {
-      availableSkills.value = [];
+      availableSkills.value = null;
       emit("error", response.data?.message || "Failed to load skills");
     }
   } catch (error) {
-    availableSkills.value = [];
+    availableSkills.value = null;
     emit("error", error?.response?.data?.message || "Failed to load skills");
   } finally {
     loadingSkills.value = false;
@@ -340,8 +337,7 @@ async function savePersona() {
   const payload = {
     ...personaForm,
     begin_dialogs: [...personaForm.begin_dialogs],
-    tools:
-      personaForm.tools?.filter((name) => !removedUnlistedTools.value.includes(name)) ?? null,
+    tools: personaForm.tools === null ? null : [...personaForm.tools],
     skills: personaForm.skills === null ? null : [...personaForm.skills],
   };
   try {
