@@ -1,31 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
 import { ArrowUpRight, PanelsTopLeft } from "@lucide/vue";
-import { fetchWithAuth } from "@/api/http";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { resolvePluginViewText } from "@/utils/pluginI18n";
 import type { WorkbenchView } from "@/utils/chatViews";
 
-defineEmits<{ open: [view: WorkbenchView] }>();
+// The workbench loads the view catalog, since it also decides whether to show +.
+defineProps<{ views: WorkbenchView[]; loading: boolean; failed: boolean }>();
+defineEmits<{ open: [view: WorkbenchView]; retry: [] }>();
 const { locale } = useI18n();
 const { tm } = useModuleI18n("features/chat");
-const views = ref<WorkbenchView[]>([]);
-const loading = ref(true);
-const failed = ref(false);
-async function load() {
-  loading.value = true;
-  failed.value = false;
-  try {
-    const response = await fetchWithAuth("/api/v1/chat/workbench/views");
-    if (!response.ok) throw new Error("Workbench catalog unavailable");
-    views.value = (await response.json()).data;
-  } catch {
-    failed.value = true;
-  } finally {
-    loading.value = false;
-  }
-}
-onMounted(load);
 </script>
 
 <template>
@@ -35,7 +18,7 @@ onMounted(load);
     <v-progress-linear v-if="loading" indeterminate color="primary" />
     <div v-else-if="failed" role="status">
       <p>{{ tm("workbench.loadError") }}</p>
-      <v-btn variant="text" @click="load">{{ tm("workbench.retry") }}</v-btn>
+      <v-btn variant="text" @click="$emit('retry')">{{ tm("workbench.retry") }}</v-btn>
     </div>
     <p v-else-if="!views.length">{{ tm("workbench.empty") }}</p>
     <button
