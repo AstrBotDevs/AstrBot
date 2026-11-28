@@ -4,6 +4,9 @@ from openai.types.chat.chat_completion import ChatCompletion
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
 
+thinking_close = "</" + "thinking>"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("content", "reasoning_field", "answer", "reasoning"),
@@ -29,12 +32,51 @@ from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
         ("<thinker>Example</thinker>", None, "<thinker>Example</thinker>", None),
         ("<thinking>Inline</thinking>Answer", "Structured", "Answer", "Structured"),
         ("<thinking>Inline</thinking>Answer", "", "Answer", ""),
-        ("<thinking>Unfinished", None, "<thinking>Unfinished", None),
+        (
+            "<thinking>Unfinished",
+            None,
+            "",
+            "<thinking>Unfinished",
+        ),
         (
             "<think>Example</thinking>Answer",
             None,
-            "<think>Example</thinking>Answer",
+            "Answer",
+            "Example",
+        ),
+        (
+            (
+                f"Draft one{thinking_close}\n"
+                f"Intermediate draft{thinking_close}\n"
+                "Final answer"
+            ),
             None,
+            "Final answer",
+            f"Draft one{thinking_close}\nIntermediate draft{thinking_close}",
+        ),
+        (
+            f"Draft{thinking_close}\nFinal answer",
+            None,
+            "Final answer",
+            f"Draft{thinking_close}",
+        ),
+        (
+            f"Literal closing tag {thinking_close} remains visible",
+            None,
+            f"Literal closing tag {thinking_close} remains visible",
+            None,
+        ),
+        (
+            f"Examples: {thinking_close} and {thinking_close}",
+            None,
+            f"Examples: {thinking_close} and",
+            None,
+        ),
+        (
+            f"Draft{thinking_close}\nPrefix <thinking>Unfinished",
+            None,
+            "",
+            f"Draft{thinking_close}\n<thinking>Unfinished",
         ),
     ],
 )

@@ -1053,17 +1053,76 @@ class ProviderOpenAIOfficial(Provider):
         if choice.message.content is not None:
             completion_text = self._normalize_content(choice.message.content)
             # Some compatible providers wrap reasoning in <think> or <thinking> tags.
-            # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<(think|thinking)>(.*?)</\1>", re.DOTALL)
+            # Accept either supported closing spelling for compatibility.
+            reasoning_pattern = re.compile(
+                r"<(?:think|thinking)>(.*?)</(?:think|thinking)>",
+                re.DOTALL | re.IGNORECASE,
+            )
             matches = reasoning_pattern.findall(completion_text)
             if matches:
                 llm_response.reasoning_content = "\n".join(
-                    [match[1].strip() for match in matches],
+                    [match.strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Also clean up trailing reasoning closing tags from some models.
+
+            closing_tag_pattern = re.compile(
+                r"</(?:think|thinking)>",
+                re.IGNORECASE,
+            )
+            # A provider may omit opening tags and use line-delimited closing
+            # tags as boundaries between drafts and the visible answer.
+            boundary_ends = []
+            for closing_match in closing_tag_pattern.finditer(completion_text):
+                suffix = completion_text[closing_match.end() :]
+                if re.match(r"[ \t]*\r?\n", suffix):
+                    boundary_ends.append(closing_match.end())
+            if (
+                trailing_closing_match := re.search(
+                    r"(?:^|\n)[^\n]*</(?:think|thinking)>[ \t]*$",
+                    completion_text,
+                    re.IGNORECASE,
+                )
+            ) and "\n" in completion_text[: trailing_closing_match.start()]:
+                boundary_ends.append(trailing_closing_match.end())
+            if boundary_ends:
+                answer_start = boundary_ends[-1]
+                unmatched_reasoning = completion_text[:answer_start].strip()
+                if unmatched_reasoning:
+                    llm_response.reasoning_content = "\n".join(
+                        part
+                        for part in (
+                            llm_response.reasoning_content,
+                            unmatched_reasoning,
+                        )
+                        if part
+                    )
+                completion_text = completion_text[answer_start:].strip()
+
+            opening_tag_pattern = re.compile(
+                r"<(?:think|thinking)>",
+                re.IGNORECASE,
+            )
+            if opening_match := opening_tag_pattern.search(completion_text):
+                reasoning_start = opening_match.start()
+                unmatched_reasoning = completion_text[reasoning_start:].strip()
+                if unmatched_reasoning:
+                    llm_response.reasoning_content = "\n".join(
+                        part
+                        for part in (
+                            llm_response.reasoning_content,
+                            unmatched_reasoning,
+                        )
+                        if part
+                    )
+                completion_text = ""
+
+            # Remove only a trailing delimiter so literal tag examples remain.
             completion_text = re.sub(
-                r"</(?:think|thinking)>\s*$", "", completion_text
+                r"</(?:think|thinking)>\s*$",
+                "",
+                completion_text,
+                count=1,
+                flags=re.IGNORECASE,
             ).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
         elif refusal := getattr(choice.message, "refusal", None):
