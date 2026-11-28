@@ -751,3 +751,118 @@ async def test_discord_client_acknowledges_component_before_dispatch(monkeypatch
     process_application_commands.assert_not_awaited()
     response.defer.assert_awaited_once_with()
     client.on_message_received.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_discord_typing_indicator_refreshes_until_stopped(monkeypatch):
+    """Verify typing is sent repeatedly and stops when stop_typing is called."""
+    sleep_calls = 0
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(_delay):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        await real_sleep(0)
+
+    monkeypatch.setattr(discord_platform_event.asyncio, "sleep", fake_sleep)
+
+    channel = Mock(spec=discord.TextChannel)
+    channel.trigger_typing = AsyncMock()
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = None
+    event._typing_task = None
+    event._get_channel = AsyncMock(return_value=channel)
+
+    await event.send_typing()
+    await event.send_typing()  # second call must not start another loop
+    task = event._typing_task
+
+    async def wait_for_refreshes():
+        while channel.trigger_typing.await_count < 3:
+            await real_sleep(0)
+
+    await asyncio.wait_for(wait_for_refreshes(), timeout=1)
+
+    await event.stop_typing()
+    await real_sleep(0)
+
+    assert task.cancelled()
+    assert event._typing_task is None
+    assert event._get_channel.await_count == 1
+    count = channel.trigger_typing.await_count
+    await real_sleep(0)
+    assert channel.trigger_typing.await_count == count
+
+
+@pytest.mark.asyncio
+async def test_discord_typing_skipped_for_slash_commands():
+    """Verify slash command interactions rely on Discord's deferred state."""
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = Mock()
+    event._typing_task = None
+    event._get_channel = AsyncMock()
+
+    await event.send_typing()
+    await event.stop_typing()
+
+    event._get_channel.assert_not_awaited()
+    assert event._typing_task is None
+
+
+@pytest.mark.asyncio
+async def test_discord_typing_retries_after_transient_failure(monkeypatch):
+    """Verify a failed typing request does not end the refresh loop."""
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(_delay):
+        await real_sleep(0)
+
+    monkeypatch.setattr(discord_platform_event.asyncio, "sleep", fake_sleep)
+
+    channel = Mock(spec=discord.TextChannel)
+    channel.trigger_typing = AsyncMock(
+        side_effect=[discord.HTTPException(Mock(status=500), "boom"), None, None]
+        + [None] * 100
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = None
+    event._typing_task = None
+    event._get_channel = AsyncMock(return_value=channel)
+
+    await event.send_typing()
+
+    async def wait_for_retries():
+        while channel.trigger_typing.await_count < 3:
+            await real_sleep(0)
+
+    await asyncio.wait_for(wait_for_retries(), timeout=1)
+    await event.stop_typing()
+
+
+@pytest.mark.asyncio
+async def test_discord_typing_overlapping_calls_start_one_loop():
+    """Verify concurrent send_typing calls share a single refresh loop."""
+    channel_ready = asyncio.Event()
+    channel = Mock(spec=discord.TextChannel)
+    channel.trigger_typing = AsyncMock()
+
+    async def slow_get_channel():
+        await channel_ready.wait()
+        return channel
+
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = None
+    event._typing_task = None
+    event._get_channel = AsyncMock(side_effect=slow_get_channel)
+
+    await asyncio.wait_for(
+        asyncio.gather(event.send_typing(), event.send_typing()), timeout=1
+    )
+    task = event._typing_task
+    channel_ready.set()
+    await asyncio.sleep(0)
+    await event.stop_typing()
+    await asyncio.sleep(0)
+
+    assert event._get_channel.await_count == 1
+    assert task.cancelled() or task.done()

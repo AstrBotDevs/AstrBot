@@ -37,6 +37,9 @@ from astrbot.core.utils.media_utils import (
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView, action_rows_to_discord_view
 
+# Matches discord.py's built-in typing() refresh interval.
+TYPING_REFRESH_INTERVAL = 5
+
 
 # 自定义Discord视图组件（兼容旧版本）
 class DiscordViewComponent(BaseMessageComponent):
@@ -59,6 +62,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook
+        self._typing_task: asyncio.Task | None = None
 
     async def send(self, message: MessageChain) -> None:
         """发送消息到Discord平台"""
@@ -125,6 +129,35 @@ class DiscordPlatformEvent(AstrMessageEvent):
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)
+
+    async def send_typing(self) -> None:
+        """Show the typing indicator until stop_typing() is called."""
+        # Slash commands already show Discord's deferred "thinking" state.
+        if self.interaction_followup_webhook:
+            return
+        if self._typing_task and not self._typing_task.done():
+            return
+        # Create the task before any await so overlapping calls cannot start
+        # a second loop.
+        self._typing_task = asyncio.create_task(self._typing_loop())
+
+    async def _typing_loop(self) -> None:
+        channel = await self._get_channel()
+        if not isinstance(channel, discord.abc.Messageable):
+            return
+        # Discord clears the typing state after about 10 seconds, so refresh it
+        # periodically. Failures are retried on the next interval.
+        while True:
+            try:
+                await channel.trigger_typing()
+            except Exception as e:
+                logger.debug(f"[Discord] Failed to send typing indicator: {e}")
+            await asyncio.sleep(TYPING_REFRESH_INTERVAL)
+
+    async def stop_typing(self) -> None:
+        task, self._typing_task = self._typing_task, None
+        if task and not task.done():
+            task.cancel()
 
     async def _get_channel(
         self,
