@@ -1,4 +1,6 @@
 import asyncio
+import os
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -165,3 +167,218 @@ async def test_get_embeddings_batch_preserves_input_order_when_batches_finish_ou
     )
 
     assert embeddings == [[0.0], [1.0], [2.0], [3.0]]
+
+
+def test_embedding_storage_write_index_is_atomic_on_failure(
+    tmp_path, monkeypatch
+) -> None:
+    """Failed FAISS index persistence leaves the prior index intact without temp leaks."""
+    import faiss
+    import numpy as np
+
+    index_path = tmp_path / "index.faiss"
+    storage = EmbeddingStorage(2, str(index_path))
+    storage._insert_batch_sync(
+        np.array([[1.0, 0.0]], dtype=np.float32),
+        [1],
+    )
+    baseline_bytes = index_path.read_bytes()
+
+    def failing_write(_index, path):
+        with open(path, "wb") as f:
+            f.write(b"corrupted-partial-bytes")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(faiss, "write_index", failing_write)
+    with pytest.raises(OSError, match="disk full"):
+        EmbeddingStorage._write_index(storage.index, str(index_path))
+
+    assert index_path.read_bytes() == baseline_bytes
+    assert [p.name for p in tmp_path.iterdir()] == ["index.faiss"]
+
+
+@pytest.mark.asyncio
+async def test_embedding_storage_offloads_faiss_ops_from_event_loop(
+    tmp_path, monkeypatch
+) -> None:
+    """Async FAISS operations run in a worker thread via asyncio.to_thread."""
+    import threading
+
+    import faiss
+    import numpy as np
+
+    main_thread_id = threading.get_ident()
+    observed_threads: list[int] = []
+
+    storage = EmbeddingStorage(2, str(tmp_path / "threaded.faiss"))
+    original_add = storage.index.add_with_ids
+    original_search = storage.index.search
+    original_remove = storage.index.remove_ids
+    original_write = faiss.write_index
+
+    def wrap_write(index, path):
+        observed_threads.append(threading.get_ident())
+        return original_write(getattr(index, "_target", index), path)
+
+    monkeypatch.setattr(faiss, "write_index", wrap_write)
+
+    class _IndexProxy:
+        def __init__(self, target):
+            self._target = target
+
+        def add_with_ids(self, vectors, ids):
+            observed_threads.append(threading.get_ident())
+            return original_add(vectors, ids)
+
+        def search(self, vector, k):
+            observed_threads.append(threading.get_ident())
+            return original_search(vector, k)
+
+        def remove_ids(self, ids):
+            observed_threads.append(threading.get_ident())
+            return original_remove(ids)
+
+    storage.index = _IndexProxy(storage.index)
+    await storage.insert_batch(np.array([[1.0, 2.0]], dtype=np.float32), [7])
+    await storage.search(np.array([1.0, 2.0], dtype=np.float32), 1)
+    await storage.delete([7])
+
+    assert len(observed_threads) >= 5
+    assert all(tid != main_thread_id for tid in observed_threads)
+
+
+@pytest.mark.asyncio
+async def test_faiss_retrieve_handles_more_than_100_candidates_and_empty_ids(
+    tmp_path,
+) -> None:
+    """FaissVecDB.retrieve passes limit=None and DocumentStorage handles all -1 ids."""
+    provider = DelayedEmbeddingProvider()
+    vec_db = FaissVecDB(
+        doc_store_path=str(tmp_path / "docs.db"),
+        index_store_path=str(tmp_path / "vec.faiss"),
+        embedding_provider=provider,
+    )
+    await vec_db.initialize()
+    try:
+        total = 120
+        await vec_db.insert_batch(
+            contents=[f"chunk-{i}" for i in range(total)],
+            metadatas=[{"kb_id": "kb1", "idx": i} for i in range(total)],
+            ids=[f"doc-{i}" for i in range(total)],
+            batch_size=total,
+        )
+
+        # k=105 triggers fetch_k > 100 when filtered; previously truncated to 100.
+        results = await vec_db.retrieve(
+            "chunk-0",
+            k=105,
+            fetch_k=115,
+            metadata_filters={"kb_id": "kb1"},
+        )
+        assert len(results) == 105
+
+        no_match = await vec_db.document_storage.get_documents(
+            metadata_filters={},
+            ids=[-1, -1],
+        )
+        assert no_match == []
+    finally:
+        await vec_db.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_embedding_storage_instances_preserve_all_writes(
+    tmp_path,
+) -> None:
+    """Two EmbeddingStorage instances targeting the same file coordinate updates."""
+    import numpy as np
+
+    index_path = tmp_path / "shared.faiss"
+    storage_a = EmbeddingStorage(2, str(index_path))
+    storage_b = EmbeddingStorage(2, str(index_path))
+
+    await asyncio.gather(
+        storage_a.insert_batch(np.array([[1.0, 0.0]], dtype=np.float32), [1]),
+        storage_b.insert_batch(np.array([[0.0, 1.0]], dtype=np.float32), [2]),
+    )
+
+    reloaded = EmbeddingStorage(2, str(index_path))
+    assert reloaded.index.ntotal == 2
+
+
+@pytest.mark.asyncio
+async def test_single_insert_rolls_back_doc_and_vector_on_save_failure(
+    tmp_path, monkeypatch
+) -> None:
+    """FaissVecDB.insert rolls back document row and vector when FAISS save fails."""
+    import faiss
+
+    provider = DelayedEmbeddingProvider()
+    vec_db = FaissVecDB(
+        doc_store_path=str(tmp_path / "docs_rollback.db"),
+        index_store_path=str(tmp_path / "vec_rollback.faiss"),
+        embedding_provider=provider,
+    )
+    await vec_db.initialize()
+    try:
+
+        def failing_write(_index, _path):
+            raise OSError("save error")
+
+        monkeypatch.setattr(faiss, "write_index", failing_write)
+        with pytest.raises(OSError, match="save error"):
+            await vec_db.insert("chunk-1", {"kb_id": "kb1"}, id="single-doc-1")
+
+        assert await vec_db.count_documents() == 0
+        assert vec_db.embedding_storage.index.ntotal == 0
+    finally:
+        await vec_db.close()
+
+
+def test_embedding_storage_write_index_preserves_posix_acl_xattr(
+    tmp_path: Path, monkeypatch
+) -> None:
+    faiss = pytest.importorskip("faiss")
+
+    index_path = tmp_path / "acl.faiss"
+    index = faiss.IndexFlatL2(1)
+    EmbeddingStorage._write_index(index, index_path)
+
+    acl_payload = b"posix-acl-payload"
+    get_calls: list[tuple[Path, str | bytes]] = []
+    set_calls: list[tuple[Path, str | bytes, bytes]] = []
+    chmod_calls: list[Path] = []
+    events: list[str] = []
+
+    orig_chmod = os.chmod
+
+    def fake_chmod(path, mode, *args, **kwargs):
+        chmod_calls.append(Path(path))
+        events.append("chmod")
+        return orig_chmod(path, mode, *args, **kwargs)
+
+    def fake_getxattr(path, attr):
+        get_calls.append((Path(path), attr))
+        events.append("getxattr")
+        return acl_payload
+
+    def fake_setxattr(path, attr, value):
+        set_calls.append((Path(path), attr, value))
+        events.append("setxattr")
+
+    monkeypatch.setattr(os, "chmod", fake_chmod)
+    monkeypatch.setattr(os, "getxattr", fake_getxattr, raising=False)
+    monkeypatch.setattr(os, "setxattr", fake_setxattr, raising=False)
+
+    EmbeddingStorage._write_index(index, index_path)
+
+    resolved_target = index_path.absolute()
+    assert get_calls == [(resolved_target, "system.posix_acl_access")]
+    assert len(set_calls) == 1
+    tmp_target, set_attr, set_value = set_calls[0]
+    assert tmp_target.parent == resolved_target.parent
+    assert tmp_target != resolved_target
+    assert set_attr == "system.posix_acl_access"
+    assert set_value == acl_payload
+    assert chmod_calls == [tmp_target]
+    assert events == ["chmod", "getxattr", "setxattr"]

@@ -262,10 +262,11 @@ class DocumentStorage:
                     text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
                 ).params(**{f"filter_{key}": val})
 
-            if ids is not None and len(ids) > 0:
+            if ids is not None:
                 valid_ids = [int(i) for i in ids if i != -1]
-                if valid_ids:
-                    query = query.where(col(Document.id).in_(valid_ids))
+                if not valid_ids:
+                    return []
+                query = query.where(col(Document.id).in_(valid_ids))
 
             if limit is not None:
                 query = query.limit(limit)
