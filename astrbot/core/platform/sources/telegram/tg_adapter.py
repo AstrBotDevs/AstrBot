@@ -1,8 +1,11 @@
 import asyncio
+import json
 import os
 import re
 import sys
+import time
 import uuid
+from collections import deque
 from collections.abc import Sequence
 from contextlib import suppress
 from typing import TYPE_CHECKING, cast
@@ -14,6 +17,8 @@ from telegram.constants import ChatType
 from telegram.error import Forbidden, InvalidToken, NetworkError
 from telegram.ext import (
     ApplicationBuilder,
+    BusinessConnectionHandler,
+    BusinessMessagesDeletedHandler,
     CallbackQueryHandler,
     ContextTypes,
     ExtBot,
@@ -43,7 +48,10 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_temp_path,
+)
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver
 
@@ -56,6 +64,8 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+BUSINESS_SESSION_PREFIX = "biz:"
 
 
 @register_platform_adapter("telegram", "telegram 适配器")
@@ -136,6 +146,13 @@ class TelegramPlatformAdapter(Platform):
         self._polling_failure_window = 60.0
         self._application_started = False
         self._forum_topic_names: dict[tuple[str, int | None], str] = {}
+        self.business_enabled = bool(self.config.get("telegram_business_enabled", True))
+        self._business_connections: dict[str, dict] = {}
+        self._business_state_path = os.path.join(
+            get_astrbot_data_path(), "telegram_business_connections.json"
+        )
+        self._seen_update_ids: deque[int] = deque(maxlen=1024)
+        self._load_business_connections()
         self._build_application()
 
         # Media group handling
@@ -162,6 +179,12 @@ class TelegramPlatformAdapter(Platform):
         )
         self.application.add_handler(CallbackQueryHandler(self.callback_query_handler))
         self.application.add_handler(message_handler)
+        self.application.add_handler(
+            BusinessConnectionHandler(self.business_connection_handler)
+        )
+        self.application.add_handler(
+            BusinessMessagesDeletedHandler(self.deleted_business_messages_handler)
+        )
         self.client = self.application.bot
         logger.debug(f"Telegram base url: {self.client.base_url}")
 
@@ -234,11 +257,23 @@ class TelegramPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        from_username = session.session_id
+        user_name = session.session_id
+        business_connection_id = None
+        parsed = self._parse_business_session(user_name)
+        if parsed is not None:
+            user_name, business_connection_id = parsed
+            if not self._business_reply_allowed(business_connection_id):
+                logger.warning(
+                    "Skipping Telegram Business reply for connection %s: "
+                    "connection is disabled or not replyable.",
+                    business_connection_id,
+                )
+                return
         await TelegramPlatformEvent.send_with_client(
             self.client,
             message_chain,
-            from_username,
+            user_name,
+            business_connection_id=business_connection_id,
         )
         await super().send_by_session(session, message_chain)
 
@@ -451,17 +486,44 @@ class TelegramPlatformAdapter(Platform):
     async def message_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        logger.debug(f"Telegram message: {update.message}")
-
-        # Handle media group messages
-        if update.message and update.message.media_group_id:
-            await self.handle_media_group_message(update, context)
+        if self._is_duplicate_update(update):
             return
 
-        # Handle regular messages
-        abm = await self.convert_message(update, context)
-        if abm:
-            await self.handle_msg(abm)
+        # Ordinary bot messages keep the existing handling path.
+        if update.message:
+            logger.debug(f"Telegram message: {update.message}")
+            if update.message.media_group_id:
+                await self.handle_media_group_message(update, context)
+                return
+            abm = await self.convert_message(update, context)
+            if abm:
+                await self.handle_msg(abm)
+            return
+
+        # Telegram Business messages arrive via their own Update field.
+        if update.business_message:
+            if not self.business_enabled:
+                logger.debug("Ignoring Telegram Business message: feature disabled.")
+                return
+            logger.debug(f"Telegram Business message: {update.business_message}")
+            if update.business_message.media_group_id:
+                await self.handle_media_group_message(update, context)
+                return
+            abm = await self.convert_business_message(update, context)
+            if abm:
+                await self.handle_msg(abm)
+            return
+
+        # Edits (both regular and business) are not new user messages.
+        if update.edited_message or update.edited_business_message:
+            logger.debug(
+                "Ignoring edited message update (id=%s): edits are not processed "
+                "as new messages.",
+                update.update_id,
+            )
+            return
+
+        logger.debug("Ignoring a Telegram update without a supported message.")
 
     async def callback_query_handler(
         self,
@@ -607,6 +669,7 @@ class TelegramPlatformAdapter(Platform):
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
         get_reply=True,
+        handle_start=True,
     ) -> AstrBotMessage | None:
         """转换 Telegram 的消息对象为 AstrBotMessage 对象。
 
@@ -815,7 +878,7 @@ class TelegramPlatformAdapter(Platform):
             message.message.extend(components)
             message.message_str = plain_text
 
-            if message.message_str.strip() == "/start":
+            if handle_start and message.message_str.strip() == "/start":
                 await self.start(update, context)
                 return None
 
@@ -917,6 +980,186 @@ class TelegramPlatformAdapter(Platform):
 
         return message
 
+    async def convert_business_message(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        get_reply=True,
+    ) -> AstrBotMessage | None:
+        """Convert a Telegram Business message into an AstrBotMessage.
+
+        Business messages reuse the regular conversion logic through a synthetic
+        Update whose ``message`` points to ``update.business_message``. The
+        result is then tagged with the business connection and given a
+        business-specific session id so replies are sent on behalf of the
+        business account and conversations stay isolated.
+
+        Args:
+            update: Telegram update carrying ``business_message``.
+            context: Telegram callback context.
+            get_reply: Whether to convert the replied-to message chain.
+
+        Returns:
+            Converted AstrBotMessage, or ``None`` when it should be ignored.
+        """
+        source = update.business_message
+        if source is None:
+            return None
+        business_connection_id = getattr(source, "business_connection_id", None)
+        if not business_connection_id:
+            logger.warning(
+                "Telegram Business message without business_connection_id; ignoring."
+            )
+            return None
+        if not self._business_reply_allowed(business_connection_id):
+            logger.warning(
+                "Skipping Telegram Business message for connection %s: "
+                "connection is disabled or not replyable.",
+                business_connection_id,
+            )
+            return None
+
+        synthetic_update = Update(update_id=update.update_id, message=source)
+        abm = await self.convert_message(
+            synthetic_update,
+            context,
+            get_reply=get_reply,
+            handle_start=False,
+        )
+        if abm is None:
+            return None
+
+        abm.business_connection_id = business_connection_id
+        abm.session_id = (
+            f"{BUSINESS_SESSION_PREFIX}{source.chat.id}:{business_connection_id}"
+        )
+        abm.type = MessageType.FRIEND_MESSAGE
+        return abm
+
+    async def business_connection_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Record Telegram Business connection lifecycle updates."""
+        if self._is_duplicate_update(update):
+            return
+        connection = update.business_connection
+        if connection is None:
+            return
+        self._record_business_connection(connection)
+        rights = getattr(connection, "rights", None)
+        can_reply = getattr(rights, "can_reply", None) if rights is not None else None
+        logger.info(
+            "Telegram Business connection %s updated: enabled=%s can_reply=%s user=%s",
+            connection.id,
+            connection.is_enabled,
+            can_reply,
+            connection.user.id,
+        )
+
+    async def deleted_business_messages_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Log deleted Telegram Business messages.
+
+        AstrBot's event pipeline has no message-deletion event, so deletion is
+        only recorded in the log for auditing purposes.
+        """
+        if self._is_duplicate_update(update):
+            return
+        deleted = update.deleted_business_messages
+        if deleted is None:
+            return
+        logger.info(
+            "Telegram Business messages deleted: connection=%s chat=%s ids=%s",
+            deleted.business_connection_id,
+            deleted.chat.id,
+            list(deleted.message_ids),
+        )
+
+    def _record_business_connection(self, connection) -> None:
+        """Persist the latest state of a Telegram Business connection."""
+        rights = getattr(connection, "rights", None)
+        can_reply = getattr(rights, "can_reply", None) if rights is not None else None
+        self._business_connections[connection.id] = {
+            "id": connection.id,
+            "user_id": connection.user.id,
+            "username": getattr(connection.user, "username", None),
+            "user_chat_id": connection.user_chat_id,
+            "is_enabled": bool(connection.is_enabled),
+            "can_reply": can_reply,
+            "updated_at": int(time.time()),
+        }
+        self._persist_business_connections()
+
+    def _business_reply_allowed(self, business_connection_id: str) -> bool:
+        """Return whether replies may be sent for a business connection.
+
+        Unknown connections are allowed so Telegram can enforce the final
+        authorization; known connections are gated on their recorded state.
+        """
+        info = self._business_connections.get(business_connection_id)
+        if info is None:
+            return True
+        if not info.get("is_enabled", True):
+            return False
+        return info.get("can_reply") is not False
+
+    def _load_business_connections(self) -> None:
+        """Load persisted business connection state, ignoring missing/corrupt files."""
+        try:
+            with open(self._business_state_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                self._business_connections = data
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.warning(
+                "Failed to load Telegram Business connection state from %s: %s",
+                self._business_state_path,
+                e,
+            )
+
+    def _persist_business_connections(self) -> None:
+        """Persist business connection state atomically (best effort)."""
+        try:
+            os.makedirs(os.path.dirname(self._business_state_path), exist_ok=True)
+            tmp_path = f"{self._business_state_path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(self._business_connections, f, ensure_ascii=False)
+            os.replace(tmp_path, self._business_state_path)
+        except Exception as e:
+            logger.warning(
+                "Failed to persist Telegram Business connection state to %s: %s",
+                self._business_state_path,
+                e,
+            )
+
+    def _is_duplicate_update(self, update: Update) -> bool:
+        """Return True when the update id was already processed."""
+        update_id = getattr(update, "update_id", None)
+        if update_id is None:
+            return False
+        if update_id in self._seen_update_ids:
+            logger.debug("Ignoring duplicate Telegram update id=%s", update_id)
+            return True
+        self._seen_update_ids.append(update_id)
+        return False
+
+    @staticmethod
+    def _parse_business_session(session_id: str) -> tuple[str, str] | None:
+        """Decode a business session id into ``(chat_id, business_connection_id)``."""
+        if not isinstance(session_id, str) or not session_id.startswith(
+            BUSINESS_SESSION_PREFIX
+        ):
+            return None
+        chat_id, sep, business_connection_id = session_id[
+            len(BUSINESS_SESSION_PREFIX) :
+        ].partition(":")
+        if not sep or not business_connection_id:
+            return None
+        return chat_id, business_connection_id
+
     async def handle_media_group_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
@@ -928,10 +1171,11 @@ class TelegramPlatformAdapter(Platform):
         """
         from datetime import datetime, timedelta
 
-        if not update.message:
+        source = update.message or update.business_message
+        if not source:
             return
 
-        media_group_id = update.message.media_group_id
+        media_group_id = source.media_group_id
         if not media_group_id:
             return
 
@@ -1001,7 +1245,10 @@ class TelegramPlatformAdapter(Platform):
         try:
             # Use the first update to create the base message (with reply, caption, etc.)
             first_update, first_context = updates_and_contexts[0]
-            abm = await self.convert_message(first_update, first_context)
+            if first_update.business_message:
+                abm = await self.convert_business_message(first_update, first_context)
+            else:
+                abm = await self.convert_message(first_update, first_context)
 
             if not abm:
                 logger.warning(
@@ -1011,8 +1258,13 @@ class TelegramPlatformAdapter(Platform):
 
             # Add additional media from remaining updates by reusing convert_message
             for update, context in updates_and_contexts[1:]:
-                # Convert the message but skip reply chains (get_reply=False)
-                extra = await self.convert_message(update, context, get_reply=False)
+                if update.business_message:
+                    # Convert the message but skip reply chains (get_reply=False)
+                    extra = await self.convert_business_message(
+                        update, context, get_reply=False
+                    )
+                else:
+                    extra = await self.convert_message(update, context, get_reply=False)
                 if not extra:
                     continue
 

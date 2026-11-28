@@ -461,6 +461,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                         "telegram_polling_restart_delay": 5.0,
+                        "telegram_business_enabled": True,
                     },
                     "Discord": {
                         "id": "discord",
@@ -907,6 +908,12 @@ CONFIG_METADATA_2 = {
                         "description": "轮询重启延迟",
                         "type": "float",
                         "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                        "show_key": True,
+                    },
+                    "telegram_business_enabled": {
+                        "description": "Business 功能",
+                        "type": "bool",
+                        "hint": "启用后，AstrBot 会接管已连接的 Telegram Business 个人账号私聊并以该账号身份自动回复。",
                         "show_key": True,
                     },
                     "id": {
